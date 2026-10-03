@@ -1,0 +1,48 @@
+import type { NextConfig } from "next";
+
+/**
+ * 安全响应头
+ * 说明：这里刻意不启用 Content-Security-Policy。
+ * Next.js 会注入内联脚本，直接启用严格 CSP 会导致页面白屏，
+ * 如需 CSP 请基于 nonce 方案单独实现。
+ */
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "X-DNS-Prefetch-Control", value: "on" },
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=()",
+  },
+];
+
+const nextConfig: NextConfig = {
+  // 开发期启用严格模式：帮助提前暴露 effect 清理等问题
+  reactStrictMode: true,
+
+  // 关闭 X-Powered-By，减少技术栈指纹泄露
+  poweredByHeader: false,
+
+  // 构建时执行 TypeScript 类型检查
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+
+  // 说明：typedRoutes 暂未启用。
+  // 开启后会把 <Link href={变量}> 全部判为类型错误，
+  // 而项目中有 4 处组件用 string 类型的 href（其中部分实为站外链接，
+  // 本就不该用 <Link>）。这属于独立的重构项，见 P1 待办。
+  // typedRoutes: true,
+
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeaders,
+      },
+    ];
+  },
+};
+
+export default nextConfig;
