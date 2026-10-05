@@ -8,7 +8,7 @@
     "news:analysis": "tsx scripts/generateNewsAnalysis.ts",
     "build": "next build --webpack",
     "event:summary": "tsx scripts/rebuildEventSummary.ts",
-    "start": "next start",
+    "start": "next start -H 0.0.0.0",
     "cluster:event": "tsx scripts/build-events.ts",
     "link:event": "tsx scripts/link-events.ts",
     "pipeline:news": "tsx scripts/run-pipeline.ts",
