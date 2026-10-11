@@ -2,7 +2,7 @@
 
 生成时间：
 
-Sun Oct 11 10:19:29 CST 2026
+Sun Oct 11 10:20:57 CST 2026
 
 
 
@@ -18,6 +18,7 @@ main
 
 工作区状态：
 
+ M ai-context/AI_HEALTH_REPORT.md
  M ai-context/ENVIRONMENT.md
  M app/admin/news/page.tsx
  M app/admin/system/page.tsx
@@ -74,9 +75,9 @@ main
  M scripts/server-health.sh
  M scripts/updateSources.ts
 ?? AI-HANDOVER/
-?? ai-context/AI_HEALTH_REPORT.md
 ?? ai-context/AI_TASK_QUEUE.md
 ?? ai-context/PROJECT_MEMORY.md
+?? ai-tools.sh
 ?? app/admin/data/
 ?? app/api/admin/system-health/
 ?? app/api/analytics/
@@ -84,7 +85,6 @@ main
 ?? app/page.v7-final-backup.tsx
 ?? app/page.v748126.tsx.bak
 ?? components/analytics/
-?? daily-ai-maintenance.sh
 ?? lib/crawler/qualityScore.backup.v748130.ts
 ?? lib/crawler/qualityScore.backup.v748131.ts
 ?? lib/crawler/qualityScore.ts
@@ -131,7 +131,7 @@ main
 
 最近提交：
 
-8b234f1 add automatic AI status generator
+bc67c45 add AI project health check system
 
 
 
@@ -232,7 +232,7 @@ npm run build
 ┌────┬─────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
 │ id │ name                │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
 ├────┼─────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
-│ 1  │ ai-insight-daily    │ default     │ N/A     │ fork    │ 551      │ 47m    │ 0    │ online    │ 0%       │ 69.5mb   │ adminis… │ disabled │
+│ 1  │ ai-insight-daily    │ default     │ N/A     │ fork    │ 551      │ 48m    │ 0    │ online    │ 0%       │ 69.5mb   │ adminis… │ disabled │
 └────┴─────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
 Module
 ┌────┬──────────────────────────────┬───────────────┬──────────┬──────────┬──────┬──────────┬──────────┬──────────┐
@@ -240,7 +240,7 @@ Module
 ├────┼──────────────────────────────┼───────────────┼──────────┼──────────┼──────┼──────────┼──────────┼──────────┤
 │ 0  │ pm2-logrotate                │ 3.0.0         │ 527      │ online   │ 0    │ 0%       │ 72.6mb   │ adminis… │
 └────┴──────────────────────────────┴───────────────┴──────────┴──────────┴──────┴──────────┴──────────┴──────────┘
-host metrics | cpu: 0.4% | ram usage: 10.1% | eth1: ⇓ 0.001mb/s ⇑ 0.001mb/s | disk: ⇓ 0.255mb/s ⇑ 0.023mb/s
+host metrics | cpu: 0.2% | ram usage: 10.1% | disk: ⇓ 0mb/s ⇑ 0.015mb/s
 
 
 
