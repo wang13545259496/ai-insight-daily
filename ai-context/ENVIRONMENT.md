@@ -1,0 +1,84 @@
+# AI Insight Daily 运行环境信息
+
+生成时间：
+
+Sun Oct 11 09:58:52 CST 2026
+
+
+## Git信息
+
+
+当前分支：
+
+main
+
+
+最新提交：
+
+7c2baaa add AI handover generator script
+
+
+最近5次提交：
+
+7c2baaa add AI handover generator script
+e076f44 create AI handover package v1.0
+c1ae7e8 add AI maintenance context documentation
+679afdc V7.4.8.11 add system health monitoring and backup tools
+5427349 AI Insight Daily V7.4.8.12 FINAL release
+
+
+
+## Node环境
+
+
+Node版本：
+
+v22.23.3
+
+
+npm版本：
+
+10.9.9
+
+
+
+## 项目依赖版本
+
+
+    "@prisma/client": "^6.19.3",
+    "next": "16.3.5",
+    "prisma": "^6.19.3",
+    "react": "19.2.8",
+
+
+
+## Prisma环境
+
+
+Prisma schema loaded from prisma/schema.prisma
+prisma                  : 6.19.3
+@prisma/client          : 6.19.3
+Computed binaryTarget   : debian-openssl-3.0.x
+Operating System        : linux
+Architecture            : x64
+Node.js                 : v22.23.3
+TypeScript              : 5.9.3
+Query Engine (Node-API) : libquery-engine c2990dca591cba766e3b7ef5d9e8a84796e47ab7 (at node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node)
+PSL                     : @prisma/prisma-schema-wasm 7.1.1-3.c2990dca591cba766e3b7ef5d9e8a84796e47ab7
+
+
+
+## 系统环境
+
+
+Linux WCJ 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 GNU/Linux
+
+
+
+## 项目路径
+
+
+/home/administrator/projects/ai-insight-daily
+
+
+
