@@ -1,8 +1,8 @@
 # AI Insight Daily 运行环境信息
 
-生成时间：
+更新时间：
 
-Sun Oct 11 09:58:52 CST 2026
+Sun Oct 11 10:00:02 CST 2026
 
 
 ## Git信息
@@ -13,36 +13,36 @@ Sun Oct 11 09:58:52 CST 2026
 main
 
 
-最新提交：
+当前提交：
 
-7c2baaa add AI handover generator script
+944208a add project environment snapshot
 
 
-最近5次提交：
+最近提交：
 
+944208a add project environment snapshot
 7c2baaa add AI handover generator script
 e076f44 create AI handover package v1.0
 c1ae7e8 add AI maintenance context documentation
 679afdc V7.4.8.11 add system health monitoring and backup tools
-5427349 AI Insight Daily V7.4.8.12 FINAL release
 
 
 
 ## Node环境
 
 
-Node版本：
+Node：
 
 v22.23.3
 
 
-npm版本：
+npm：
 
 10.9.9
 
 
 
-## 项目依赖版本
+## 核心依赖
 
 
     "@prisma/client": "^6.19.3",
@@ -52,7 +52,7 @@ npm版本：
 
 
 
-## Prisma环境
+## Prisma
 
 
 Prisma schema loaded from prisma/schema.prisma
@@ -68,7 +68,7 @@ PSL                     : @prisma/prisma-schema-wasm 7.1.1-3.c2990dca591cba766e3
 
 
 
-## 系统环境
+## 系统
 
 
 Linux WCJ 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22:12:15 UTC 2026 x86_64 GNU/Linux
@@ -79,6 +79,4 @@ Linux WCJ 6.18.40.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Fri Jul 31 22
 
 
 /home/administrator/projects/ai-insight-daily
-
-
 
