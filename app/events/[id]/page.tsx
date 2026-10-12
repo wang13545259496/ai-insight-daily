@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function EventDetailPage({
   params,
 }: {
@@ -9,20 +12,25 @@ export default async function EventDetailPage({
   }>;
 }) {
   const { id } = await params;
+  const eventId = Number(id);
+
+  if (!Number.isInteger(eventId)) {
+    return <NotFound />;
+  }
 
   const event = await prisma.newsEvent.findUnique({
     where: {
-      id: Number(id),
+      id: eventId,
     },
-
     include: {
       news: {
-        orderBy: {
-          createdAt: "desc",
+        where: {
+          dataStatus: "active",
         },
-
-        take: 20,
-
+        orderBy: {
+          publishedAt: "desc",
+        },
+        take: 30,
         include: {
           sourceRef: true,
         },
@@ -31,507 +39,731 @@ export default async function EventDetailPage({
   });
 
   if (!event) {
-    return (
-      <div
-        className="
-min-h-screen
-bg-black
-text-white
-p-8
-"
-      >
-        <h1
-          className="
-text-3xl
-font-bold
-"
-        >
-          事件不存在
-        </h1>
-      </div>
-    );
+    return <NotFound />;
   }
 
-  const newsCount = event.news.length;
+  const news = event.news;
 
-  const sourceCount = new Set(event.news.map((item) => item.source)).size;
+  const newsCount = news.length;
 
-  const latestTime = event.news[0]?.createdAt || event.createdAt;
+  const sourceNames = Array.from(
+    new Set(
+      news
+        .map((item) => item.source)
+        .filter(Boolean)
+    )
+  );
+
+  const sourceCount = sourceNames.length;
+
+  const latestNews = news[0];
+
+  const latestTime =
+    latestNews?.publishedAt ??
+    latestNews?.createdAt ??
+    event.updatedAt ??
+    event.createdAt;
+
+  const now = Date.now();
+
+  const recent24h = news.filter(
+    (item) =>
+      now - new Date(item.publishedAt ?? item.createdAt).getTime() <= 24 * 60 * 60 * 1000
+  ).length;
+
+  const recent72h = news.filter(
+    (item) =>
+      now - new Date(item.publishedAt ?? item.createdAt).getTime() <= 72 * 60 * 60 * 1000
+  ).length;
+
+  const aiScores = news
+    .map((item) => Number(item.aiScore || 0))
+    .filter((score) => score > 0);
+
+  const averageAiScore =
+    aiScores.length > 0
+      ? Math.round(
+          aiScores.reduce((sum, score) => sum + score, 0) /
+            aiScores.length
+        )
+      : 0;
+
+  const trendLabel = getTrendLabel(event.trendStatus);
+
+  const trendDescription = getTrendDescription({
+    trendStatus: event.trendStatus,
+    recent24h,
+    recent72h,
+  });
+
+  const impactText = buildImpactText(event.category);
+
+  const opportunityText = buildOpportunityText(event.category);
+
+  const riskText = buildRiskText(event.category);
 
   return (
-    <div
-      className="
-min-h-screen
-bg-black
-text-white
-p-8
-"
-    >
-      <div
-        className="
-max-w-7xl
-mx-auto
-"
-      >
-        {/* =====================
-事件顶部驾驶舱
-===================== */}
+    <main className="min-h-screen bg-white text-black">
+      {/* =========================
+          顶部导航
+      ========================= */}
 
-        <section
-          className="
-border
-border-gray-800
-rounded-3xl
-bg-gray-950
-p-8
-"
-        >
-          <div
-            className="
-flex
-justify-between
-gap-8
-"
-          >
+
+      {/* =========================
+          事件核心驾驶舱
+      ========================= */}
+      <section className="border-b border-gray-200 bg-black text-white">
+        <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8 lg:py-14">
+          <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
             <div>
-              <h1
-                className="
-text-4xl
-font-bold
-leading-tight
-"
-              >
-                🔥 {event.title}
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <span className="border border-white/20 bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wider">
+                  EVENT #{event.id}
+                </span>
+
+                <span className="border border-white/20 px-3 py-1 text-xs font-bold">
+                  {event.category}
+                </span>
+
+                <span className="border border-white/20 px-3 py-1 text-xs font-bold">
+                  {trendLabel}
+                </span>
+              </div>
+
+              <h1 className="max-w-5xl text-4xl font-black leading-tight tracking-tight md:text-5xl">
+                {event.title}
               </h1>
 
-              <p
-                className="
-mt-5
-text-gray-400
-leading-7
-"
-              >
+              <p className="mt-6 max-w-4xl text-base leading-8 text-gray-300">
                 {event.summary}
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-gray-400">
+                <span>
+                  最新动态{" "}
+                  <strong className="text-white">
+                    {formatDateTime(latestTime)}
+                  </strong>
+                </span>
+
+                <span>
+                  最近24h{" "}
+                  <strong className="text-white">
+                    {recent24h}
+                  </strong>{" "}
+                  条
+                </span>
+
+                <span>
+                  最近72h{" "}
+                  <strong className="text-white">
+                    {recent72h}
+                  </strong>{" "}
+                  条
+                </span>
+              </div>
+            </div>
+
+            <div className="border border-white/15 bg-white/[0.04] p-6">
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">
+                EVENT SIGNAL
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-px border border-white/10 bg-white/10">
+                <Metric
+                  label="热度"
+                  value={formatScore(event.heatScore)}
+                />
+
+                <Metric
+                  label="峰值"
+                  value={formatScore(event.peakScore)}
+                />
+
+                <Metric
+                  label="相关新闻"
+                  value={String(newsCount)}
+                />
+
+                <Metric
+                  label="信息来源"
+                  value={String(sourceCount)}
+                />
+              </div>
+
+              <div className="mt-5 flex items-end justify-between border-t border-white/10 pt-5">
+                <div>
+                  <div className="text-xs text-gray-500">
+                    AI平均评分
+                  </div>
+
+                  <div className="mt-1 text-3xl font-black">
+                    {averageAiScore || "—"}
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className="text-xs text-gray-500">
+                    事件质量
+                  </div>
+
+                  <div className="mt-1 text-xl font-black">
+                    {formatScore(event.qualityScore)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* =========================
+          事件判断
+      ========================= */}
+      <section className="border-b border-gray-200 bg-gray-50">
+        <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+          <div className="mb-6">
+            <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+              EVENT INTELLIGENCE
+            </div>
+
+            <h2 className="mt-2 text-2xl font-black">
+              事件情报判断
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-500">
+              基于当前事件关联新闻、更新时间、AI评分与趋势状态形成的展示层判断。
+            </p>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-3">
+            <InsightCard
+              label="趋势判断"
+              title={trendLabel}
+              text={trendDescription}
+            />
+
+            <InsightCard
+              label="产业影响"
+              title="值得持续跟踪"
+              text={impactText}
+            />
+
+            <InsightCard
+              label="商业机会"
+              title="观察应用落地"
+              text={opportunityText}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* =========================
+          事件时间线
+      ========================= */}
+      <section className="bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-8">
+          <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-end">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+                EVENT TIMELINE
+              </div>
+
+              <h2 className="mt-2 text-2xl font-black">
+                新闻证据时间线
+              </h2>
+
+              <p className="mt-2 text-sm text-gray-500">
+                按最新发生时间排列，展示该事件当前可追踪的信息证据。
               </p>
             </div>
 
-            <div
-              className="
-min-w-[260px]
-border
-border-gray-800
-rounded-2xl
-p-5
-"
-            >
-              <div
-                className="
-text-gray-500
-text-sm
-"
-              >
-                事件指标
-              </div>
-
-              <div
-                className="
-mt-4
-space-y-3
-text-gray-300
-"
-              >
-                <p>
-                  🔥 热度：
-                  {event.heatScore}
-                </p>
-
-                <p>
-                  📂 分类：
-                  {event.category}
-                </p>
-
-                <p>
-                  📰 新闻：
-                  {newsCount} 篇
-                </p>
-
-                <p>
-                  🌐 来源：
-                  {sourceCount} 个
-                </p>
-              </div>
+            <div className="text-sm font-bold text-gray-400">
+              共 {newsCount} 条
             </div>
           </div>
-        </section>
-        {/* =====================
-事件商业分析
-===================== */}
 
-        <div
-          className="
-mt-6
-grid
-md:grid-cols-3
-gap-5
-"
-        >
-          <AnalysisCard
-            title="📌 事件背景"
+          {news.length === 0 ? (
+            <div className="border border-gray-200 py-16 text-center text-gray-500">
+              当前事件暂无有效新闻数据。
+            </div>
+          ) : (
+            <div className="mt-8 space-y-4">
+              {news.map((item, index) => (
+                <article
+                  key={item.id}
+                  className="group border border-gray-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-black hover:shadow-sm"
+                >
+                  <div className="grid gap-5 lg:grid-cols-[72px_1fr_auto]">
+                    <div className="hidden lg:block">
+                      <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+                        #{String(index + 1).padStart(2, "0")}
+                      </div>
 
-            text={`
-${event.category}
+                      <div className="mt-3 text-xs leading-5 text-gray-400">
+                        {formatDate(item.publishedAt ?? item.createdAt)}
+                      </div>
+                    </div>
 
-该事件由多个信息来源持续跟踪，
-系统根据新闻聚合和事件关联关系生成分析。
-`}
-          />
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-gray-400 lg:hidden">
+                          #{String(index + 1).padStart(2, "0")}
+                        </span>
 
-          <AnalysisCard
-            title="🏭 产业影响"
+                        <span className="border border-gray-200 px-2 py-1 text-xs font-bold text-gray-600">
+                          {item.source || "未知来源"}
+                        </span>
 
-            text={`
-AI产品生态
+                        {item.verified && (
+                          <span className="border border-black px-2 py-1 text-xs font-bold">
+                            已验证
+                          </span>
+                        )}
 
-企业数字化升级
+                        {item.aiScore > 0 && (
+                          <span className="text-xs font-bold text-gray-400">
+                            AI {formatScore(item.aiScore)}
+                          </span>
+                        )}
+                      </div>
 
-AI商业模式探索
-`}
-          />
+                      <h3 className="mt-4 text-lg font-black leading-7">
+                        <Link
+                          href={`/news/${item.id}`}
+                          className="transition group-hover:underline"
+                        >
+                          {item.title}
+                        </Link>
+                      </h3>
 
-          <AnalysisCard
-            title="💰 商业机会"
+                      <p className="mt-3 line-clamp-3 text-sm leading-7 text-gray-500">
+                        {item.summary ||
+                          item.content ||
+                          "暂无新闻摘要。"}
+                      </p>
 
-            text={`
-AI应用工具
+                      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-gray-400">
+                        <span>
+                          发布时间：{formatDateTime(item.publishedAt ?? item.createdAt)}
+                        </span>
 
-企业智能助手
+                        {item.category && (
+                          <span>
+                            分类：{item.category}
+                          </span>
+                        )}
 
-AI服务平台
+                        <span>
+                          来源：{item.source || "未知"}
+                        </span>
+                      </div>
+                    </div>
 
-行业解决方案
-`}
-          />
+                    <div className="flex items-start gap-2 lg:flex-col lg:items-end">
+                      <Link
+                        href={`/news/${item.id}`}
+                        className="border border-black px-4 py-2 text-xs font-black transition hover:bg-black hover:text-white"
+                      >
+                        查看详情
+                      </Link>
+
+                      {item.sourceUrl && (
+                        <a
+                          href={item.sourceUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="border border-gray-200 px-4 py-2 text-xs font-black text-gray-600 transition hover:border-black hover:text-black"
+                        >
+                          原始来源 ↗
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
+      </section>
 
-        {/* =====================
-风险关注
-===================== */}
+      {/* =========================
+          风险关注
+      ========================= */}
+      <section className="border-y border-gray-200 bg-gray-50">
+        <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+          <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+                RISK WATCH
+              </div>
 
-        <section
-          className="
-mt-5
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-6
-"
-        >
-          <h2
-            className="
-text-xl
-font-bold
-"
-          >
-            ⚠ 风险关注
-          </h2>
+              <h2 className="mt-2 text-2xl font-black">
+                风险关注
+              </h2>
 
-          <div
-            className="
-mt-4
-grid
-md:grid-cols-3
-gap-4
-"
-          >
-            <SmallCard text="技术成熟度" />
+              <p className="mt-3 max-w-md text-sm leading-7 text-gray-500">
+                事件仍处于动态变化过程中，以下维度适合作为后续跟踪重点。
+              </p>
+            </div>
 
-            <SmallCard text="数据安全" />
+            <div className="grid gap-4 md:grid-cols-3">
+              <RiskCard
+                title="技术成熟度"
+                text="关注技术能力是否从演示阶段进入稳定应用阶段。"
+              />
 
-            <SmallCard text="商业落地成本" />
-          </div>
-        </section>
+              <RiskCard
+                title="数据与安全"
+                text="关注数据权限、隐私、安全与合规要求变化。"
+              />
 
-        {/* =====================
-事件发展时间线
-===================== */}
-
-        <section
-          className="
-mt-6
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-6
-"
-        >
-          <div
-            className="
-flex
-justify-between
-items-center
-"
-          >
-            <h2
-              className="
-text-xl
-font-bold
-"
-            >
-              📰 新闻发展时间线
-            </h2>
-
-            <div
-              className="
-text-sm
-text-gray-500
-"
-            >
-              最新动态：
-              {new Date(latestTime).toLocaleDateString("zh-CN")}
+              <RiskCard
+                title="商业落地"
+                text={riskText}
+              />
             </div>
           </div>
+        </div>
+      </section>
 
-          <div
-            className="
-mt-5
-space-y-3
-"
-          >
-            {event.news.map((item) => (
-              <Link
-                key={item.id}
+      {/* =========================
+          来源与事件信息
+      ========================= */}
+      <section className="bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-8">
+          <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-end">
+            <div>
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+                SOURCE & DATA
+              </div>
 
-                href={`/news/${item.id}`}
+              <h2 className="mt-2 text-2xl font-black">
+                来源与数据
+              </h2>
+            </div>
 
-                className="
-block
-border
-border-gray-800
-rounded-xl
-p-4
-hover:border-gray-600
-"
-              >
-                <div
-                  className="
-flex
-justify-between
-gap-4
-"
-                >
-                  <h3
-                    className="
-font-bold
-text-sm
-"
-                  >
-                    {item.title}
-                  </h3>
+            <Link
+              href="/events"
+              className="text-sm font-black underline underline-offset-4"
+            >
+              返回全部事件 →
+            </Link>
+          </div>
 
+          <div className="mt-8 grid gap-5 md:grid-cols-4">
+            <DataCard
+              label="相关新闻"
+              value={String(newsCount)}
+              description="当前事件关联有效新闻"
+            />
+
+            <DataCard
+              label="信息来源"
+              value={String(sourceCount)}
+              description="不同来源数量"
+            />
+
+            <DataCard
+              label="24h更新"
+              value={String(recent24h)}
+              description="最近24小时新增动态"
+            />
+
+            <DataCard
+              label="72h更新"
+              value={String(recent72h)}
+              description="最近72小时新增动态"
+            />
+          </div>
+
+          <div className="mt-8 border border-gray-200 bg-gray-50 p-6">
+            <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">
+              SOURCES
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {sourceNames.length > 0 ? (
+                sourceNames.map((source) => (
                   <span
-                    className="
-text-xs
-text-gray-500
-"
+                    key={source}
+                    className="border border-gray-200 bg-white px-3 py-2 text-sm font-bold"
                   >
-                    {new Date(item.createdAt).toLocaleDateString("zh-CN")}
+                    {source}
                   </span>
-                </div>
-
-                <div
-                  className="
-mt-2
-text-sm
-text-gray-500
-"
-                >
-                  来源：
-                  {item.source}
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-        {/* =====================
-来源与事件信息
-===================== */}
-
-        <section
-          className="
-mt-6
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-6
-"
-        >
-          <h2
-            className="
-text-xl
-font-bold
-"
-          >
-            🌐 来源分析
-          </h2>
-
-          <div
-            className="
-mt-5
-grid
-md:grid-cols-3
-gap-4
-"
-          >
-            <div
-              className="
-border
-border-gray-800
-rounded-xl
-p-4
-"
-            >
-              <div
-                className="
-text-gray-500
-text-sm
-"
-              >
-                相关新闻数量
-              </div>
-
-              <div
-                className="
-mt-2
-text-2xl
-font-bold
-"
-              >
-                {newsCount}
-              </div>
-            </div>
-
-            <div
-              className="
-border
-border-gray-800
-rounded-xl
-p-4
-"
-            >
-              <div
-                className="
-text-gray-500
-text-sm
-"
-              >
-                信息来源
-              </div>
-
-              <div
-                className="
-mt-2
-text-2xl
-font-bold
-"
-              >
-                {sourceCount}
-              </div>
-            </div>
-
-            <div
-              className="
-border
-border-gray-800
-rounded-xl
-p-4
-"
-            >
-              <div
-                className="
-text-gray-500
-text-sm
-"
-              >
-                事件趋势
-              </div>
-
-              <div
-                className="
-mt-2
-text-xl
-font-bold
-"
-              >
-                持续关注
-              </div>
+                ))
+              ) : (
+                <span className="text-sm text-gray-500">
+                  暂无来源信息
+                </span>
+              )}
             </div>
           </div>
-        </section>
+        </div>
+      </section>
+
+      {/* =========================
+          底部
+      ========================= */}
+      <footer className="border-t border-gray-200 bg-black text-white">
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-6 py-8 text-sm md:flex-row md:items-center lg:px-8">
+          <div>
+            <div className="font-black">
+              AI Insight Daily
+            </div>
+
+            <div className="mt-1 text-gray-500">
+              AI事件情报 · 新闻证据 · 趋势判断
+            </div>
+          </div>
+
+          <div className="flex gap-5 text-gray-400">
+            <Link
+              href="/"
+              className="transition hover:text-white"
+            >
+              首页
+            </Link>
+
+            <Link
+              href="/news"
+              className="transition hover:text-white"
+            >
+              资讯
+            </Link>
+
+            <Link
+              href="/events"
+              className="transition hover:text-white"
+            >
+              事件中心
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="bg-black p-5">
+      <div className="text-xs text-gray-500">
+        {label}
+      </div>
+
+      <div className="mt-2 text-2xl font-black">
+        {value}
       </div>
     </div>
   );
 }
 
-function AnalysisCard({
+function InsightCard({
+  label,
   title,
-
   text,
 }: {
+  label: string;
   title: string;
-
   text: string;
 }) {
   return (
-    <div
-      className="
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-5
-"
-    >
-      <h3
-        className="
-font-bold
-text-lg
-"
-      >
+    <div className="border border-gray-200 bg-white p-6">
+      <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+        {label}
+      </div>
+
+      <h3 className="mt-3 text-xl font-black">
         {title}
       </h3>
 
-      <p
-        className="
-mt-3
-text-sm
-text-gray-500
-leading-5
-whitespace-pre-line
-"
-      >
+      <p className="mt-3 text-sm leading-7 text-gray-500">
         {text}
       </p>
     </div>
   );
 }
 
-function SmallCard({ text }: { text: string }) {
+function RiskCard({
+  title,
+  text,
+}: {
+  title: string;
+  text: string;
+}) {
   return (
-    <div
-      className="
-border
-border-gray-800
-rounded-xl
-bg-black
-p-4
-text-gray-300
-text-sm
-"
-    >
-      {text}
+    <div className="border border-gray-200 bg-white p-5">
+      <div className="text-base font-black">
+        {title}
+      </div>
+
+      <p className="mt-3 text-sm leading-6 text-gray-500">
+        {text}
+      </p>
     </div>
   );
+}
+
+function DataCard({
+  label,
+  value,
+  description,
+}: {
+  label: string;
+  value: string;
+  description: string;
+}) {
+  return (
+    <div className="border border-gray-200 bg-white p-6">
+      <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+        {label}
+      </div>
+
+      <div className="mt-3 text-3xl font-black">
+        {value}
+      </div>
+
+      <div className="mt-2 text-xs leading-5 text-gray-400">
+        {description}
+      </div>
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-white px-6 text-black">
+      <div className="w-full max-w-xl border border-gray-200 p-10 text-center">
+        <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+          EVENT NOT FOUND
+        </div>
+
+        <h1 className="mt-4 text-3xl font-black">
+          事件不存在
+        </h1>
+
+        <p className="mt-4 text-sm leading-7 text-gray-500">
+          当前事件可能已经被清理，或者访问地址无效。
+        </p>
+
+        <Link
+          href="/events"
+          className="mt-7 inline-block bg-black px-6 py-3 text-sm font-black text-white"
+        >
+          返回事件中心
+        </Link>
+      </div>
+    </main>
+  );
+}
+
+function getTrendLabel(status: string) {
+  switch (status) {
+    case "rising":
+      return "上升";
+    case "falling":
+      return "下降";
+    case "stable":
+      return "稳定";
+    default:
+      return status || "持续关注";
+  }
+}
+
+function getTrendDescription({
+  trendStatus,
+  recent24h,
+  recent72h,
+}: {
+  trendStatus: string;
+  recent24h: number;
+  recent72h: number;
+}) {
+  if (recent24h > 0) {
+    return `最近24小时仍有 ${recent24h} 条关联动态，事件当前保持活跃，建议继续关注后续信息变化。`;
+  }
+
+  if (recent72h > 0) {
+    return `最近72小时仍有 ${recent72h} 条关联动态，但最近24小时暂无新增信息，当前处于持续跟踪阶段。`;
+  }
+
+  if (trendStatus === "falling") {
+    return "事件近期新增信息减少，关注度可能正在回落。";
+  }
+
+  if (trendStatus === "stable") {
+    return "事件近期保持相对稳定，建议继续观察后续新增信息。";
+  }
+
+  return "当前事件仍具有持续跟踪价值，建议结合后续新闻与来源变化判断趋势。";
+}
+
+function buildImpactText(category: string) {
+  if (!category) {
+    return "关注模型、Agent、应用与企业服务等方向可能出现的连锁变化。";
+  }
+
+  return `当前事件属于「${category}」方向，重点关注技术产品、产业链参与者与应用场景是否出现进一步变化。`;
+}
+
+function buildOpportunityText(category: string) {
+  if (!category) {
+    return "重点观察新产品、新服务、企业智能化与行业解决方案的落地机会。";
+  }
+
+  return `围绕「${category}」方向，重点观察产品创新、企业服务、应用工具以及行业解决方案等商业化机会。`;
+}
+
+function buildRiskText(category: string) {
+  if (category === "AI芯片") {
+    return "关注供应链、性能兑现、成本结构与规模化部署难度。";
+  }
+
+  if (category === "AI模型") {
+    return "关注模型能力兑现、推理成本、竞争格局与产品商业化速度。";
+  }
+
+  if (category === "AI智能体" || category === "AI Agent") {
+    return "关注稳定性、权限控制、数据安全与真实工作流落地成本。";
+  }
+
+  return `围绕「${category || "当前方向"}」持续观察技术兑现、竞争格局与商业化成本。`;
+}
+
+function formatScore(value: number | null | undefined) {
+  const number = Number(value || 0);
+
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+
+  return Number.isInteger(number)
+    ? String(number)
+    : number.toFixed(1);
+}
+
+function formatDate(value: Date | string) {
+  return new Date(value).toLocaleDateString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+function formatDateTime(value: Date | string) {
+  return new Date(value).toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }

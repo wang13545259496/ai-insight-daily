@@ -1,19 +1,20 @@
-export async function generateSummary(
-  content:string
-){
+import { generateSummary as generateNewsSummary } from "@/lib/ai-summary";
 
-  return `
-背景：
-人工智能行业正在快速发展，大模型技术和AI应用生态持续演进。
+export async function generateSummary(content: string) {
+  const result = await generateNewsSummary(
+    content,
+    content
+  );
+
+  return `背景：
+${result.background}
 
 内容：
-${content}
+${result.summary}
 
 影响：
-该事件可能推动人工智能技术创新，并影响相关企业和开发者生态。
+${result.impact}
 
 来源分析：
-该新闻属于AI行业动态，建议持续关注后续发展。
-`;
-
+${result.insight}`;
 }

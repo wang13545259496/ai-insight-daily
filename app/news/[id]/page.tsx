@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { checkContentQuality } from "@/lib/news/contentQualityScore";
 
 export default async function NewsDetailPage({
   params,
@@ -8,422 +9,530 @@ export default async function NewsDetailPage({
   }>;
 }) {
   const { id } = await params;
-
   const newsId = Number(id);
 
-  const news = await prisma.news.findUnique({
+  const news = await prisma.news.findFirst({
     where: {
       id: newsId,
+      dataStatus: "active",
     },
   });
 
   if (!news) {
     return (
-      <div
-        className="
-min-h-screen
-bg-black
-text-white
-p-10
-"
-      >
-        <h1>新闻不存在</h1>
-      </div>
+      <main className="min-h-screen bg-black text-white px-4 py-12">
+        <div className="max-w-4xl mx-auto">
+          <div className="border border-gray-800 bg-gray-950 rounded-2xl p-8">
+            <p className="text-gray-500">未找到这条新闻。</p>
+          </div>
+        </div>
+      </main>
     );
   }
 
-  const sections = parseNewsContent(news.content);
+  const isAnalyzed = news.analysisStatus === "completed";
+
+  const contentQuality =
+    checkContentQuality(
+      news.content || ""
+    );
+
+
+  const articleContent =
+    contentQuality.level === "polluted"
+      ? (
+          news.summary?.trim() ||
+          "该新闻正文质量异常，已自动整理。"
+        )
+      : (
+          news.content?.trim() ||
+          news.summary?.trim() ||
+          "暂无新闻正文"
+        );
+
+  const judgmentContent = buildCoreJudgment(
+    news.insight,
+    news.summary,
+    news.content
+  );
+
+  const impactContent = isAnalyzed
+    ? splitAnalysisText(news.impact)
+    : [];
+
+  const businessContent = isAnalyzed
+    ? splitAnalysisText(news.businessOpportunity)
+    : [];
+
+  const investmentContent = isAnalyzed
+    ? splitAnalysisText(news.investmentView)
+    : [];
+
+  const industryValueContent = buildIndustryValue(
+    news.insight,
+    news.content,
+    news.summary
+  );
+
+  const riskContent = isAnalyzed
+    ? extractRisk(news.investmentView, news.insight, news.businessOpportunity)
+    : "暂无风险分析";
 
   return (
-    <div
-      className="
-min-h-screen
-bg-black
-text-white
-p-8
-"
-    >
-      <div
-        className="
-max-w-7xl
-mx-auto
-"
-      >
-        <section
-          className="
-border
-border-gray-800
-rounded-3xl
-bg-gray-950
-p-8
-"
-        >
-          <h1
-            className="
-text-4xl
-font-bold
-"
-          >
-            {news.title}
-          </h1>
-          <div
-            className="
-mt-5
-flex
-items-center
-justify-between
-"
-          >
-            <div
-              className="
-text-sm
-text-gray-500
-"
-            >
-              来源：
-              {news.source}
+    <main className="min-h-screen bg-black text-white px-4 py-8 md:px-8">
+      <div className="max-w-6xl mx-auto">
+
+        {/* 01 新闻头部 */}
+        <section className="border border-gray-800 bg-gray-950 rounded-3xl overflow-hidden">
+          <div className="p-6 md:p-8">
+
+            <div className="flex flex-wrap items-center gap-3 mb-5">
+              <span className="text-xs tracking-[0.25em] text-gray-500 uppercase">
+                AI资讯
+              </span>
+
+              {news.source && (
+                <span className="text-xs text-gray-500">
+                  {news.source}
+                </span>
+              )}
+
+              {news.aiScore !== null && news.aiScore !== undefined && (
+                <span className="text-xs px-2.5 py-1 rounded-full border border-gray-700 text-gray-300">
+                  AI评分 {news.aiScore}
+                </span>
+              )}
             </div>
 
-            {news.sourceUrl && (
-              <a
-                href={news.sourceUrl}
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
 
-                target="_blank"
+              <div className="min-w-0 flex-1">
+                <h1 className="text-3xl md:text-5xl font-semibold leading-tight tracking-tight">
+                  {news.title}
+                </h1>
+              </div>
 
-                rel="noopener noreferrer"
+              {news.sourceUrl && (
+                <div className="shrink-0 md:pt-1">
+                  <div className="flex flex-col items-start md:items-end gap-2">
+                    <a
+                      href={news.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-700 bg-white text-black text-sm font-medium hover:bg-gray-200 transition whitespace-nowrap"
+                    >
+                      查看原始来源
+                      <span>↗</span>
+                    </a>
 
-                className="
-text-sm
-text-gray-300
-border
-border-gray-700
-rounded-lg
-px-4
-py-2
-hover:bg-gray-900
-"
-              >
-                🔗 查看原始新闻
-              </a>
+                    <span className="text-[11px] text-gray-600">
+                      原始来源可能需要国际网络访问
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {!news.sourceUrl && (
+              <div className="mt-5">
+                <span className="text-xs text-gray-600">
+                  暂无原始来源链接
+                </span>
+              </div>
             )}
           </div>
-          <div
-            className="
-mt-4
-text-sm
-text-gray-500
-flex
-gap-5
-"
-          >
-            <span>{news.category}</span>
+        </section>
 
-            <span>{news.source}</span>
+        {/* 02 发生了什么 */}
+        <section className="mt-8">
+          <div className="mb-4">
+            <div className="text-[11px] tracking-[0.3em] text-gray-600 uppercase">
+              WHAT HAPPENED
+            </div>
+
+            <h2 className="mt-2 text-2xl md:text-3xl font-semibold">
+              发生了什么
+            </h2>
+          </div>
+
+          <div className="border border-gray-800 bg-gray-950 rounded-2xl p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <span className="w-1 h-6 bg-white rounded-full" />
+
+              <div>
+                <h3 className="text-lg font-semibold">
+                  新闻正文
+                </h3>
+
+                <p className="text-xs text-gray-600 mt-1">
+                  本站整理
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {splitArticleText(articleContent).map((paragraph, index) => (
+                <p
+                  key={index}
+                  className="text-[15px] md:text-base leading-8 text-gray-300"
+                >
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+          </div>
+
+          {/* 核心判断 */}
+          <div className="mt-4 border border-gray-900 bg-gray-950/70 rounded-2xl p-6 md:p-7">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <div className="text-[10px] tracking-[0.25em] text-gray-600 uppercase">
+                  CORE JUDGMENT
+                </div>
+
+                <h3 className="mt-2 text-lg font-semibold">
+                  核心判断
+                </h3>
+              </div>
+
+              <span className="text-[11px] text-gray-600">
+                AI产业视角
+              </span>
+            </div>
+
+            <p className="text-base md:text-lg leading-8 text-gray-200">
+              {judgmentContent}
+            </p>
           </div>
         </section>
-        <section
-          className="
-mt-6
-grid
-lg:grid-cols-4
-gap-4
-"
-        >
-          {/* 核心内容 */}
 
-          <div
-            className="
-lg:col-span-4
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-6
-"
-          >
-            <h2
-              className="
-text-xl
-font-bold
-"
-            >
-              📌 核心内容
+        {/* 03 为什么重要 */}
+        <section className="mt-12">
+          <div className="mb-5">
+            <div className="text-[11px] tracking-[0.3em] text-gray-600 uppercase">
+              WHY IT MATTERS
+            </div>
+
+            <h2 className="mt-2 text-2xl md:text-3xl font-semibold">
+              为什么重要
             </h2>
 
-            <p
-              className="
-mt-4
-text-sm
-text-gray-300
-leading-6
-"
-            >
-              {sections.core || news.summary || "暂无核心内容"}
+            <p className="mt-2 text-sm text-gray-600">
+              从产业、商业与投资三个角度理解这条新闻的价值。
             </p>
           </div>
 
-          {/* 产业影响 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <InsightCard
+              title="产业影响"
+              label="INDUSTRY"
+              content={impactContent}
+            />
 
-          <AnalysisPanel
-            title="产业影响"
+            <InsightCard
+              title="商业机会"
+              label="BUSINESS"
+              content={businessContent}
+            />
 
-            items={sections.impact}
-          />
-
-          {/* 商业机会 */}
-
-          <AnalysisPanel
-            title="商业机会"
-
-            items={sections.business}
-          />
-
-          {/* 风险分析 */}
-
-          <AnalysisPanel
-            title="风险分析"
-
-            items={sections.risk}
-          />
-        </section>
-
-        <section
-          className="
-mt-6
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-6
-"
-        >
-          <h2
-            className="
-text-xl
-font-bold
-"
-          >
-            🤖 AI智能分析
-          </h2>
-
-          <div
-            className="
-mt-4
-grid
-md:grid-cols-3
-gap-4
-"
-          >
-            <div
-              className="
-border
-border-gray-800
-rounded-xl
-p-4
-"
-            >
-              <h3
-                className="
-font-bold
-text-sm
-"
-              >
-                产业价值
-              </h3>
-
-              <p
-                className="
-mt-2
-text-xs
-text-gray-400
-"
-              >
-                AI技术持续向应用场景扩展。
-              </p>
-            </div>
-
-            <div
-              className="
-border
-border-gray-800
-rounded-xl
-p-4
-"
-            >
-              <h3
-                className="
-font-bold
-text-sm
-"
-              >
-                商业方向
-              </h3>
-
-              <p
-                className="
-mt-2
-text-xs
-text-gray-400
-"
-              >
-                企业服务和行业解决方案持续发展。
-              </p>
-            </div>
-
-            <div
-              className="
-border
-border-gray-800
-rounded-xl
-p-4
-"
-            >
-              <h3
-                className="
-font-bold
-text-sm
-"
-              >
-                关注风险
-              </h3>
-
-              <p
-                className="
-mt-2
-text-xs
-text-gray-400
-"
-              >
-                关注技术、安全和成本因素。
-              </p>
-            </div>
+            <InsightCard
+              title="投资判断"
+              label="INVESTMENT"
+              content={investmentContent}
+            />
           </div>
         </section>
+
+        {/* 04 AI研判 */}
+        <section className="mt-12">
+          <div className="mb-5">
+            <div className="text-[11px] tracking-[0.3em] text-gray-600 uppercase">
+              AI INSIGHT
+            </div>
+
+            <h2 className="mt-2 text-2xl md:text-3xl font-semibold">
+              AI智能分析
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            <ResearchCard
+              title="产业价值"
+              content={industryValueContent}
+            />
+
+            <ResearchCard
+              title="商业方向"
+              content={
+                news.businessOpportunity?.trim() ||
+                "暂无商业方向分析"
+              }
+            />
+
+            <ResearchCard
+              title="关注风险"
+              content={riskContent}
+            />
+
+          </div>
+        </section>
+
       </div>
-    </div>
+    </main>
   );
 }
 
-function AnalysisPanel({
+function InsightCard({
   title,
-
-  items,
+  label,
+  content,
 }: {
   title: string;
-
-  items: string[];
+  label: string;
+  content: string[];
 }) {
   return (
-    <div
-      className="
-border
-border-gray-800
-rounded-2xl
-bg-gray-950
-p-5
-"
-    >
-      <h3
-        className="
-font-bold
-text-sm
-"
-      >
+    <div className="border border-gray-800 bg-gray-950 rounded-2xl p-6 min-h-[220px]">
+      <div className="text-[10px] tracking-[0.25em] text-gray-600">
+        {label}
+      </div>
+
+      <h3 className="mt-3 text-lg font-semibold">
         {title}
       </h3>
 
-      <div
-        className="
-mt-4
-space-y-2
-"
-      >
-        {items.length > 0 ? (
-          items.map((item, index) => (
-            <div
+      {content.length > 0 ? (
+        <div className="mt-5 space-y-3">
+          {content.map((item, index) => (
+            <p
               key={index}
-
-              className="
-text-xs
-text-gray-400
-border-b
-border-gray-900
-pb-2
-"
+              className="text-sm leading-7 text-gray-400"
             >
               {item}
-            </div>
-          ))
-        ) : (
-          <div
-            className="
-text-xs
-text-gray-500
-"
-          >
-            暂无信息
-          </div>
-        )}
-      </div>
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-5 text-sm leading-7 text-gray-600">
+          暂无相关分析
+        </p>
+      )}
     </div>
   );
 }
 
-function parseNewsContent(content: string) {
-  const getSection = (
-    start: string,
+function ResearchCard({
+  title,
+  content,
+}: {
+  title: string;
+  content: string;
+}) {
+  return (
+    <div className="border border-gray-800 bg-gray-950 rounded-2xl p-6 min-h-[220px]">
+      <div className="text-[10px] tracking-[0.25em] text-gray-600 uppercase">
+        AI ANALYSIS
+      </div>
 
-    end?: string,
-  ) => {
-    const startIndex = content.indexOf(start);
+      <h3 className="mt-3 text-lg font-semibold">
+        {title}
+      </h3>
 
-    if (startIndex === -1) {
-      return "";
+      <p className="mt-5 text-sm leading-7 text-gray-400">
+        {content}
+      </p>
+    </div>
+  );
+}
+
+function splitArticleText(text: string) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function splitAnalysisText(text: string | null) {
+  if (!text?.trim()) {
+    return [];
+  }
+
+  return text
+    .replace(/\r\n/g, "\n")
+    .split(/\n+|(?<=[。！？])/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildCoreJudgment(
+  insight: string | null,
+  summary: string | null,
+  content: string | null
+) {
+  const insightText = insight?.trim().replace(/\s+/g, " ");
+
+  if (insightText) {
+    const sentences = insightText
+      .split(/(?<=[。！？])/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const judgmentSentence = sentences.find((sentence) =>
+      /重塑|意味着|表明|推动|加速|改变|竞争|门槛|趋势|倒逼|催化|深化|转向|普及/.test(
+        sentence
+      )
+    );
+
+    if (judgmentSentence) {
+      return simplifyJudgment(judgmentSentence);
     }
 
-    const begin = startIndex + start.length;
+    if (sentences.length >= 2) {
+      return simplifyJudgment(sentences[sentences.length - 1]);
+    }
 
-    const endIndex = end ? content.indexOf(end, begin) : content.length;
+    return simplifyJudgment(insightText);
+  }
 
-    return content
+  const summaryText = summary?.trim().replace(/\s+/g, " ");
 
-      .slice(
-        begin,
+  if (summaryText) {
+    const sentences = summaryText
+      .split(/(?<=[。！？])/)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
-        endIndex === -1 ? content.length : endIndex,
+    const conclusion = sentences.find((sentence) =>
+      /意味着|表明|可能|有望|推动|加速|重塑|改变|降低门槛|提升|强化|加剧|倒逼/.test(
+        sentence
       )
+    );
 
-      .trim();
-  };
+    if (conclusion) {
+      return simplifyJudgment(conclusion);
+    }
 
-  return {
-    core: getSection(
-      "【核心内容】",
+    if (sentences.length >= 2) {
+      return simplifyJudgment(sentences[sentences.length - 1]);
+    }
+  }
 
-      "【产业影响】",
-    ),
+  if (content?.trim()) {
+    const firstSentence = content
+      .trim()
+      .replace(/\s+/g, " ")
+      .split(/(?<=[。！？])/)
+      .map((item) => item.trim())
+      .filter(Boolean)[0];
 
-    impact: getSection(
-      "【产业影响】",
+    if (firstSentence) {
+      return `这条消息的核心价值在于：${firstSentence}`;
+    }
+  }
 
-      "【商业机会】",
-    )
-      .split("\n")
+  return "暂无核心判断";
+}
 
-      .filter(Boolean),
+function buildIndustryValue(
+  insight: string | null,
+  content: string | null,
+  summary: string | null
+) {
+  const insightText = insight?.trim().replace(/\s+/g, " ");
 
-    business: getSection(
-      "【商业机会】",
+  if (insightText) {
+    const sentences = insightText
+      .split(/(?<=[。！？])/)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
-      "【风险分析】",
-    )
-      .split("\n")
+    const industrySentence = sentences.find((sentence) =>
+      /产业|行业|市场|生态|生产力|开发者|企业|应用|模型|平台|成本|价格/.test(
+        sentence
+      )
+    );
 
-      .filter(Boolean),
+    if (industrySentence) {
+      const remaining = sentences.filter(
+        (sentence) => sentence !== industrySentence
+      );
 
-    risk: getSection("【风险分析】")
-      .split("\n")
+      if (remaining.length > 0) {
+        return `${industrySentence} ${remaining.join(" ")}`;
+      }
 
-      .filter(Boolean),
-  };
+      return industrySentence;
+    }
+  }
+
+  if (summary?.trim()) {
+    return `从产业角度看，这一变化的关键在于：${summary
+      .trim()
+      .replace(/\s+/g, " ")}`;
+  }
+
+  if (content?.trim()) {
+    return `从产业角度看，这一事件可能进一步推动相关技术和应用落地。`;
+  }
+
+  return "暂无产业价值分析";
+}
+
+function extractRisk(
+  investmentView: string | null,
+  insight: string | null,
+  businessOpportunity: string | null
+) {
+  const investmentText = investmentView?.trim();
+
+  if (investmentText) {
+    const riskMatch = investmentText.match(
+      /(?:风险|不确定性|挑战|注意|需关注|需要关注)[：:：]?\s*([^。！？]+[。！？]?)/i
+    );
+
+    if (riskMatch?.[0]) {
+      return riskMatch[0].trim();
+    }
+  }
+
+  const combinedText = [
+    investmentText,
+    insight?.trim(),
+    businessOpportunity?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (combinedText) {
+    if (/价格竞争|价格战|降价/.test(combinedText)) {
+      return "需要关注 AI 模型价格竞争加剧带来的利润空间压缩，以及低价策略能否长期维持。";
+    }
+
+    if (/迭代|技术/.test(combinedText)) {
+      return "需要关注模型技术迭代速度，以及当前能力和成本优势能否持续。";
+    }
+
+    if (/依赖|平台/.test(combinedText)) {
+      return "需要关注对单一模型或平台的依赖，以及底层能力变化带来的业务风险。";
+    }
+  }
+
+  return "需要关注模型技术快速迭代、价格竞争加剧以及优势持续性的变化。";
+}
+
+function simplifyJudgment(text: string) {
+  let result = text
+    .replace(/^其/, "这一变化")
+    .replace(/^该模型/, "这一变化")
+    .replace(/^该产品/, "这一变化")
+    .replace(/^该公司/, "这一变化")
+    .trim();
+
+  if (result.length > 120) {
+    result = `${result.slice(0, 120)}……`;
+  }
+
+  return result;
 }

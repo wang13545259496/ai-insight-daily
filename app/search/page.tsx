@@ -205,6 +205,37 @@ keyword && (
 
 <section className="mt-12">
 
+<div className="grid md:grid-cols-3 gap-4 mb-8">
+
+<div className="border border-gray-800 rounded-2xl bg-gray-950 p-5">
+<div className="text-xs text-gray-500">
+相关资讯
+</div>
+<div className="mt-2 text-3xl font-bold">
+{results.length}
+</div>
+</div>
+
+<div className="border border-gray-800 rounded-2xl bg-gray-950 p-5">
+<div className="text-xs text-gray-500">
+相关事件
+</div>
+<div className="mt-2 text-3xl font-bold">
+{events.length}
+</div>
+</div>
+
+<div className="border border-gray-800 rounded-2xl bg-gray-950 p-5">
+<div className="text-xs text-gray-500">
+最高热度
+</div>
+<div className="mt-2 text-3xl font-bold">
+{events.length ? Math.round(Math.max(...events.map(e=>e.heatScore))) : 0}
+</div>
+</div>
+
+</div>
+
 
 
 <h2 className="
@@ -213,14 +244,24 @@ font-bold
 mb-6
 ">
 
+{keyword==="GPT" || keyword==="OpenAI" || keyword==="Claude" || keyword==="Gemini" || keyword==="DeepSeek"
+?
+<>
+模型专题：
+
+<span className="text-gray-400">
+{keyword}
+</span>
+</>
+:
+<>
 搜索：
 
 <span className="text-gray-400">
-
 {keyword}
-
 </span>
-
+</>
+}
 
 </h2>
 

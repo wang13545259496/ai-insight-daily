@@ -9,11 +9,155 @@ function classify(title: string) {
 
   let score = 40;
 
+
+  // 垃圾事件过滤
+
+  const noiseKeywords = [
+    "dota",
+    "roboschool",
+    "universe",
+    "distill",
+    "tutorial",
+    "course",
+    "workshop",
+    "benchmark",
+    "paper",
+    "survey"
+  ];
+
+
+  if(
+    noiseKeywords.some(
+      item => text.includes(item)
+    )
+  ){
+
+    return {
+      type:"noise",
+      score:10,
+    };
+
+  }
+
+
+  // AI安全事件
+
+  if (
+    text.includes("safety") ||
+    text.includes("security") ||
+    text.includes("cyber") ||
+    text.includes("mental health") ||
+    text.includes("trust")
+  ) {
+
+    type = "safety";
+
+    score = 82;
+
+  }
+
+
+  // AI评测事件
+
+  else if (
+    text.includes("benchmark") ||
+    text.includes("swe-bench") ||
+    text.includes("evaluation") ||
+    text.includes("evaluate")
+  ) {
+
+    type = "evaluation";
+
+    score = 75;
+
+  }
+
+
+  // 公司动态事件
+
+  if (
+    text.includes("appointed") ||
+    text.includes("appoint") ||
+    text.includes("joins") ||
+    text.includes("chief") ||
+    text.includes("ceo") ||
+    text.includes("cfo") ||
+    text.includes("officer")
+  ) {
+
+    type = "company";
+
+    score = 72;
+
+  }
+
+
+  // AI研究事件
+
+  else if (
+    text.includes("paper") ||
+    text.includes("arxiv") ||
+    text.includes("algorithm") ||
+    text.includes("mathematics") ||
+    text.includes("physics") ||
+    text.includes("theorem") ||
+    text.includes("instruction") ||
+    text.includes("hierarchy") ||
+    text.includes("alignment") ||
+    text.includes("training")
+  ) {
+
+    type = "research";
+
+    score = 60;
+
+  }
+
+
+  // Agent智能体事件
+
+  if (
+    text.includes("agent") ||
+    text.includes("agentic") ||
+    text.includes("copilot") ||
+    text.includes("codex") ||
+    text.includes("operator") ||
+    text.includes("runtime") ||
+    text.includes("workflow")
+  ) {
+
+    type = "agent";
+
+    score = 88;
+
+  }
+
+
+  // 模型事件
+
+  else if (
+    text.includes("gpt") ||
+    text.includes("claude") ||
+    text.includes("gemini") ||
+    text.includes("llama") ||
+    text.includes("deepseek") ||
+    text.includes("模型")
+  ) {
+
+    type = "model";
+
+    score = 85;
+
+  }
+
+
   // 产品发布
 
   if (
     text.includes("launch") ||
     text.includes("release") ||
+    text.includes("introducing") ||
+    text.includes("announcing") ||
     text.includes("发布") ||
     text.includes("推出")
   ) {
@@ -28,12 +172,73 @@ function classify(title: string) {
     text.includes("google") ||
     text.includes("microsoft") ||
     text.includes("anthropic") ||
+    text.includes("nvidia") ||
+    text.includes("deepseek") ||
+    text.includes("百度") ||
+    text.includes("腾讯") ||
+    text.includes("阿里") ||
+    text.includes("华为") ||
+    text.includes("字节") ||
+    text.includes("豆包") ||
+    text.includes("minimax") ||
+    text.includes("月之暗面") ||
     text.includes("公司")
   ) {
     type = "company";
 
     score = 80;
   }
+
+  // 安全治理
+
+  else if (
+    text.includes("安全") ||
+    text.includes("safety") ||
+    text.includes("governance") ||
+    text.includes("治理") ||
+    text.includes("risk") ||
+    text.includes("threat") ||
+    text.includes("early warning")
+  ) {
+
+    type = "safety";
+
+    score = 82;
+
+  }
+
+
+  // 公司合作
+
+  else if (
+    text.includes("partnership") ||
+    text.includes("partner") ||
+    text.includes("合作") ||
+    text.includes("api")
+  ) {
+
+    type = "company";
+
+    score = 78;
+
+  }
+
+
+  // AI应用
+
+  else if (
+    text.includes("health") ||
+    text.includes("customer") ||
+    text.includes("solution") ||
+    text.includes("application")
+  ) {
+
+    type = "application";
+
+    score = 75;
+
+  }
+
 
   // 投融资
   else if (
@@ -63,8 +268,7 @@ function classify(title: string) {
     text.includes("paper") ||
     text.includes("research") ||
     text.includes("gan") ||
-    text.includes("transformer") ||
-    text.includes("model")
+    text.includes("transformer")
   ) {
     type = "research";
 

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import PageViewTracker from "@/components/analytics/PageViewTracker";
 
 export const metadata: Metadata = {
   title: "AI Insight Daily",
-
   description: "AI资讯与Agent生态平台",
 };
 
@@ -22,6 +22,8 @@ text-white
 "
       >
         <Navbar />
+
+        <PageViewTracker />
 
         {children}
       </body>

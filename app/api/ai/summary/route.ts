@@ -1,117 +1,50 @@
-import OpenAI from "openai";
+import { NextResponse } from "next/server";
+import { generateSummary } from "@/lib/ai-summary";
 
-
-const hasKey = !!process.env.OPENAI_API_KEY;
-
-
-const client = hasKey
-? new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-: null;
-
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-
-
   try {
-
-
     const body = await request.json();
 
+    const title = String(body?.title || "").trim();
+    const content = String(body?.content || "").trim();
 
-    const { title, content } = body;
-    if(!client){
-
- return Response.json({
-
-  success:true,
-
-  data:{
-    summary:`
-背景：
-${title}
-
-内容：
-${content}
-
-来源：
-AI Insight Daily 自动分析系统
-`
-  }
-
- });
-
-}
-
-
-
-    const response = await client.chat.completions.create({
-
-      model:"gpt-4o-mini",
-
-      messages:[
-
+    if (!title) {
+      return NextResponse.json(
         {
-          role:"system",
-          content:
-          "你是一名专业AI新闻分析师，请按照时间、背景、内容、来源渠道整理新闻。"
+          success: false,
+          error: "缺少新闻标题",
         },
-
         {
-          role:"user",
-          content:`
-标题：
-${title}
-
-正文：
-${content}
-
-请生成结构化摘要。
-`
+          status: 400,
         }
+      );
+    }
 
-      ]
+    const result = await generateSummary(
+      title,
+      content
+    );
 
+    return NextResponse.json({
+      success: true,
+      data: result,
     });
+  } catch (error) {
+    console.error(
+      "AI摘要生成失败:",
+      error
+    );
 
-
-
-    return Response.json({
-
-      success:true,
-
-      data:{
-
-        summary:
-        response.choices[0].message.content
-
+    return NextResponse.json(
+      {
+        success: false,
+        error: String(error),
+      },
+      {
+        status: 500,
       }
-
-    });
-
-
-
-  } catch(error){
-
-
-    console.error(error);
-
-
-    return Response.json({
-
-      success:false,
-
-      error:String(error)
-
-    },{
-
-      status:500
-
-    });
-
-
+    );
   }
-
-
 }

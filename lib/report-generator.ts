@@ -1,39 +1,38 @@
 import { prisma } from "@/lib/prisma";
 
+export async function generateDailyReport() {
+  const date = new Date().toISOString().split("T")[0];
 
-export async function generateDailyReport(){
-
-
-  const news =
-  await prisma.news.findMany({
-
-    orderBy:{
-      createdAt:"desc"
+  // 防止同一天重复生成日报
+  const existingReport = await prisma.dailyReport.findFirst({
+    where: {
+      date,
     },
-
-    take:8
-
+    orderBy: {
+      createdAt: "desc",
+    },
   });
 
+  if (existingReport) {
+    console.log(
+      `今日日报已存在，跳过重复生成：${existingReport.title}`
+    );
 
-
-  if(news.length === 0){
-
-    return null;
-
+    return existingReport;
   }
 
+  const news = await prisma.news.findMany({
+    orderBy: {
+      createdAt: "desc",
+    },
+    take: 8,
+  });
 
-
-  const date =
-  new Date()
-  .toISOString()
-  .split("T")[0];
-
-
+  if (news.length === 0) {
+    return null;
+  }
 
   let content = `
-
 AI Insight Daily
 
 ${date}
@@ -42,15 +41,10 @@ ${date}
 
 `;
 
+  news.forEach((item, index) => {
+    content += `
 
-
-  news.forEach(
-    (item,index)=>{
-
-
-      content += `
-
-${index+1}.
+${index + 1}.
 ${item.title}
 
 摘要：
@@ -60,11 +54,7 @@ ${item.summary}
 ${item.source}
 
 `;
-
-    }
-  );
-
-
+  });
 
   content += `
 
@@ -81,31 +71,17 @@ ${item.source}
 
 `;
 
-
-
-  const report =
-  await prisma.dailyReport.create({
-
-    data:{
-
-
-      title:
-      `AI Insight Daily ${date}`,
-
-
+  const report = await prisma.dailyReport.create({
+    data: {
+      title: `AI Insight Daily ${date}`,
       content,
-
-
-      date
-
-
-    }
-
+      date,
+    },
   });
 
-
+  console.log(
+    `日报生成完成：${report.title}`
+  );
 
   return report;
-
-
 }

@@ -1,12 +1,43 @@
 import { News } from "@prisma/client";
 
 
+function getNewsTime(item: News){
 
-/**
- * V7.4.8.10.5.5.3
- *
- * AI事件自动评分引擎
- */
+  return (
+    item.publishedAt ??
+    item.createdAt
+  );
+
+}
+
+
+
+function isOfficialSource(source:string){
+
+  const official=[
+
+    "OpenAI",
+    "Google",
+    "Microsoft",
+    "Anthropic",
+    "NVIDIA",
+    "DeepMind",
+    "百度",
+    "腾讯",
+    "阿里",
+    "华为",
+    "字节"
+
+  ];
+
+
+  return official.some(
+    item =>
+      source.includes(item)
+  );
+
+}
+
 
 
 
@@ -14,73 +45,127 @@ export function calculateEventScore(
   news: News[]
 ){
 
+  if(!news.length){
+
+    return 0;
+
+  }
 
 
-  // 新闻数量评分
+
+  /*
+   新闻规模
+  */
 
   const newsScore =
-    news.length * 10;
+    Math.min(
+      news.length * 8,
+      250
+    );
 
 
 
+  /*
+   多来源验证
+  */
 
-  // 来源数量评分
-
-  const sourceScore =
+  const sourceCount =
     new Set(
       news.map(
         item=>item.source
       )
-    ).size * 15;
+    ).size;
+
+
+  const sourceScore =
+    Math.min(
+      sourceCount * 20,
+      200
+    );
 
 
 
 
-
-  // 时间增长评分
+  /*
+    发布时间增长
+  */
 
   const now =
     Date.now();
 
 
-
-  const recentNews =
+  const recent24 =
     news.filter(item=>{
 
-
-      const diff =
-        now -
+      const time =
         new Date(
-          item.createdAt
+          getNewsTime(item)
         ).getTime();
 
 
-
       return (
-        diff <
-        24 * 60 * 60 * 1000
+        now-time
+        <=
+        24*60*60*1000
       );
-
 
     });
 
 
 
-
   const growthScore =
-    recentNews.length * 20;
-
-
-
-
-
-  // 关键词评分
-
-  const keywordScore =
     Math.min(
-      news.length * 5,
-      100
+      recent24.length * 25,
+      250
     );
+
+
+
+
+  /*
+    AI质量
+  */
+
+
+  const avgAiScore =
+    news.reduce(
+      (
+        sum,
+        item
+      )=>
+        sum+
+        (item.aiScore || 0),
+      0
+    )
+    /
+    news.length;
+
+
+
+  const qualityScore =
+    Math.round(
+      avgAiScore * 2
+    );
+
+
+
+
+  /*
+    官方来源增强
+  */
+
+
+  const officialScore =
+    news.some(
+      item=>
+        isOfficialSource(
+          item.source
+        )
+    )
+    ?
+    100
+    :
+    0;
 
 
 
@@ -93,13 +178,14 @@ export function calculateEventScore(
     +
     growthScore
     +
-    keywordScore;
-
+    qualityScore
+    +
+    officialScore;
 
 
 
   return Math.min(
-    total,
+    Math.round(total),
     1000
   );
 
@@ -111,29 +197,27 @@ export function calculateEventScore(
 
 
 
+
 export function calculateTrendStatus(
   score:number
 ){
 
 
-  if(score>=300){
+  if(score>=400){
 
     return "rising";
 
   }
 
 
-
-  if(score>=100){
+  if(score>=150){
 
     return "stable";
 
   }
 
 
-
   return "falling";
-
 
 }
 
@@ -142,29 +226,25 @@ export function calculateTrendStatus(
 
 
 
-
 export function generateTrendSummary(
-  score:number
+ score:number
 ){
 
 
-  if(score>=300){
+  if(score>=400){
 
-    return "事件热度快速增长，正在形成行业关注热点";
-
-  }
-
-
-
-  if(score>=100){
-
-    return "事件保持稳定关注度";
+    return "重大AI产业事件，多来源快速扩散，建议重点跟踪";
 
   }
 
 
+  if(score>=150){
 
-  return "事件关注度正在下降";
+    return "AI产业事件保持稳定关注";
 
+  }
+
+
+  return "事件热度下降，进入观察阶段";
 
 }

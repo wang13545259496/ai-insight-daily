@@ -1,103 +1,58 @@
 import { prisma } from "@/lib/prisma";
+import { calculateHotScore } from "./hotScore";
 
+function contentQuality(item: {
+  title: string;
+  summary: string;
+  content: string;
+  sourceUrl: string | null;
+}) {
+  let score = 0;
 
-import {
-    calculateHotScore
+  if (item.title?.length >= 8) score += 25;
+  if (item.summary?.length >= 30) score += 25;
+  if (item.content?.length >= 100) score += 30;
+  if (item.sourceUrl) score += 20;
+
+  return score;
 }
-from "./hotScore";
 
+export async function getHotNews(limit = 20) {
+  const news = await prisma.news.findMany({
+    where: {
+      dataStatus: "active",
+    },
+    take: 200,
+    orderBy: {
+      createdAt: "desc",
+    },
+    include: {
+      event: true,
+      sourceRef: true,
+    },
+  });
 
+  const result = news
+    .map((item) => {
+      const hotScore = calculateHotScore({
+        createdAt: item.createdAt,
+        sourceCount: item.sourceCount,
+        originalSourceCount: item.originalSourceCount,
+        verified: item.verified,
+        aiScore: item.aiScore,
+        contentQuality: contentQuality(item),
+        eventHeat: item.event?.heatScore ?? 0,
+        eventQuality: item.event?.qualityScore ?? 0,
+        sourceWeight: item.sourceRef?.rssWeight ?? 100,
+      });
 
-export async function getHotNews(limit:number = 20){
+      return {
+        ...item,
+        hotScore,
+      };
+    })
+    .sort((a, b) => b.hotScore.finalScore - a.hotScore.finalScore)
+    .slice(0, limit);
 
-
-    const news = await prisma.news.findMany({
-
-
-        take:100,
-
-
-        orderBy:{
-
-
-            createdAt:"desc"
-
-
-        }
-
-
-    });
-
-
-
-    const result = news.map(item=>{
-
-
-        /**
-         * 当前版本数据库暂未接入 NewsMetrics
-         * 使用默认热度指标
-         * 后续接入真实统计表
-         */
-
-
-        const metrics = {
-
-
-            views:0,
-
-
-            likes:0,
-
-
-            favorites:0,
-
-
-            shares:0,
-
-
-            comments:0
-
-
-        };
-
-
-
-        const hotScore = calculateHotScore(metrics);
-
-
-
-        return {
-
-
-            ...item,
-
-
-            hotScore
-
-
-        };
-
-
-    });
-
-
-
-    return result
-
-        .sort(
-
-            (a,b)=>
-
-                b.hotScore.finalScore
-
-                -
-
-                a.hotScore.finalScore
-
-        )
-
-        .slice(0,limit);
-
-
-
+  return result;
 }

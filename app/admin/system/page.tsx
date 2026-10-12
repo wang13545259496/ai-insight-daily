@@ -1,38 +1,27 @@
-import { prisma } from "@/lib/prisma";
+export default async function AdminSystemPage() {
 
 
-export default async function AdminSystemPage(){
-
-
-  const newsCount =
-    await prisma.news.count();
-
-
-
-  const reportCount =
-    await prisma.dailyReport.count();
-
-
-
-  const latestNews =
-    await prisma.news.findFirst({
-
-      orderBy:{
-        createdAt:"desc"
+  const res =
+    await fetch(
+      "http://localhost:3000/api/admin/system-health",
+      {
+        cache:"no-store"
       }
-
-    });
-
+    );
 
 
-  const latestReport =
-    await prisma.dailyReport.findFirst({
+  const result =
+    await res.json();
 
-      orderBy:{
-        createdAt:"desc"
-      }
 
-    });
+
+  const data =
+    result.data;
+
+
+
+  const system =
+    result.system;
 
 
 
@@ -42,7 +31,7 @@ export default async function AdminSystemPage(){
 
 
       <h1>
-        系统监控中心
+        AI Insight Daily 系统监控中心
       </h1>
 
 
@@ -53,39 +42,79 @@ export default async function AdminSystemPage(){
         <div className="card">
 
           <h2>
-            新闻数据
+            📰 新闻数据
           </h2>
-
 
           <p>
             新闻总量：
-            {newsCount}
+            {data.newsCount}
           </p>
 
-
         </div>
-
 
 
 
         <div className="card">
 
           <h2>
-            日报数据
+            📄 日报数据
           </h2>
-
 
           <p>
             日报数量：
-            {reportCount}
+            {data.reportCount}
           </p>
-
 
         </div>
 
 
 
+        <div className="card">
+
+          <h2>
+            🔥 事件数据
+          </h2>
+
+          <p>
+            热点事件：
+            {data.eventCount}
+          </p>
+
+        </div>
+
+
+
+        <div className="card">
+
+          <h2>
+            💡 商业机会
+          </h2>
+
+          <p>
+            机会数量：
+            {data.opportunityCount}
+          </p>
+
+        </div>
+
+
+
+        <div className="card">
+
+          <h2>
+            💰 投资观察
+          </h2>
+
+          <p>
+            项目数量：
+            {data.investmentCount}
+          </p>
+
+        </div>
+
+
       </section>
+
 
 
 
@@ -100,15 +129,39 @@ export default async function AdminSystemPage(){
 
 
         <p>
+          Web服务：
+          {
+            system.web === "online"
+            ? "🟢 Online"
+            : "🔴 Offline"
+          }
+        </p>
+
+
+
+        <p>
+          数据库：
+          {
+            system.database === "connected"
+            ? "🟢 Connected"
+            : "🔴 Error"
+          }
+        </p>
+
+
+
+        <p>
           RSS采集：
           ✅ 正常
         </p>
 
 
+
         <p>
-          摘要系统：
+          AI摘要：
           ✅ 正常
         </p>
+
 
 
         <p>
@@ -117,8 +170,9 @@ export default async function AdminSystemPage(){
         </p>
 
 
-
       </section>
+
+
 
 
 
@@ -131,30 +185,33 @@ export default async function AdminSystemPage(){
         </h2>
 
 
+
         <p>
-
           最新新闻：
-
           {
-            latestNews?.createdAt
-            .toLocaleString()
-
+            data.latestNews
+            ?
+            new Date(
+              data.latestNews
+            ).toLocaleString()
+            :
+            "暂无"
           }
-
         </p>
 
 
 
         <p>
-
           最新日报：
-
           {
-            latestReport?.createdAt
-            .toLocaleString()
-
+            data.latestReport
+            ?
+            new Date(
+              data.latestReport
+            ).toLocaleString()
+            :
+            "暂无"
           }
-
         </p>
 
 

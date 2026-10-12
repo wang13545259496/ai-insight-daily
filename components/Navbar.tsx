@@ -10,38 +10,43 @@ const navItems = [
   },
 
   {
-    name: "新闻",
+    name: "AI资讯",
     href: "/news",
   },
 
   {
-    name: "事件",
+    name: "事件中心",
     href: "/events",
   },
 
   {
-    name: "产业",
+    name: "产业趋势",
     href: "/industry",
   },
 
   {
-    name: "Agent",
+    name: "Agent生态",
     href: "/agent",
   },
 
   {
-    name: "模型",
+    name: "模型生态",
     href: "/models",
   },
 
   {
-    name: "机会",
+    name: "机会地图",
     href: "/opportunity-map",
   },
 
   {
-    name: "投资",
+    name: "投资观察",
     href: "/investment",
+  },
+
+  {
+    name: "预测",
+    href: "/trend/predict",
   },
 ];
 

@@ -1,5 +1,4 @@
 import { agents } from "@/data/agents";
-console.log(agents)
 
 export default function AgentsPage(){
 

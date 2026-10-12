@@ -1,87 +1,241 @@
 import { prisma } from "@/lib/prisma";
 
-function cleanHtml(html: string) {
-  if (!html) {
-    return "";
-  }
 
-  return (
-    html
+function cleanHtml(html:string){
 
-      // 删除script
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-
-      // 删除style
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-
-      // 删除图片
-      .replace(/<img[^>]*>/gi, "")
-
-      // 删除html标签
-      .replace(/<[^>]+>/g, "")
-
-      // 解码常见html
-      .replace(/&nbsp;/g, " ")
-
-      .replace(/&amp;/g, "&")
-
-      .replace(/&lt;/g, "<")
-
-      .replace(/&gt;/g, ">")
-
-      // 多空格
-      .replace(/\s+/g, " ")
-
-      .trim()
-  );
+if(!html){
+return "";
 }
 
-async function main() {
-  console.log("开始清洗新闻正文...");
 
-  const newsList = await prisma.news.findMany({
-    take: 200,
-  });
+let text=html;
 
-  console.log(`处理 ${newsList.length} 条新闻`);
 
-  let count = 0;
+// 删除script
+text=text.replace(
+/<script[\s\S]*?<\/script>/gi,
+""
+);
 
-  for (const news of newsList) {
-    try {
-      const cleaned = cleanHtml(news.content);
 
-      const finalContent = cleaned || news.summary;
+// 删除style
+text=text.replace(
+/<style[\s\S]*?<\/style>/gi,
+""
+);
 
-      await prisma.news.update({
-        where: {
-          id: news.id,
-        },
 
-        data: {
-          content: finalContent,
-        },
-      });
+// 删除图片
+text=text.replace(
+/<img[^>]*>/gi,
+""
+);
 
-      count++;
 
-      console.log(
-        `${count}/${newsList.length}`,
+// 删除JS代码块
+text=text.replace(
+/\(function[\s\S]*?\}\)\(.*?\);?/gi,
+""
+);
 
-        news.title,
-      );
-    } catch (error) {
-      console.log(
-        "失败",
 
-        news.id,
-      );
-    }
-  }
+// 删除常见JS
+text=text.replace(
+/(window\.|document\.|gtag\(|collectEvent|dataLayer|function\s*\()/gi,
+""
+);
 
-  console.log("新闻正文清洗完成");
 
-  await prisma.$disconnect();
+// 删除JSON-LD
+text=text.replace(
+/\{["@']@context[\s\S]*?\}/gi,
+""
+);
+
+
+// 删除HTML
+text=text.replace(
+/<[^>]+>/g,
+""
+);
+
+
+// HTML实体
+
+text=text.replace(/&nbsp;/g," ");
+
+text=text.replace(/&amp;/g,"&");
+
+text=text.replace(/&lt;/g,"<");
+
+text=text.replace(/&gt;/g,">");
+
+
+// 清理空白
+
+text=text.replace(
+/\s+/g,
+" "
+);
+
+
+return text.trim();
+
 }
+
+
+
+function isBadContent(text:string){
+
+if(!text){
+return true;
+}
+
+
+// 太短
+
+if(text.length<80){
+return true;
+}
+
+
+// 官网导航污染
+
+const badWords=[
+
+"关于我们",
+"加入我们",
+"联系我们",
+"投资者关系",
+"下载",
+"扫码下载",
+"京ICP备",
+"版权所有",
+"客服热线",
+"意见反馈"
+
+];
+
+
+let count=0;
+
+
+for(const word of badWords){
+
+if(text.includes(word)){
+count++;
+}
+
+}
+
+
+return count>=3;
+
+}
+
+
+
+async function main(){
+
+console.log(
+"开始深度清洗新闻正文..."
+);
+
+
+const list=await prisma.news.findMany({
+
+select:{
+id:true,
+title:true,
+content:true,
+summary:true
+}
+
+});
+
+
+let clean=0;
+
+let bad=0;
+
+
+for(const news of list){
+
+
+const result=cleanHtml(
+news.content || ""
+);
+
+
+if(isBadContent(result)){
+
+
+await prisma.news.update({
+
+where:{
+id:news.id
+},
+
+data:{
+
+dataStatus:"inactive",
+
+cleanReason:
+"正文污染或低质量内容"
+
+}
+
+});
+
+
+bad++;
+
+console.log(
+"标记低质量:",
+news.title
+);
+
+
+continue;
+
+}
+
+
+
+await prisma.news.update({
+
+where:{
+id:news.id
+},
+
+data:{
+
+content:result,
+summary:cleanHtml(news.summary || "")
+
+}
+
+});
+
+
+clean++;
+
+
+}
+
+
+console.log(
+"正文清洗完成",
+{
+clean,
+bad
+}
+);
+
+
+await prisma.$disconnect();
+
+}
+
 
 main();

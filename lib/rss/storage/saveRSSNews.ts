@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
+import { cleanContent, isBadContent } from "@/lib/news/contentCleaner";
+import { enrichNews } from "@/lib/news/newsEnricher";
+import { checkContentQuality } from "@/lib/news/contentQualityScore";
 
 
 
@@ -73,6 +76,54 @@ export async function saveRSSNews(
     for(
         const article of limitedArticles
     ){
+
+
+        const cleanedContent =
+            cleanContent(
+                article.content || ""
+            );
+
+
+        const cleanedSummary =
+            cleanContent(
+                article.contentSnippet ||
+                article.content ||
+                ""
+            );
+
+
+        const enriched =
+            enrichNews(
+                article.title || "",
+                cleanedContent
+            );
+
+
+        const contentQuality =
+            checkContentQuality(
+                enriched.content
+            );
+
+
+        const dataStatus =
+            contentQuality.level === "polluted"
+                ? "repair"
+                : "active";
+
+
+        const cleanReason =
+            contentQuality.level === "polluted"
+                ? `正文污染:${contentQuality.reasons.join(",")}`
+                : null;
+
+
+        if(
+            isBadContent(
+                cleanedContent
+            )
+        ){
+            continue;
+        }
 
 
 
@@ -179,20 +230,27 @@ export async function saveRSSNews(
 
 
                 background:
-                    "RSS自动采集",
+                    enriched.background,
 
 
 
                 summary:
-                    article.contentSnippet ||
-                    article.content ||
-                    "",
+                    enriched.summary,
 
 
 
                 content:
-                    article.content ||
-                    "",
+                    enriched.content,
+
+
+
+                impact:
+                    enriched.impact,
+
+
+
+                businessOpportunity:
+                    enriched.businessOpportunity,
 
 
 
@@ -210,6 +268,12 @@ export async function saveRSSNews(
 
                 verified:
                     false,
+
+
+                dataStatus,
+
+
+                cleanReason,
 
 
 
