@@ -48,6 +48,11 @@ const navItems = [
     name: "预测",
     href: "/trend/predict",
   },
+
+  {
+    name: "旅行规划",
+    href: "/travel",
+  },
 ];
 
 export default function Navbar() {

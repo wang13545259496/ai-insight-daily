@@ -1,0 +1,208 @@
+import Link from "next/link";
+import { Suspense } from "react";
+
+import type { Metadata } from "next";
+
+import TripPlannerForm from "@/components/travel/TripPlannerForm";
+import { isAmadeusConfigured, isAmadeusSandbox } from "@/lib/agents/travel/amadeus";
+import { supportedCityCount } from "@/lib/agents/travel/cities";
+import { listPlans } from "@/lib/agents/travel/data";
+import { getTravelAIModel, isTravelAIEnabled } from "@/lib/agents/travel/ai";
+
+export const metadata: Metadata = {
+  title: "旅行规划",
+  description:
+    "输入出发地、目的地、去返程日期、人数与预算，自动生成含交通、住宿、餐饮与逐日行程的完整旅行方案。",
+};
+
+/** 依赖数据库与外部接口，不做静态化 */
+export const dynamic = "force-dynamic";
+
+/** 档位中文名，用于历史列表 */
+const STYLE_LABELS: Record<string, string> = {
+  budget: "经济型",
+  comfort: "舒适型",
+  premium: "品质型",
+  luxury: "奢享型",
+};
+
+/** 报价来源徽标文案 */
+function quoteModeLabel(mode: string): { text: string; className: string } {
+  if (mode === "live") {
+    return { text: "实时报价", className: "bg-emerald-500/15 text-emerald-400" };
+  }
+
+  if (mode === "partial") {
+    return { text: "部分实时", className: "bg-sky-500/15 text-sky-400" };
+  }
+
+  return { text: "估算", className: "bg-gray-500/15 text-gray-400" };
+}
+
+/**
+ * 运行状态提示条。
+ * 如实告知用户当前报价与模型是否真的接通，避免把估算值当成实时价格。
+ */
+function StatusBanner() {
+  const liveQuotes = isAmadeusConfigured();
+  const sandbox = liveQuotes && isAmadeusSandbox();
+  const aiReady = isTravelAIEnabled();
+
+  /** 组成一条条状态 */
+  const items: Array<{ label: string; ok: boolean; note: string }> = [
+    {
+      label: "机票与住宿报价",
+      ok: liveQuotes,
+      note: liveQuotes
+        ? sandbox
+          ? "Amadeus 测试环境：接口已接通，价格为示例数据，非真实可订价"
+          : "Amadeus 生产环境：返回可用于报价的数据"
+        : "未配置 AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET，当前按目的地下限估算",
+    },
+    {
+      label: "行程编排模型",
+      ok: aiReady,
+      note: aiReady
+        ? `已接入 ${getTravelAIModel()}，负责逐日行程内容编排`
+        : "未配置 DEEPSEEK_API_KEY，行程内容将由内置模板生成",
+    },
+  ];
+
+  const hasWarning = items.some((item) => !item.ok);
+
+  return (
+    <div
+      className={`rounded-lg border p-4 ${
+        hasWarning ? "border-amber-500/25 bg-amber-500/5" : "border-emerald-500/25 bg-emerald-500/5"
+      }`}
+    >
+      <h2 className="text-sm font-medium text-white">运行状态</h2>
+
+      <ul className="mt-2 space-y-1.5">
+        {items.map((item) => (
+          <li key={item.label} className="flex flex-wrap items-baseline gap-2 text-xs">
+            <span className={item.ok ? "text-emerald-400" : "text-amber-400"}>
+              {item.ok ? "●" : "○"}
+            </span>
+            <span className="text-gray-300">{item.label}</span>
+            <span className="text-gray-500">{item.note}</span>
+          </li>
+        ))}
+      </ul>
+
+      {!liveQuotes && (
+        <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-500">
+          在{" "}
+          <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">.env.local</code> 中填入{" "}
+          <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">AMADEUS_CLIENT_ID</code>{" "}
+          与{" "}
+          <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">
+            AMADEUS_CLIENT_SECRET
+          </code>
+          （免费注册：developers.amadeus.com）后重启服务，即自动切换为实时询价。
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 历史方案列表 */
+async function HistoryList() {
+  let plans: Awaited<ReturnType<typeof listPlans>> = [];
+
+  try {
+    plans = await listPlans(8);
+  } catch (error) {
+    console.error("[travel] 历史方案读取失败", { error: String(error) });
+
+    return (
+      <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+        历史方案暂时无法读取。
+      </p>
+    );
+  }
+
+  if (plans.length === 0) {
+    return (
+      <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+        还没有生成过方案。填写上方表单后，生成的方案会自动保存在这里，并生成可分享的链接。
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {plans.map((plan) => {
+        const badge = quoteModeLabel(plan.quoteMode);
+
+        return (
+          <Link
+            key={plan.id}
+            href={`/travel/${plan.id}`}
+            className="group rounded-lg border border-gray-800 bg-gray-950/40 p-4 transition hover:border-sky-500/40"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-white group-hover:text-sky-300">
+                {plan.origin} → {plan.destination}
+              </span>
+              <span className={`rounded px-2 py-0.5 text-[11px] ${badge.className}`}>
+                {badge.text}
+              </span>
+            </div>
+
+            <p className="mt-1 text-xs text-gray-500">
+              {plan.departDate} 至 {plan.returnDate} · {plan.days} 天 · 成人 {plan.adults}
+              {plan.children > 0 ? ` / 儿童 ${plan.children}` : ""} · 预算 {plan.budget} 元 ·{" "}
+              {STYLE_LABELS[plan.style] ?? plan.style}
+            </p>
+
+            <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-400">
+              {plan.overview}
+            </p>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function TravelPage() {
+  return (
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <header>
+        <h1 className="text-3xl font-bold text-white">旅行规划</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
+          输入出发地、目的地、去返程日期、同行人数与总预算，自动生成一份完整方案：往返交通、住宿、
+          餐饮与门票的预算分配，以及逐日可执行的行程安排。金额由确定性算法计算，行程内容由
+          AI 编排，并标注每一笔价格的来源。
+        </p>
+      </header>
+
+      <div className="mt-8 space-y-8">
+        <StatusBanner />
+
+        <TripPlannerForm />
+
+        <section>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-lg font-semibold text-white">历史方案</h2>
+            <span className="text-xs text-gray-500">
+              已收录 {supportedCityCount()} 个常用城市，其它城市可直接填机场三字码
+            </span>
+          </div>
+
+          {/* HistoryList 是异步组件，用 Suspense 包住让表单先渲染出来 */}
+          <Suspense
+            fallback={
+              <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+                正在读取历史方案…
+              </p>
+            }
+          >
+            <HistoryList />
+          </Suspense>
+        </section>
+      </div>
+    </main>
+  );
+}
