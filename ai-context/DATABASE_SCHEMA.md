@@ -567,3 +567,104 @@ app/api/travel/plan/route.ts
 迁移文件：
 
 prisma/migrations/20261015090000_add_trip_plan
+
+================================
+
+# TripPlan 扩展字段（2026-10-13，高德接入）
+
+planJson 内部新增以下结构，均为「尽力而为」的可选字段，
+高德未接入或接口失败时缺省，不影响方案主体。
+
+
+## activities[].coordinates
+
+高德解析出的坐标，格式 "lng,lat"。
+
+
+## activities[].address
+
+高德整理后的规范地址。
+
+
+## activities[].commuteFromPrevious
+
+从上一个活动到本活动的通勤方案：
+
+
+from
+
+to
+
+distanceMeters
+
+durationMinutes
+
+mode        walk / transit / drive
+
+summary     如「驾车/打车约 8.2 公里」
+
+
+## itinerary[].commuteLegs
+
+当日通勤段汇总，供页面整体展示。
+
+
+## weather
+
+逐日天气预报数组：
+
+
+date
+
+dayWeather
+
+nightWeather
+
+dayTemp
+
+nightTemp
+
+windDirection
+
+windPower
+
+
+## mapEnriched
+
+本次是否附带真实地图数据（坐标与通勤）。
+
+
+## 数据来源与限制
+
+
+来源：高德地图 Web 服务 API。
+
+覆盖：仅中国境内。境外目的地无 POI 与路径数据，此时静默跳过。
+
+
+配额（个人认证开发者）：
+
+
+地理编码 / 路径规划   150,000 次/月
+
+POI 搜索 / 天气查询     5,000 次/月
+
+
+省配额策略：
+
+只对活动点位做地理编码、不批量搜 POI；每天最多 6 段通勤；
+同一地点结果进程内缓存。
+
+
+已知限制：
+
+
+1. 高德天气预报仅覆盖未来数日。行程日期超出范围时，
+   不展示任何天气并明确告警，不会用今天的天气冒充行程天气。
+
+2. 海岛类景点（如蜈支洲岛）在路网数据中位于海上，
+   公交规划可能返回 60 公里以上的失真结果。
+   超过 120 分钟的公交方案会被判定为失真并丢弃。
+
+3. 若同一天的活动确实分处不同片区，系统会校验并触发一次重排；
+   重排仍不达标时如实告警，交由用户手动调整。
