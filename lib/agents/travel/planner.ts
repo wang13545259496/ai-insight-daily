@@ -52,12 +52,33 @@ import { fetchTravelWeather } from "./weather";
  */
 const MAX_TOKENS = 8000;
 
-/** 生成结果：方案本体 + 生成过程告警 */
+/** 生成过程告警 */
 export interface GeneratePlanResult {
   plan: TravelPlan;
   warnings: string[];
   /** 需求指纹，供接口层做去重落库 */
   fingerprint: string;
+}
+
+/**
+ * 进度阶段标识。
+ * 前端据此显示「正在进行哪一步」，避免用户在 40-60 秒里干等。
+ */
+export type PlanProgressStage =
+  | "validate"
+  | "quotes"
+  | "itinerary"
+  | "map"
+  | "layout"
+  | "weather"
+  | "save";
+
+/** 进度回调；不传则不产生任何开销 */
+export type PlanProgressReporter = (stage: PlanProgressStage, message: string) => void;
+
+/** 空实现，供默认参数使用 */
+function noopProgress(): void {
+  // 无进度上报时不做任何事
 }
 
 /**
@@ -105,8 +126,11 @@ export function isAmapCoveredDestination(cityCode: string): boolean {
 export async function generateTravelPlan(
   input: unknown,
   now: Date = new Date(),
+  onProgress: PlanProgressReporter = noopProgress,
 ): Promise<GeneratePlanResult> {
   // ---------- 1. 校验 ----------
+  onProgress("validate", "正在校验行程参数");
+
   const { query, warnings: validationWarnings } = normalizeTripQuery(input);
 
   // 需求指纹：与数据层落库时使用同一算法，保证「生成」与「去重」判定一致
@@ -142,6 +166,9 @@ export async function generateTravelPlan(
   };
 
   const provider = selectProvider(warnings);
+
+  onProgress("quotes", "正在查询交通与住宿价格");
+
   const quotes = await fetchQuotesWithFallback(provider, quoteContext, warnings);
 
   // ---------- 4. 预算分配 ----------
@@ -180,6 +207,8 @@ export async function generateTravelPlan(
     dates,
   );
 
+  onProgress("itinerary", "AI 正在编排逐日行程");
+
   const { draft, generatedByAI, model } = await composeItinerary(base, dates, template, warnings);
 
   base.itinerary = finalizeItinerary(draft.days, budget, dates, query);
@@ -192,6 +221,8 @@ export async function generateTravelPlan(
   // ---------- 6. 地图增强（可选）----------
   // 用高德补齐坐标、通勤与天气。任一步失败都只影响增强项，
   // 方案本身照常返回——地图是加分项，不是前置条件。
+  onProgress("map", "正在获取景点坐标与真实通勤");
+
   await applyMapEnrichment(base, destination.input, warnings, destination.code);
 
   // ---------- 7. 跨区通勤检查与一次重排 ----------
@@ -200,6 +231,8 @@ export async function generateTravelPlan(
   const violations = findLayoutIssues(base);
 
   if (violations.length > 0) {
+    onProgress("layout", `发现 ${violations.length} 处跨区安排，正在重新编排`);
+
     await retryForLongCommutes({
       plan: base,
       violations,
@@ -392,6 +425,8 @@ async function applyMapEnrichment(
   if (!isAmapConfigured()) {
     warnings.push("未配置 AMAP_WEB_KEY，行程未附地图坐标与通勤信息；配置后自动补齐");
 
+    await attachWeather(plan, null, warnings);
+
     return;
   }
 
@@ -399,11 +434,13 @@ async function applyMapEnrichment(
 
   // 目的地中心坐标：境外行程也要用它来查天气
   let cityCenter: string | null = null;
+  let adcode: string | undefined;
 
   try {
     const point = await resolveCityPoint(city);
 
     cityCenter = point?.location ?? null;
+    adcode = point?.adcode || undefined;
   } catch {
     cityCenter = null;
   }
@@ -414,7 +451,7 @@ async function applyMapEnrichment(
         "本次未附景点坐标与通勤时间；当地通勤请以导航软件实测为准",
     );
 
-    await attachWeather(plan, cityCenter, warnings);
+    await attachWeather(plan, cityCenter, warnings, adcode);
 
     return;
   }
@@ -428,11 +465,11 @@ async function applyMapEnrichment(
     warnings.push(...result.warnings);
 
     // 天气优先用高德返回的 adcode；取不到时退回城市中心坐标
-    await attachWeather(plan, result.cityCenter ?? cityCenter, warnings, city);
+    await attachWeather(plan, result.cityCenter ?? cityCenter, warnings, result.adcode || adcode);
   } catch (error) {
     warnings.push(`地图数据获取失败，行程未附通勤信息：${describeError(error)}`);
 
-    await attachWeather(plan, cityCenter, warnings);
+    await attachWeather(plan, cityCenter, warnings, adcode);
   }
 }
 
@@ -442,13 +479,22 @@ async function applyMapEnrichment(
  * 只保留真正落在行程日期内的预报——把出发前几天的天气混进行程里
  * 比不显示更糟。没有任何一天匹配时明确说明原因。
  */
+/**
+ * 附加逐日天气。
+ *
+ * 只保留真正落在行程日期内的预报——把出发前几天的天气混进行程里
+ * 比不显示更糟。没有任何一天匹配时明确说明原因。
+ *
+ * @param location "lng,lat"，和风天气用它定位
+ * @param adcode   高德 adcode，高德天气用它定位
+ */
 async function attachWeather(
   plan: TravelPlan,
   location: string | null,
   warnings: string[],
-  city?: string,
+  adcode?: string,
 ): Promise<void> {
-  const result = await fetchTravelWeather(location, city);
+  const result = await fetchTravelWeather(location, adcode);
 
   if (result.warning) {
     warnings.push(result.warning);

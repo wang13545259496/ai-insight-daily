@@ -383,4 +383,45 @@ describe("travel/amap 正常增强", () => {
       "应当查询过公交方案",
     );
   });
+
+  it("地理编码结果不在目标城市时丢弃，避免错误坐标", async () => {
+    requests = [];
+
+    // 覆盖 mock：让活动地点返回外省的 adcode
+    installFakeFetch((url) => {
+      if (url.includes("/v3/geocode/geo")) {
+        const isCity = url.includes("address=%E4%B8%89%E4%BA%9A");
+
+        return {
+          status: "1",
+          info: "OK",
+          infocode: "10000",
+          geocodes: [
+            {
+              // 城市返回正确的三亚 adcode；地点返回贵州的 adcode
+              location: isCity ? "109.508217,18.247869" : "105.617976,25.934772",
+              formatted_address: isCity ? "海南省三亚市" : "贵州省安顺市关岭县索大道",
+              city: isCity ? "三亚市" : "安顺市",
+              adcode: isCity ? "460200" : "520424",
+            },
+          ],
+        };
+      }
+
+      return { status: "1", info: "OK", infocode: "10000", route: { paths: [] } };
+    });
+
+    const day = makeDay("2026-12-10", ["长江索道新华路站"]);
+
+    const result = await enrichItinerary({ city: "三亚", itinerary: [day] });
+
+    const activity = result.itinerary[0].activities[0];
+
+    assert.equal(activity.coordinates, undefined, "外省坐标必须被丢弃");
+    assert.equal(activity.address, undefined);
+    assert.ok(
+      result.warnings.some((w) => w.includes("定位")),
+      "应报告有地点未能定位",
+    );
+  });
 });

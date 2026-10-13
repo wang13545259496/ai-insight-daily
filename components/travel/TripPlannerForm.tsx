@@ -51,6 +51,108 @@ interface FormState {
   notes: string;
 }
 
+/** 生成阶段清单，用于在等待期间显示进度 */
+const PROGRESS_STEPS = [
+  "校验行程参数",
+  "查询交通与住宿价格",
+  "AI 正在编排逐日行程",
+  "获取景点坐标与真实通勤",
+  "重新编排",
+  "生成最终方案",
+];
+
+/** 生成结果（成功或失败） */
+interface StreamResult {
+  success: boolean;
+  data?: TravelPlan;
+  id?: number | null;
+  warnings?: string[];
+  message?: string;
+  errors?: string[];
+}
+
+/**
+ * 带进度回调地调用生成接口。
+ *
+ * 用流式（NDJSON）而不是普通 JSON：一次生成要 40-60 秒，
+ * 普通响应期间页面毫无反馈，用户会以为卡死。服务端每完成一个阶段
+ * 推一行 JSON，这里逐行解析并回调进度。
+ *
+ * 若服务端未按流式返回（校验失败会直接返回 JSON），回退为一次性解析。
+ */
+async function generateWithProgress(
+  payload: unknown,
+  onProgress: (message: string) => void,
+): Promise<StreamResult> {
+  const response = await fetch("/api/travel/plan", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/x-ndjson",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("x-ndjson")) {
+    return (await response.json()) as StreamResult;
+  }
+
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    throw new Error("浏览器不支持流式响应");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: StreamResult | null = null;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    // 最后一段可能是不完整的行，留到下一轮拼接
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        continue;
+      }
+
+      try {
+        const message = JSON.parse(trimmed) as {
+          type?: string;
+          message?: string;
+        } & StreamResult;
+
+        if (message.type === "progress") {
+          onProgress(message.message ?? "处理中");
+        } else if (message.type === "done") {
+          result = message;
+        }
+      } catch {
+        // 单行解析失败不应中断整个流程
+      }
+    }
+  }
+
+  if (!result) {
+    throw new Error("生成未返回结果，请重试");
+  }
+
+  return result;
+}
+
 /** 在指定日期上加减天数，返回 YYYY-MM-DD */
 function shiftDate(base: string, days: number): string {
   const timestamp = Date.parse(`${base}T00:00:00Z`);
@@ -102,6 +204,7 @@ export default function TripPlannerForm() {
   const [planId, setPlanId] = useState<number | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [progress, setProgress] = useState("");
 
   /** 更新单个字段 */
   function update<K extends keyof FormState>(key: K, value: FormState[K]): void {
@@ -165,12 +268,11 @@ export default function TripPlannerForm() {
     setLoading(true);
     setErrors([]);
     setWarnings([]);
+    setProgress("正在提交请求");
 
     try {
-      const response = await fetch("/api/travel/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const payload = await generateWithProgress(
+        {
           origin: form.origin.trim(),
           destination: form.destination.trim(),
           departDate: form.departDate,
@@ -180,19 +282,11 @@ export default function TripPlannerForm() {
           style: form.style,
           interests: form.interests,
           notes: form.notes.trim() || undefined,
-        }),
-      });
+        },
+        setProgress,
+      );
 
-      const payload = (await response.json()) as {
-        success: boolean;
-        data?: TravelPlan;
-        id?: number | null;
-        warnings?: string[];
-        message?: string;
-        errors?: string[];
-      };
-
-      if (!response.ok || !payload.success || !payload.data) {
+      if (!payload.success || !payload.data) {
         setErrors(payload.errors ?? [payload.message ?? "生成失败，请稍后重试"]);
         return;
       }
@@ -209,6 +303,7 @@ export default function TripPlannerForm() {
       setErrors([`请求失败：${error instanceof Error ? error.message : String(error)}`]);
     } finally {
       setLoading(false);
+      setProgress("");
     }
   }
 
@@ -427,13 +522,41 @@ export default function TripPlannerForm() {
           disabled={loading}
           className="mt-6 w-full rounded-lg bg-sky-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500 sm:w-auto sm:px-8"
         >
-          {loading ? "正在询价并编排行程…" : "生成旅行方案"}
+          {loading ? "正在生成…" : "生成旅行方案"}
         </button>
 
         {loading && (
-          <p className="mt-2 text-xs text-gray-500">
-            正在查询交通与住宿报价，并调用模型编排逐日行程，通常需要 10-40 秒
-          </p>
+          <div className="mt-4 rounded-lg border border-sky-500/25 bg-sky-500/5 p-4">
+            <div className="flex items-center gap-3">
+              {/* 旋转指示：让「在处理」这件事有视觉反馈 */}
+              <span className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-sky-400/30 border-t-sky-400" />
+              <span className="text-sm text-sky-300">{progress || "正在处理"}</span>
+            </div>
+
+            <ul className="mt-3 space-y-0.5 text-xs text-gray-500">
+              {PROGRESS_STEPS.map((step) => {
+                const activeIndex = PROGRESS_STEPS.findIndex((s) => progress.includes(s));
+                const thisIndex = PROGRESS_STEPS.indexOf(step);
+                const done = activeIndex > thisIndex;
+                const current = activeIndex === thisIndex;
+
+                return (
+                  <li
+                    key={step}
+                    className={
+                      done ? "text-emerald-400/70" : current ? "text-sky-300" : "text-gray-600"
+                    }
+                  >
+                    {done ? "✓" : current ? "▸" : "·"} {step}
+                  </li>
+                );
+              })}
+            </ul>
+
+            <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-500">
+              完整生成含询价、模型编排、地图通勤计算与质量校验，通常需要 30-60 秒
+            </p>
+          </div>
         )}
       </form>
 

@@ -288,13 +288,24 @@ export async function resolveCityPoint(city: string): Promise<GeoPoint | null> {
 /**
  * 把活动地点文本解析为坐标。
  *
- * 注意两点：
- *   1. 用地理编码而非 POI 搜索——搜索服务每月只有 5000 次，
- *      地理编码属于 15 万次的基础 LBS 配额，更适合逐点解析。
- *   2. city 参数必须保留。实测去掉后「宽窄巷子」会被匹配到
- *      新疆博乐市的同名地点，地域完全错误。
+ * 两个关键点，都是实测踩出来的：
+ *
+ * 1. **必须用 adcode 而非城市名做限定。**
+ *    实测「长江索道新华路站」在 city=重庆 时被解析到贵州省关岭县索大道，
+ *    「南山泉水鸡一条街」解析到辽宁省宽甸县，「山城第三步道」解析到
+ *    河南省鹤壁市山城区——高德会把这些名字当成外地同名路名。
+ *    改用 adcode（如重庆 500000）后全部正确落在本市。
+ *
+ * 2. **必须校验返回结果的 adcode 前缀。**
+ *    即便加了限定，个别地点仍可能匹配到外地。错误的坐标比没有坐标更糟：
+ *    它会生成一段看起来合理的假通勤，用户无从分辨。
+ *    因此这里直接丢弃不属于本市的解析结果。
  */
-export async function geocodePlace(city: string, name: string): Promise<GeoPoint | null> {
+export async function geocodePlace(
+  city: string,
+  name: string,
+  adcode?: string,
+): Promise<GeoPoint | null> {
   const cleaned = normalizePlaceText(name);
 
   // 太短或明显不是地名的文本没必要查
@@ -302,7 +313,7 @@ export async function geocodePlace(city: string, name: string): Promise<GeoPoint
     return null;
   }
 
-  const cacheK = cacheKey(city, cleaned);
+  const cacheK = cacheKey(adcode ?? city, cleaned);
 
   const cached = geocodeCache.get(cacheK);
 
@@ -319,21 +330,36 @@ export async function geocodePlace(city: string, name: string): Promise<GeoPoint
     try {
       const payload = await amapGet<AmapResponse & { geocodes?: Array<Record<string, string>> }>(
         "/v3/geocode/geo",
-        { address, city },
+        // 传 citycode/adcode 时高德才做严格的城市限定
+        { address, city: adcode ?? city },
       );
 
       const first = payload.geocodes?.[0];
 
-      if (first?.location) {
-        point = {
-          location: first.location,
-          formattedAddress: first.formatted_address ?? address,
-          city: first.city ?? city,
-          adcode: first.adcode ?? "",
-        };
+      if (!first?.location) {
+        continue;
+      }
+
+      // 越界校验：adcode 前两位是省级编码，必须与目的地一致
+      if (adcode && first.adcode && first.adcode.slice(0, 2) !== adcode.slice(0, 2)) {
+        console.warn("[travel] 地理编码结果不在目标城市，已丢弃", {
+          name: cleaned,
+          expected: adcode,
+          got: first.adcode,
+          address: first.formatted_address,
+        });
 
         break;
       }
+
+      point = {
+        location: first.location,
+        formattedAddress: first.formatted_address ?? address,
+        city: first.city ?? city,
+        adcode: first.adcode ?? "",
+      };
+
+      break;
     } catch {
       // 单次失败继续尝试下一个候选文本
     }
@@ -413,7 +439,12 @@ async function queryWalking(from: string, to: string): Promise<ModeResult | null
 }
 
 /** 只查公交方案 */
-async function queryTransit(city: string, from: string, to: string): Promise<ModeResult | null> {
+async function queryTransit(
+  city: string,
+  adcode: string | undefined,
+  from: string,
+  to: string,
+): Promise<ModeResult | null> {
   const payload = await amapGet<
     AmapResponse & {
       route?: {
@@ -427,8 +458,9 @@ async function queryTransit(city: string, from: string, to: string): Promise<Mod
   >("/v3/direction/transit/integrated", {
     origin: from,
     destination: to,
-    city,
-    cityd: city,
+    // 公交规划同样优先用城市码，避免同名城市的干扰
+    city: adcode ?? city,
+    cityd: adcode ?? city,
     extensions: "base",
     strategy: "0",
   });
@@ -509,12 +541,13 @@ async function queryDriving(from: string, to: string): Promise<ModeResult | null
  */
 export async function fetchCommute(options: {
   city: string;
+  adcode?: string;
   fromName: string;
   fromLocation: string;
   toName: string;
   toLocation: string;
 }): Promise<CommuteLeg | null> {
-  const { city, fromName, fromLocation, toName, toLocation } = options;
+  const { city, adcode, fromName, fromLocation, toName, toLocation } = options;
 
   const straight = haversineMeters(fromLocation, toLocation);
 
@@ -532,7 +565,10 @@ export async function fetchCommute(options: {
       candidates.push({ mode: "walk", run: () => queryWalking(fromLocation, toLocation) });
     }
 
-    candidates.push({ mode: "transit", run: () => queryTransit(city, fromLocation, toLocation) });
+    candidates.push({
+      mode: "transit",
+      run: () => queryTransit(city, adcode, fromLocation, toLocation),
+    });
 
     const settled = await Promise.all(
       candidates.map(async (candidate) => ({
@@ -641,7 +677,7 @@ export async function enrichItinerary(options: {
   });
 
   const points = await mapWithConcurrency(flat, GEOCODE_CONCURRENCY, (item) =>
-    geocodePlace(city, item.name),
+    geocodePlace(city, item.name, cityPoint.adcode),
   );
 
   console.info("[travel] 地理编码完成", {
@@ -735,6 +771,7 @@ export async function enrichItinerary(options: {
   const legs = await mapWithConcurrency(pending, COMMUTE_CONCURRENCY, (item) =>
     fetchCommute({
       city,
+      adcode: cityPoint.adcode,
       fromName: item.fromName,
       fromLocation: item.fromLocation,
       toName: item.toName,
