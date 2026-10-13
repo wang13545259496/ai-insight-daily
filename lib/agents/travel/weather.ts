@@ -155,9 +155,13 @@ async function fetchQWeather(location: string): Promise<WeatherResult | null> {
   }
 
   try {
+    // lang=zh 必填：和风默认按查询地点的当地语言返回天气描述。
+    // 实测不加时，东京返回「晴れ／曇り」、巴黎返回「Averses／Ensoleillé」，
+    // 与中文页面混排后用户看不懂。
     const url =
       `${host.replace(/\/+$/, "")}/weather/v1/daily/` +
-      `${lat.toFixed(2)}/${lng.toFixed(2)}?days=${QWEATHER_FORECAST_DAYS}&localTime=true`;
+      `${lat.toFixed(2)}/${lng.toFixed(2)}` +
+      `?days=${QWEATHER_FORECAST_DAYS}&localTime=true&lang=zh`;
 
     const response = await httpGet(url, { "X-QW-Api-Key": key });
 

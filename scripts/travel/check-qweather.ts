@@ -220,6 +220,10 @@ async function main(): Promise<void> {
 
   let locationId = "";
 
+  // 经纬度供第 3 步的新版 v1 逐日预报使用
+  let lat = 0;
+  let lon = 0;
+
   try {
     const { payload, status } = await getJson(
       `${host}/geo/v2/city/lookup?location=${encodeURIComponent(cityName)}&number=1`,
@@ -246,6 +250,16 @@ async function main(): Promise<void> {
       const first = locations[0];
 
       locationId = first.id ?? "";
+      lat = Number(first.lat ?? 0);
+      lon = Number(first.lon ?? 0);
+
+      // 经纬度是第 3 步的必需输入，缺失就没法查天气
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) {
+        line(false, "经纬度缺失", "第 3 步的逐日预报需要经纬度，无法继续");
+        process.exitCode = 1;
+
+        return;
+      }
 
       line(
         true,
@@ -285,29 +299,50 @@ async function main(): Promise<void> {
   console.log("\n### 3. 逐日天气预报（行程每天用什么天气）");
 
   try {
-    const { payload, status } = await getJson(
-      `${host}/v7/weather/7d?location=${encodeURIComponent(locationId)}`,
-      key,
-    );
+    // 用与主代码**完全一致**的接口与参数，否则诊断通过不代表功能正常。
+    // 这里是新版 v1 接口（按经纬度查询），不是旧的 /v7/weather/7d。
+    // lang=zh 必填：不加时和风按当地语言返回，东京会得到「晴れ」、
+    // 巴黎会得到「Ensoleillé」，与中文页面混排后用户看不懂。
+    const url =
+      `${host}/weather/v1/daily/${lat.toFixed(2)}/${lon.toFixed(2)}` +
+      `?days=7&localTime=true&lang=zh`;
 
-    const code = String(payload.code ?? "");
-    const hasError = Boolean(payload.error) || (code !== "" && code !== "200");
+    const { payload, status } = await getJson(url, key);
+
+    const hasError = Boolean(payload.error);
 
     if (status === 200 && !hasError) {
-      const daily = (payload.daily ?? []) as Array<Record<string, string>>;
+      const daily = (payload.days ?? []) as Array<Record<string, unknown>>;
 
       line(true, "请求成功", `返回 ${daily.length} 天预报`);
 
       for (const day of daily.slice(0, 5)) {
+        const daytime = (day.daytime ?? {}) as Record<string, unknown>;
+        const nighttime = (day.nighttime ?? {}) as Record<string, unknown>;
+        const dayCond = (daytime.condition ?? {}) as Record<string, unknown>;
+        const nightCond = (nighttime.condition ?? {}) as Record<string, unknown>;
+        const wind = (daytime.wind ?? {}) as Record<string, unknown>;
+        const precip = (daytime.precipitation ?? {}) as Record<string, unknown>;
+        const amount = (precip.amount ?? {}) as Record<string, unknown>;
+
+        const num = (value: unknown): string => {
+          const parsed = Number(value);
+
+          return Number.isFinite(parsed) ? String(Math.round(parsed)) : "-";
+        };
+
+        const date = String(day.forecastStartTime ?? "").slice(0, 10);
+
         console.log(
-          `      · ${day.fxDate}　白天 ${day.textDay}／夜间 ${day.textNight}　` +
-            `${day.tempMin}~${day.tempMax}℃　${day.windDirDay} ${day.windScaleDay} 级　降水 ${day.precip ?? "-"}mm`,
+          `      · ${date}　白天 ${String(dayCond.text ?? "-")}／夜间 ${String(
+            nightCond.text ?? "-",
+          )}　${num((day.temperatureMin as Record<string, unknown>)?.value)}~${num(
+            (day.temperatureMax as Record<string, unknown>)?.value,
+          )}℃　风力 ${String(wind.scale ?? "-")} 级　降水 ${String(amount.value ?? "0")}mm`,
         );
       }
 
-      console.log(
-        "      提示：降水与大风字段可用于自动调整行程（例如把户外景点换成室内备选）。",
-      );
+      console.log("      提示：天气描述应为中文；若出现日文/法文，说明 lang 参数未生效。");
     } else {
       line(false, `请求失败（HTTP ${status}）`, readErrorDetail(payload, status));
       console.log("      若为权限类错误，说明该 Key 未开通「天气预报」API。");
@@ -320,23 +355,41 @@ async function main(): Promise<void> {
   console.log("\n### 4. 天气预警（暴雨/台风等，用于触发行程调整）");
 
   try {
+    // 预警接口已改版：旧的 /v7/warning/now 返回 403 Deprecated，
+    // 新接口按经纬度查询，返回 severity / headline / expireTime 等字段。
     const { payload, status } = await getJson(
-      `${host}/v7/warning/now?location=${encodeURIComponent(locationId)}`,
+      `${host}/weatheralert/v1/current/${lat.toFixed(2)}/${lon.toFixed(2)}?localTime=true&lang=zh`,
       key,
     );
 
-    const code = String(payload.code ?? "");
-    const hasError = Boolean(payload.error) || (code !== "" && code !== "200");
+    const hasError = Boolean(payload.error);
 
-    // 预警接口在没有预警时也可能返回 200 且 warning 为空数组，属正常
     if (status === 200 && !hasError) {
-      const warnings = (payload.warning ?? []) as Array<Record<string, string>>;
+      const alerts = (payload.alerts ?? []) as Array<Record<string, unknown>>;
+      const zeroResult = Boolean(
+        (payload.metadata as Record<string, unknown> | undefined)?.zeroResult,
+      );
 
-      line(true, "请求成功", warnings.length > 0 ? `${warnings.length} 条预警` : "当前无预警");
+      line(
+        true,
+        "请求成功",
+        alerts.length > 0 ? `${alerts.length} 条生效预警` : zeroResult ? "当前无预警" : "当前无预警",
+      );
 
-      for (const item of warnings.slice(0, 3)) {
-        console.log(`      · ${item.title}（${item.severityColor ?? ""}）${item.text ?? ""}`);
+      for (const item of alerts.slice(0, 3)) {
+        const eventType = (item.eventType ?? {}) as Record<string, unknown>;
+        const color = (item.color ?? {}) as Record<string, unknown>;
+
+        console.log(
+          `      · [${String(color.code ?? "-")}] ${String(eventType.name ?? "-")}` +
+            ` 严重度 ${String(item.severity ?? "-")}｜${String(item.headline ?? "")}`,
+        );
+        console.log(`        生效至 ${String(item.expireTime ?? "-")}`);
       }
+
+      console.log(
+        "      说明：预警为空属正常（多数时段无预警）。有预警时可在方案里提示用户调整行程。",
+      );
     } else {
       line(false, `请求失败（HTTP ${status}）`, readErrorDetail(payload, status));
       console.log("      若为权限类错误，说明该 Key 未开通「预警」API，不影响天气预报功能。");

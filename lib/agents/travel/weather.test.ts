@@ -170,6 +170,34 @@ describe("travel/weather 降级顺序", () => {
     );
   });
 
+  it("请求和风时必须带 lang=zh，否则会返回当地语言", async () => {
+    process.env.QWEATHER_KEY = "test-key";
+    process.env.QWEATHER_HOST = "https://example.qweatherapi.com";
+
+    requests = [];
+
+    installFakeFetch(() => ({ body: { days: [qweatherDay("2026-12-10")] } }));
+
+    await fetchTravelWeather("139.80,35.68");
+
+    const url = requests.find((item) => item.includes("qweatherapi.com")) ?? "";
+
+    // 实测不加 lang 时，东京返回「晴れ」、巴黎返回「Ensoleillé」
+    assert.ok(url.includes("lang=zh"), `请求应带 lang=zh，实际：${url}`);
+    assert.ok(url.includes("localTime=true"), `请求应带 localTime=true，实际：${url}`);
+    assert.ok(url.includes("/weather/v1/daily/"), `应使用新版 v1 接口，实际：${url}`);
+  });
+
+  it("localTime=true 时按当地日期取日，不因时区错位", () => {
+    // 和风在 localTime=true 下返回的 forecastStartTime 已是当地日期
+    const days = mapQWeatherDays([
+      { forecastStartTime: "2026-12-10T00:00+09:00", daytime: { condition: { text: "晴" } } },
+    ]);
+
+    assert.equal(days.length, 1);
+    assert.equal(days[0].date, "2026-12-10");
+  });
+
   it("和风报错时退回高德", async () => {
     process.env.QWEATHER_KEY = "test-key";
     process.env.QWEATHER_HOST = "https://example.qweatherapi.com";

@@ -5,7 +5,7 @@
  * REST），有免费测试额度。注册地址 https://developers.amadeus.com
  *
  * 关于「真实价格」的边界，代码里也如实标注：
- * - 测试环境（test.api.amadeus.com）返回的是示例数据，价格非真实可订价
+ * - 测试环境（test.travel.api.amadeus.com）返回的是示例数据，价格非真实可订价
  * - 生产环境（api.amadeus.com）才返回可用于报价的数据，需签约
  * - 酒店接口的报价覆盖度有限，取不到房价时降级为估算并在 warnings 说明
  *
@@ -13,6 +13,7 @@
  *   AMADEUS_CLIENT_ID
  *   AMADEUS_CLIENT_SECRET
  *   AMADEUS_ENV=test | production   （默认 test）
+ *   AMADEUS_HOST                    可选，覆盖接口主机（地址再变时用这个，无需改代码）
  */
 
 import {
@@ -40,6 +41,20 @@ interface AmadeusConfig {
   sandbox: boolean;
 }
 
+/**
+ * 测试环境与生产环境的默认主机。
+ *
+ * 主机名的坑（实测，2026-10）：
+ *   - test.api.amadeus.com         已不存在，公网 DNS 解析失败（curl 退出码 6）
+ *   - test.travel.api.amadeus.com  当前测试环境地址，实测可达
+ *   - api.amadeus.com              生产地址，但 /v1 鉴权路径返回 410 Gone
+ *
+ * 早期官方 OpenAPI 规范里写的仍是 test.api.amadeus.com，已过时；
+ * 若将来再次变更，用 AMADEUS_HOST 覆盖即可，无需改代码。
+ */
+const DEFAULT_TEST_HOST = "https://test.travel.api.amadeus.com";
+const DEFAULT_PRODUCTION_HOST = "https://api.amadeus.com";
+
 /** 读取配置；缺任一项返回 null，由调用方切换到估算模式 */
 function readConfig(): AmadeusConfig | null {
   const clientId = process.env.AMADEUS_CLIENT_ID?.trim();
@@ -51,14 +66,16 @@ function readConfig(): AmadeusConfig | null {
 
   const isProduction = (process.env.AMADEUS_ENV ?? "test").trim().toLowerCase() === "production";
 
-  const override = process.env.AMADEUS_BASE_URL?.trim();
+  // 优先级：AMADEUS_HOST > AMADEUS_BASE_URL > 按环境取默认值
+  const override =
+    process.env.AMADEUS_HOST?.trim() || process.env.AMADEUS_BASE_URL?.trim() || "";
 
   const host =
-    override && override.length > 0
+    override.length > 0
       ? override.replace(/\/+$/, "")
       : isProduction
-        ? "https://api.amadeus.com"
-        : "https://test.api.amadeus.com";
+        ? DEFAULT_PRODUCTION_HOST
+        : DEFAULT_TEST_HOST;
 
   return { clientId, clientSecret, host, sandbox: !isProduction };
 }
