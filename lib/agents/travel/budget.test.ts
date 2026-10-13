@@ -239,6 +239,31 @@ describe("travel/budget 方案分配", () => {
     assert.ok(Math.abs(ratioSum - 1) < 0.001, `比例之和 ${ratioSum} 应接近 1`);
   });
 
+  it("市内打车费计入交通科目，不挤占备用金", () => {
+    const withoutTaxi = buildBudgetPlan(makeContext({ total: 15000 }));
+    const withTaxi = buildBudgetPlan(makeContext({ total: 15000, taxiCost: 320 }));
+
+    const transportBefore = withoutTaxi.categories.find((item) => item.key === "transport")!;
+    const transportAfter = withTaxi.categories.find((item) => item.key === "transport")!;
+    const contingencyBefore = withoutTaxi.categories.find((item) => item.key === "contingency")!;
+    const contingencyAfter = withTaxi.categories.find((item) => item.key === "contingency")!;
+
+    assert.equal(transportAfter.amount, transportBefore.amount + 320);
+    // 打车费从其他科目挤出，总额仍然自洽
+    assert.equal(withTaxi.allocated, 15000);
+    assert.ok(contingencyAfter.amount < contingencyBefore.amount);
+    assert.ok(transportAfter.detail.includes("市内打车"));
+  });
+
+  it("未提供打车费时交通科目不出现打车说明", () => {
+    const plan = buildBudgetPlan(makeContext({ total: 15000 }));
+
+    assert.equal(
+      plan.categories.find((item) => item.key === "transport")!.detail.includes("打车"),
+      false,
+    );
+  });
+
   it("预算充足时档位越高住宿标准越高", () => {
     // 用足够大的预算，让住宿的档位下限真正生效（否则会被权重分配与其它下限挤掉）
     const budgetStyle = buildBudgetPlan(makeContext({ total: 100000, style: "budget" }));

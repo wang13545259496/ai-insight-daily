@@ -70,6 +70,31 @@ const RATE_LIMIT_BACKOFF_MS = [600, 1500];
 /** 高德「QPS 超限」错误码 */
 const AMAP_QPS_EXCEEDED = "10021";
 
+/**
+ * 打车费估算参数（国内多数城市的通用计价方式）。
+ * 用于在接口不提供打车费时给出可解释的估算值。
+ */
+const TAXI_BASE_FARE = 13;
+const TAXI_BASE_KM = 3;
+const TAXI_PER_KM = 2.6;
+
+/**
+ * 上一次行程增强期间，退避重试后仍被限流的次数。
+ *
+ * 为什么需要它：限流被重试消化掉时不该打扰用户，但重试仍失败时
+ * 表现是「某地点不存在」，用户会以为地名有问题。这个计数让调用方
+ * 能给出「接口访问受限，请稍后重试」这种可理解的说明。
+ */
+let lastRateLimitFailures = 0;
+
+/** 读取并清零限流失败计数 */
+export function consumeRateLimitFailures(): number {
+  const count = lastRateLimitFailures;
+  lastRateLimitFailures = 0;
+
+  return count;
+}
+
 /** 是否已配置高德 Key */
 export function isAmapConfigured(): boolean {
   return readKey() !== null;
@@ -107,6 +132,8 @@ export interface AmapEnrichment {
   cityCenter: string | null;
   /** 目的地 adcode，供高德天气查询复用 */
   adcode: string | null;
+  /** 驾车段预估打车费合计（元） */
+  taxiCost: number;
   /** 可读告警 */
   warnings: string[];
 }
@@ -156,9 +183,14 @@ async function amapGet<T extends AmapResponse>(
         return payload;
       }
 
-      if (payload.infocode === AMAP_QPS_EXCEEDED && attempt < RATE_LIMIT_BACKOFF_MS.length) {
-        await sleep(RATE_LIMIT_BACKOFF_MS[attempt]);
-        continue;
+      if (payload.infocode === AMAP_QPS_EXCEEDED) {
+        if (attempt < RATE_LIMIT_BACKOFF_MS.length) {
+          await sleep(RATE_LIMIT_BACKOFF_MS[attempt]);
+          continue;
+        }
+
+        // 重试耗尽仍被限流：记账，交由调用方给出可理解的告警
+        lastRateLimitFailures++;
       }
 
       throw new Error(`高德接口返回错误：${payload.info ?? "未知"}（${payload.infocode ?? "-"}）`);
@@ -410,6 +442,8 @@ interface ModeResult {
   distanceMeters: number;
   durationMinutes: number;
   summary: string;
+  /** 驾车方案的预估打车费（元） */
+  taxiCost?: number;
 }
 
 /** 只查步行方案 */
@@ -500,10 +534,33 @@ async function queryTransit(
   };
 }
 
+/**
+ * 按里程估算打车费（元）。
+ *
+ * 为什么不直接取接口字段：实测高德 v3 驾车接口的返回字段只有
+ * distance / duration / strategy / tolls / toll_distance / steps /
+ * restriction / traffic_lights，**没有 taxi_cost**。
+ * 因此用国内多数城市的通用计价方式估算：
+ * 起步价覆盖前 3 公里，之后按里程累加。
+ *
+ * 这是可解释的经验值，不是真实报价；调用方在文案里会标注为「估算」。
+ */
+export function estimateTaxiFare(distanceMeters: number): number {
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
+    return 0;
+  }
+
+  const km = distanceMeters / 1000;
+
+  return Math.round(TAXI_BASE_FARE + Math.max(0, km - TAXI_BASE_KM) * TAXI_PER_KM);
+}
+
 /** 只查驾车方案（打车参考） */
 async function queryDriving(from: string, to: string): Promise<ModeResult | null> {
   const payload = await amapGet<
-    AmapResponse & { route?: { paths?: Array<{ distance?: string; duration?: string }> } }
+    AmapResponse & {
+      route?: { paths?: Array<{ distance?: string; duration?: string }> };
+    }
   >("/v3/direction/driving", { origin: from, destination: to, strategy: "0" });
 
   const path = payload.route?.paths?.[0];
@@ -519,10 +576,14 @@ async function queryDriving(from: string, to: string): Promise<ModeResult | null
     return null;
   }
 
+  // 接口不提供打车费，按里程估算
+  const taxiCost = estimateTaxiFare(distance);
+
   return {
     distanceMeters: distance,
     durationMinutes: duration > 0 ? duration : Math.max(1, Math.round(distance / 500)),
-    summary: `驾车/打车约 ${formatKm(distance)}`,
+    summary: `驾车/打车约 ${formatKm(distance)}，打车约 ${taxiCost} 元（按里程估算）`,
+    taxiCost,
   };
 }
 
@@ -613,6 +674,7 @@ export async function fetchCommute(options: {
       durationMinutes: best.result.durationMinutes,
       mode: best.mode,
       summary: best.result.summary,
+      taxiCost: best.mode === "drive" ? best.result.taxiCost : undefined,
     };
   } catch {
     return null;
@@ -650,8 +712,11 @@ export async function enrichItinerary(options: {
       `高德未能识别目的地「${city}」，本次未附地图信息（境外目的地无数据属正常）`,
     );
 
-    return { itinerary, cityCenter: null, adcode: null, warnings };
+    return { itinerary, cityCenter: null, adcode: null, taxiCost: 0, warnings };
   }
+
+  // 本次增强开始，重置限流计数
+  lastRateLimitFailures = 0;
 
   // ---------- 1. 地理编码：拍平后受控并发 ----------
   // 阶段计时用于定位性能瓶颈：受控并发 + QPS 退避会让耗时波动很大，
@@ -806,6 +871,12 @@ export async function enrichItinerary(options: {
     commuteCount++;
   });
 
+  // 驾车段的打车费合计，供预算把市内交通计入「交通」科目
+  const taxiCost = legs.reduce(
+    (acc, leg) => acc + (leg?.mode === "drive" ? (leg.taxiCost ?? 0) : 0),
+    0,
+  );
+
   if (geocodeFailures > 0) {
     warnings.push(`有 ${geocodeFailures} 个活动地点未能在地图上定位，已保留原始文字描述`);
   }
@@ -814,10 +885,20 @@ export async function enrichItinerary(options: {
     warnings.push("已获取地点坐标，但未能生成通勤方案（可能是点位过近或接口无数据）");
   }
 
+  // 限流重试耗尽时给出可理解的说明，避免被误当成「地名有问题」
+  const rateLimited = consumeRateLimitFailures();
+
+  if (rateLimited > 0) {
+    warnings.push(
+      `高德接口有 ${rateLimited} 次请求因访问频率受限而失败，部分地点或通勤信息可能缺失，稍后重新生成可补齐`,
+    );
+  }
+
   return {
     itinerary: enrichedDays,
     cityCenter: cityPoint.location,
     adcode: cityPoint.adcode,
+    taxiCost,
     warnings,
   };
 }

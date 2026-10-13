@@ -10,6 +10,7 @@ import {
   fillMissingDays,
   finalizeItinerary,
   parseItineraryDraft,
+  repriceItinerary,
   type DayDraft,
 } from "./itinerary";
 import type { TravelPlan, TripQuery } from "./types";
@@ -521,6 +522,117 @@ describe("travel/itinerary finalizeItinerary 成本回填", () => {
     const itinerary = finalizeItinerary(draft.days, budget, DATES, query);
 
     assert.equal(itinerary[0].activities[0].costSource, "estimate");
+  });
+});
+
+describe("travel/itinerary repriceItinerary 重新定价", () => {
+  it("重新定价保留坐标、地址与通勤，只改金额", () => {
+    const query = makeQuery();
+    const budget = makeBudget();
+    const draft = buildTemplateDraft(
+      query,
+      { quotes: { flight: null, hotel: null, warnings: [] }, budget },
+      DATES,
+    );
+
+    // 模拟地图增强后的行程：带坐标、地址与通勤
+    const enriched = finalizeItinerary(draft.days, budget, DATES, query).map((day) => ({
+      ...day,
+      activities: day.activities.map((activity) => ({
+        ...activity,
+        coordinates: "118.088910,24.479627",
+        address: "福建省厦门市思明区测试地点",
+        commuteFromPrevious: {
+          from: "上一个点",
+          to: activity.title,
+          distanceMeters: 1200,
+          durationMinutes: 15,
+          mode: "transit" as const,
+          summary: "公交约 15 分钟",
+        },
+      })),
+      commuteLegs: [
+        {
+          from: "上一个点",
+          to: day.theme,
+          distanceMeters: 1200,
+          durationMinutes: 15,
+          mode: "transit" as const,
+          summary: "公交约 15 分钟",
+        },
+      ],
+    }));
+
+    // 用更小的弹性额度重新定价（模拟打车费挤占餐饮与门票）
+    const smaller = buildBudgetPlan({
+      total: query.budget,
+      party: query.party,
+      nights: 4,
+      days: 5,
+      style: query.style,
+      flight: null,
+      hotel: null,
+      rooms: 1,
+      peakSeason: false,
+      taxiCost: 400,
+    });
+
+    const repriced = repriceItinerary(enriched, smaller);
+
+    repriced.forEach((day, dayIndex) => {
+      assert.equal(day.date, enriched[dayIndex].date, "日期应保留");
+      assert.equal(day.commuteLegs?.length, 1, "通勤段应保留");
+
+      day.activities.forEach((activity, activityIndex) => {
+        const before = enriched[dayIndex].activities[activityIndex];
+
+        assert.equal(activity.coordinates, before.coordinates, "坐标应保留");
+        assert.equal(activity.address, before.address, "地址应保留");
+        assert.equal(
+          activity.commuteFromPrevious?.durationMinutes,
+          before.commuteFromPrevious?.durationMinutes,
+          "通勤信息应保留",
+        );
+      });
+    });
+  });
+
+  it("重新定价后逐日合计等于餐饮与门票两个科目", () => {
+    const query = makeQuery();
+    const budget = makeBudget();
+    const draft = buildTemplateDraft(
+      query,
+      { quotes: { flight: null, hotel: null, warnings: [] }, budget },
+      DATES,
+    );
+    const itinerary = finalizeItinerary(draft.days, budget, DATES, query);
+
+    const smaller = buildBudgetPlan({
+      total: query.budget,
+      party: query.party,
+      nights: 4,
+      days: 5,
+      style: query.style,
+      flight: null,
+      hotel: null,
+      rooms: 1,
+      peakSeason: false,
+      taxiCost: 400,
+    });
+
+    const repriced = repriceItinerary(itinerary, smaller);
+
+    const expected = smaller.categories
+      .filter((item) => item.key === "activities" || item.key === "food")
+      .reduce((acc, item) => acc + item.amount, 0);
+
+    const actual = repriced.reduce((acc, day) => acc + day.estimatedCost, 0);
+
+    assert.equal(actual, expected, "重定价后逐日合计应与新预算一致");
+  });
+
+  it("空行程不报错", () => {
+    assert.deepEqual(repriceItinerary([], makeBudget()), []);
   });
 });
 

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   clearAmapCache,
   enrichItinerary,
+  estimateTaxiFare,
   haversineMeters,
   isAmapConfigured,
   normalizePlaceText,
@@ -82,6 +83,21 @@ describe("travel/amap 纯逻辑", () => {
   it("normalizePlaceText 对正常地名保持不变", () => {
     assert.equal(normalizePlaceText("宽窄巷子"), "宽窄巷子");
     assert.equal(normalizePlaceText("成都天府国际机场"), "成都天府国际机场");
+  });
+
+  it("estimateTaxiFare 按起步价 + 里程估算", () => {
+    // 实测高德 v3 驾车接口不返回 taxi_cost，因此本地估算
+    assert.equal(estimateTaxiFare(0), 0);
+    // 3 公里以内只有起步价
+    assert.equal(estimateTaxiFare(2000), 13);
+    assert.equal(estimateTaxiFare(3000), 13);
+    // 10.3 公里 ≈ 13 + 7.3 × 2.6 ≈ 32
+    assert.equal(estimateTaxiFare(10326), 32);
+  });
+
+  it("estimateTaxiFare 对非法输入返回 0", () => {
+    assert.equal(estimateTaxiFare(-100), 0);
+    assert.equal(estimateTaxiFare(Number.NaN), 0);
   });
 
   it("haversineMeters 计算两点距离", () => {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { buildBudgetPlan } from "./budget";
 import { addDays, today } from "./date";
+import { buildTemplateDraft, finalizeItinerary } from "./itinerary";
 import { auditPlan, previewQuery } from "./planner";
 import { estimateHotelQuote, type QuoteContext } from "./providers";
 import { TravelValidationError } from "./validation";
@@ -127,6 +128,64 @@ function makePlan(overrides: Partial<TravelPlan> = {}): TravelPlan {
 describe("travel/planner auditPlan 自校验", () => {
   it("自洽的方案不报问题", () => {
     assert.deepEqual(auditPlan(makePlan()), []);
+  });
+
+  it("计入打车费后逐日金额必须随预算重算，否则会报超出", () => {
+    // 复现真实场景：预算先按长途交通算好并回填行程，
+    // 之后才知道打车费、重算预算。若不重填行程金额，
+    // 活动金额基于旧预算、审计基于新预算，必然超限。
+    const query = makeQuery();
+
+    const withoutTaxi = buildBudgetPlan({
+      total: query.budget,
+      party: query.party,
+      nights: 4,
+      days: 5,
+      style: query.style,
+      flight: null,
+      hotel: null,
+      rooms: 1,
+      peakSeason: false,
+    });
+
+    const withTaxi = buildBudgetPlan({
+      total: query.budget,
+      party: query.party,
+      nights: 4,
+      days: 5,
+      style: query.style,
+      flight: null,
+      hotel: null,
+      rooms: 1,
+      peakSeason: false,
+      taxiCost: 176,
+    });
+
+    const activityBudgetOf = (plan: typeof withoutTaxi) =>
+      plan.categories
+        .filter((item) => item.key === "activities" || item.key === "food")
+        .reduce((acc, item) => acc + item.amount, 0);
+
+    // 打车费确实挤占了弹性科目，两个预算的餐饮+门票额度不同
+    assert.notEqual(activityBudgetOf(withoutTaxi), activityBudgetOf(withTaxi));
+
+    // 用新预算重算行程后，审计不应报「超出」
+    const template = buildTemplateDraft(
+      query,
+      { quotes: { flight: null, hotel: null, warnings: [] }, budget: withTaxi },
+      DATES,
+    );
+
+    const itinerary = finalizeItinerary(template.days, withTaxi, DATES, query);
+
+    const plan = makePlan({ budget: withTaxi, itinerary });
+    const issues = auditPlan(plan);
+
+    assert.equal(
+      issues.some((item) => item.includes("超出")),
+      false,
+      `重算后不应报超出：${issues.join("；")}`,
+    );
   });
 
   it("行程天数与计划天数不一致时报错", () => {

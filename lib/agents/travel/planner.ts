@@ -27,6 +27,7 @@ import {
   fillMissingDays,
   finalizeItinerary,
   parseItineraryDraft,
+  repriceItinerary,
   type ItineraryDraft,
   type TemplateDraft,
 } from "./itinerary";
@@ -172,6 +173,8 @@ export async function generateTravelPlan(
   const quotes = await fetchQuotesWithFallback(provider, quoteContext, warnings);
 
   // ---------- 4. 预算分配 ----------
+  // 市内打车费要等地图阶段才知道，因此预算先按长途交通算，
+  // 地图增强后再用真实打车费修正（见 applyMapEnrichment 之后的修正步骤）。
   const budget = buildBudgetPlan({
     total: query.budget,
     party: query.party,
@@ -225,6 +228,37 @@ export async function generateTravelPlan(
 
   await applyMapEnrichment(base, destination.input, warnings, destination.code);
 
+  logEnrichmentCounts(base, "地图阶段后");
+
+  // ---------- 6.5 用真实打车费修正交通科目 ----------
+  // 预算在询价后就算好了，而市内打车费要到地图阶段才知道。
+  // 这里重算一次预算，把打车费计入「交通」，避免它全落在「备用金」里。
+  //
+  // 关键：重算预算后必须**重新回填逐日活动金额**。
+  // 打车费会挤占餐饮与门票的弹性额度，若不重填，
+  // 活动金额基于旧预算、审计基于新预算，会报「逐日合计超出预算」。
+  if ((base.mapTaxiCost ?? 0) > 0) {
+    const taxiCost = base.mapTaxiCost ?? 0;
+
+    base.budget = buildBudgetPlan({
+      total: query.budget,
+      party: query.party,
+      nights: duration.nights,
+      days: duration.days,
+      style: query.style,
+      flight: quotes.flight,
+      hotel: quotes.hotel,
+      rooms,
+      peakSeason: quoteContext.peakSeason,
+      taxiCost,
+    });
+
+    base.itinerary = repriceItinerary(base.itinerary, base.budget);
+    base.mapTaxiCost = taxiCost;
+
+    warnings.push(`已把市内打车约 ${taxiCost} 元计入交通科目（按里程估算）`);
+  }
+
   // ---------- 7. 跨区通勤检查与一次重排 ----------
   // 模型不掌握真实距离，容易把相隔几十公里的两个片区排进同一天。
   // 拿到真实通勤数据后校验一次，超标就带着具体问题回炉重生成。
@@ -243,9 +277,11 @@ export async function generateTravelPlan(
       destinationCode: destination.code,
       warnings,
     });
-  }
 
+    logEnrichmentCounts(base, "重排后");
+  }
   // ---------- 8. 自校验 ----------
+  logEnrichmentCounts(base, "返回前");
   base.warnings = [...warnings, ...auditPlan(base)];
 
   return { plan: base, warnings: base.warnings, fingerprint };
@@ -256,6 +292,30 @@ const MAX_COMMUTE_MINUTES = 60;
 
 /** 一天之内活动点位的最大离散半径（公里），超出说明跨区了 */
 const MAX_DAY_RADIUS_KM = 30;
+
+/**
+ * 打印行程增强的计数快照。
+ *
+ * 保留这段日志是因为踩过一次教训：重算预算时误用模型原始草稿重建行程，
+ * 把地图增强结果整份抹掉，症状是「有打车费、却没有坐标与通勤」。
+ * 三个阶段各打一次，一旦坐标与打车费不再同步变化，从日志就能一眼看出
+ * 是在哪一步丢的。
+ *
+ * 字段：activities 活动数、withCoords 已定位数、legs 通勤段数、
+ * taxi 打车费、enriched 是否增强过。
+ */
+function logEnrichmentCounts(plan: TravelPlan, label: string): void {
+  const activities = plan.itinerary.flatMap((day) => day.activities);
+  const legs = plan.itinerary.flatMap((day) => day.commuteLegs ?? []);
+
+  console.info(`[travel] ${label}`, {
+    activities: activities.length,
+    withCoords: activities.filter((item) => item.coordinates).length,
+    legs: legs.length,
+    taxi: plan.mapTaxiCost ?? 0,
+    enriched: plan.mapEnriched ?? false,
+  });
+}
 
 /**
  * 找出「通勤过长」与「当天跨区」两类问题，返回可直接喂给模型的说明。
@@ -461,6 +521,7 @@ async function applyMapEnrichment(
 
     plan.itinerary = result.itinerary;
     plan.mapEnriched = true;
+    plan.mapTaxiCost = result.taxiCost;
 
     warnings.push(...result.warnings);
 

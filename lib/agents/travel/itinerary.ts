@@ -572,6 +572,62 @@ export function buildTemplateDraft(
 
 
 /**
+ * 按新预算重新分配活动金额，保留坐标、通勤等地图数据。
+ *
+ * 为什么需要它：预算在询价后就算好了，而市内打车费要到地图增强后
+ * 才知道。打车费会挤占餐饮与门票的弹性额度，因此预算需要重算一次。
+ *
+ * 但**不能**用 finalizeItinerary 重建行程——那会拿模型的原始草稿重新生成，
+ * 把刚补好的 coordinates / address / commuteFromPrevious / commuteLegs
+ * 全部抹掉。实测症状：有打车费、却没有任何通勤与坐标。
+ * 这里只改金额，其余字段原样保留。
+ */
+export function repriceItinerary(itinerary: ItineraryDay[], budget: BudgetPlan): ItineraryDay[] {
+  if (itinerary.length === 0) {
+    return itinerary;
+  }
+
+  const activitiesBudget = budget.categories.find((item) => item.key === "activities")?.amount ?? 0;
+  const mealBudget = budget.categories.find((item) => item.key === "food")?.amount ?? 0;
+
+  // 门票体验额度只分给非餐饮活动；餐饮额度按天均分后再在当天餐饮活动间分配
+  const flatCosts = allocateByWeight(
+    itinerary.flatMap((day) =>
+      day.activities.map((activity) => (activity.kind === "meal" ? 0 : 1)),
+    ),
+    activitiesBudget,
+  );
+
+  const mealPerDay = allocateByWeight(
+    itinerary.map(() => 1),
+    mealBudget,
+  );
+
+  let cursor = 0;
+
+  return itinerary.map((day, dayIndex) => {
+    const dayMealCosts = allocateByWeight(
+      day.activities.map((activity) => (activity.kind === "meal" ? 1 : 0)),
+      mealPerDay[dayIndex] ?? 0,
+    );
+
+    let dayTotal = 0;
+
+    const activities = day.activities.map((activity, activityIndex) => {
+      const cost =
+        activity.kind === "meal" ? (dayMealCosts[activityIndex] ?? 0) : (flatCosts[cursor] ?? 0);
+
+      cursor += 1;
+      dayTotal += cost;
+
+      return { ...activity, estimatedCost: cost };
+    });
+
+    return { ...day, activities, estimatedCost: dayTotal };
+  });
+}
+
+/**
  * 把草稿补齐到完整天数：模型少给的天用模板补。
  *
  * 按「下标」对齐而不是按 date 对齐：解析阶段为了不让模型自填的日期混入

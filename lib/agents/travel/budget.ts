@@ -209,6 +209,11 @@ export interface BudgetContext {
   rooms: number;
   /** 是否旺季（旺季会抬高估算下限） */
   peakSeason: boolean;
+  /**
+   * 市内打车费合计（元），由高德驾车方案提供。
+   * 计入「交通」科目：否则打车支出会全部落在「备用金」里，不够准确。
+   */
+  taxiCost?: number;
 }
 
 /**
@@ -242,7 +247,7 @@ function toCategory(
  * feasible 表示预算是否达到该目的地的最低可行成本。
  */
 export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
-  const { total, party, nights, days, style, flight, hotel, rooms, peakSeason } = context;
+  const { total, party, nights, days, style, flight, hotel, rooms, peakSeason, taxiCost } = context;
 
   const preset = PRESETS[style];
   const headcount = Math.max(1, party.adults + party.children);
@@ -254,15 +259,26 @@ export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
 
   // ---------- 1. 锁定项：交通与住宿 ----------
   // 有真实报价就用真实报价；没有报价但不代表没有成本，用估算值占位。
-  const transportAmount = flight
+  const longHaulAmount = flight
     ? flight.totalPrice
     : Math.round(FALLBACK_TRANSPORT_PER_PERSON[style] * headcount * seasonFactor);
 
-  const transportDetail = flight
-    ? `${flight.confidence === "live" ? "真实报价" : "估算"}：${flight.outbound[0]?.from ?? ""} → ${
-        flight.outbound[0]?.to ?? ""
-      } 往返，单人 ${flight.pricePerAdult} 元`
-    : `未取得机票报价，按 ${preset.label}长途往返人均 ${FALLBACK_TRANSPORT_PER_PERSON[style]} 元估算`;
+  // 市内打车费由高德驾车方案给出，计入交通科目。
+  // 否则这笔支出会全部落在「备用金」里，让备用金失真。
+  const taxiAmount = Math.max(0, Math.round(taxiCost ?? 0));
+
+  const transportAmount = longHaulAmount + taxiAmount;
+
+  const transportDetail = [
+    flight
+      ? `${flight.confidence === "live" ? "真实报价" : "估算"}：${
+          flight.outbound[0]?.from ?? ""
+        } → ${flight.outbound[0]?.to ?? ""} 往返，单人 ${flight.pricePerAdult} 元`
+      : `未取得机票报价，按 ${preset.label}长途往返人均 ${FALLBACK_TRANSPORT_PER_PERSON[style]} 元估算`,
+    taxiAmount > 0 ? `含市内打车约 ${taxiAmount} 元（按里程估算）` : "",
+  ]
+    .filter(Boolean)
+    .join("；");
 
   const hotelNightlyEstimate = Math.round(preset.hotelFloorPerRoomNight * seasonFactor);
 

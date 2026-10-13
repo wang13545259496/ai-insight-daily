@@ -179,6 +179,8 @@ export interface CommuteLeg {
   mode: "walk" | "transit" | "drive";
   /** 文字说明，如「地铁 8 号线，步行 400 米」 */
   summary: string;
+  /** 驾车出行的预估打车费（元），仅 mode 为 drive 时由高德提供 */
+  taxiCost?: number;
 }
 
 /** 单日活动安排 */
@@ -263,4 +265,6 @@ export interface TravelPlan {
   weather?: DailyWeather[];
   /** 本次是否附带了真实地图数据（坐标与通勤） */
   mapEnriched?: boolean;
+  /** 市内打车费合计（元），由高德驾车方案估算，已计入预算的交通科目 */
+  mapTaxiCost?: number;
 }
