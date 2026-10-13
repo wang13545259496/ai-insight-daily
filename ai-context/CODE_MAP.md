@@ -473,3 +473,108 @@ AI永远知道项目结构。
 
 
 
+
+================================
+
+# 十一、Agent 模块
+
+## 旅行规划 Agent
+
+位置：
+
+lib/agents/travel/
+
+
+职责：
+
+
+旅行方案生成的全部业务逻辑。
+
+
+文件分工：
+
+
+types.ts        领域模型
+
+date.ts         日期推算
+
+validation.ts   输入校验
+
+cities.ts       城市到 IATA 三字码
+
+budget.ts       预算分配算法（确定性）
+
+itinerary.ts    行程编排与成本回填
+
+prompt.ts       提示词构建
+
+providers.ts    报价 Provider 抽象与估算降级
+
+amadeus.ts      真实报价接入（未启用）
+
+ai.ts           模型调用层
+
+data.ts         数据访问层
+
+planner.ts      主流程编排
+
+
+---
+
+页面：
+
+
+位置：app/travel/
+
+app/travel/page.tsx       表单与结果
+
+app/travel/[id]/page.tsx  方案分享页
+
+
+---
+
+接口：
+
+
+位置：app/api/travel/plan/
+
+route.ts        POST 生成 / GET 列表
+
+[id]/route.ts   GET 单条
+
+
+---
+
+组件：
+
+
+位置：components/travel/
+
+TripPlannerForm.tsx   表单（客户端）
+
+PlanView.tsx          方案展示（服务端）
+
+
+---
+
+数据表：
+
+TripPlan
+
+
+---
+
+诊断脚本：
+
+
+位置：scripts/travel/
+
+check-amap.ts        高德 Key 与接口诊断
+
+check-amadeus.ts     Amadeus 凭据诊断
+
+check-qweather.ts    和风天气诊断
+
+check-db.ts          方案落库自洽性检查
+
+e2e.ts               端到端验证

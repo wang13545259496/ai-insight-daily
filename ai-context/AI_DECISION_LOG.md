@@ -346,3 +346,85 @@ AI_DECISION_LOG.md
 
 
 
+
+================================
+
+# 决策记录：AI旅行规划Agent 立项与落地
+
+
+日期：
+
+2026-10-13
+
+
+等级：
+
+Level 3（数据库变化 + 新增模块）
+
+
+决策：
+
+将旅行规划作为 AI 智能体生态平台的第一个自研 Agent 落地，
+业务逻辑置于 lib/agents/travel/，与 news / investment 等模块平级。
+
+
+原因：
+
+
+1. 项目路线为 V7 驾驶舱 → V8 知识库 → V9 Agent 生态，
+   需要先验证「Agent 调用外部工具 + 大模型编排 + 结果落库」的完整链路。
+2. 旅行规划是独立域，不污染 AI 产业分析主线，适合做试验田。
+
+
+影响范围：
+
+
+代码：
+
+- 新增 lib/agents/travel/（业务逻辑）
+- 新增 app/travel/、app/api/travel/（页面与接口）
+- 新增 components/travel/（组件）
+- 修改 components/Navbar.tsx（新增导航项，9 -> 10）
+
+
+数据库：
+
+- 新增 TripPlan 表
+- 迁移文件 20261015090000_add_trip_plan
+- 变更前已备份 dev.db
+
+
+文档：
+
+- DATABASE_SCHEMA.md 新增模型说明
+- CODE_MAP.md 新增模块位置
+- AI_TASK_QUEUE.md 登记 TASK-006
+
+
+AI调用方式：
+
+
+经 lib/agents/travel/ai.ts 调用模型，
+使用项目统一的 DEEPSEEK_API_KEY / DEEPSEEK_BASE_URL / DEEPSEEK_MODEL，
+并启用 response_format=json_object，
+不引入独立模型配置，符合 AI_API_INTEGRATION.md 方向。
+
+
+关键设计决策：
+
+
+1. 金额由确定性算法计算，大模型只负责行程内容，不参与算钱。
+2. 报价接口不可用时降级为估算，并在方案中显式标注来源。
+3. 模型输出不可用时降级为确定性模板，保证功能始终可用。
+
+
+测试结果：
+
+
+类型检查通过、ESLint 通过、448 项测试通过（其中旅行模块 118 项）、
+生产构建通过。
+
+
+Git基准：
+
+19b22f9

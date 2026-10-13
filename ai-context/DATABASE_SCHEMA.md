@@ -485,3 +485,85 @@ Agent运行记录表。
 
 
 
+
+================================
+
+# 14. TripPlan
+
+用途：
+
+存储 AI 旅行规划 Agent 生成的完整行程方案。
+
+
+新增时间：
+
+2026-10-13
+
+
+主要字段：
+
+
+origin
+
+destination
+
+departDate
+
+returnDate
+
+adults
+
+children
+
+budget
+
+style
+
+interests
+
+planJson
+
+overview
+
+quoteMode
+
+generatedByAI
+
+model
+
+
+说明：
+
+
+planJson 保存完整方案 JSON，包括预算分配、逐日行程、
+交通与住宿报价、行前清单。
+
+标量列（origin/budget/quoteMode 等）用于列表展示与检索，
+避免为渲染列表而解析整份 JSON。
+
+
+quoteMode 取值：
+
+
+- live       交通与住宿均为实时报价
+- partial    部分为实时报价
+- estimate   全部为估算值
+
+
+数据来源标注规则：
+
+报价接口未配置或调用失败时降级为估算，
+必须如实标注为 estimate，不得把估算值表现为真实价格。
+
+
+关联模块：
+
+
+lib/agents/travel/data.ts
+
+app/api/travel/plan/route.ts
+
+
+迁移文件：
+
+prisma/migrations/20261015090000_add_trip_plan
