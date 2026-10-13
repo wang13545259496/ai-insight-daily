@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 
 import TripPlannerForm from "@/components/travel/TripPlannerForm";
 import { isAmadeusConfigured, isAmadeusSandbox } from "@/lib/agents/travel/amadeus";
+import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
 import { getTravelAIModel, isTravelAIEnabled } from "@/lib/agents/travel/ai";
@@ -47,6 +48,7 @@ function StatusBanner() {
   const liveQuotes = isAmadeusConfigured();
   const sandbox = liveQuotes && isAmadeusSandbox();
   const aiReady = isTravelAIEnabled();
+  const mapReady = isAmapConfigured();
 
   /** 组成一条条状态 */
   const items: Array<{ label: string; ok: boolean; note: string }> = [
@@ -65,6 +67,13 @@ function StatusBanner() {
       note: aiReady
         ? `已接入 ${getTravelAIModel()}，负责逐日行程内容编排`
         : "未配置 DEEPSEEK_API_KEY，行程内容将由内置模板生成",
+    },
+    {
+      label: "地图与天气",
+      ok: mapReady,
+      note: mapReady
+        ? "已接入高德：补齐景点坐标、真实通勤时间与逐日天气（仅中国境内）"
+        : "未配置 AMAP_WEB_KEY，行程不含坐标、通勤与天气",
     },
   ];
 

@@ -215,7 +215,12 @@ function DayCard({ day, nights }: { day: TravelPlan["itinerary"][number]; nights
                 </p>
 
                 {activity.location && (
-                  <p className="mt-1 text-xs text-gray-600">地点：{activity.location}</p>
+                  <p className="mt-1 text-xs text-gray-600">
+                    地点：{activity.location}
+                    {activity.address && activity.address !== activity.location && (
+                      <span className="text-gray-700">（{activity.address}）</span>
+                    )}
+                  </p>
                 )}
               </div>
             </div>
@@ -227,6 +232,27 @@ function DayCard({ day, nights }: { day: TravelPlan["itinerary"][number]; nights
         <span>住宿：{day.accommodation}</span>
         {nights === 0 && <span className="text-gray-600">（一日游）</span>}
       </div>
+
+      {day.commuteLegs && day.commuteLegs.length > 0 && (
+        <div className="border-t border-gray-800 bg-gray-900/30 px-4 py-2">
+          <p className="text-xs text-gray-500">
+            当日通勤 <span className="text-gray-600">（高德地图实测）</span>
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {day.commuteLegs.map((leg) => (
+              <li key={`${leg.from}-${leg.to}`} className="text-xs text-gray-400">
+                {leg.mode === "walk" ? "🚶" : "🚇"} {leg.from} → {leg.to}：
+                <span className="text-cyan-400"> {leg.durationMinutes} 分钟</span>
+                <span className="text-gray-600">
+                  {" "}
+                  / {(leg.distanceMeters / 1000).toFixed(1)} 公里
+                </span>
+                {leg.summary && <span className="text-gray-600">　{leg.summary}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {day.tips && (
         <div className="border-t border-gray-800 px-4 py-2 text-xs text-sky-300/80">
@@ -335,6 +361,44 @@ export default function PlanView({
           {plan.overview}
         </p>
       </section>
+
+      {plan.weather && plan.weather.length > 0 && (
+        <section>
+          <h3 className="mb-3 text-lg font-semibold text-white">
+            天气预报
+            <span className="ml-2 text-sm font-normal text-gray-500">高德 · 仅中国境内</span>
+          </h3>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {plan.weather
+              .filter((w) =>
+                plan.itinerary.some((d) => d.date === w.date),
+              )
+              .map((w) => (
+                <div
+                  key={w.date}
+                  className="rounded-lg border border-gray-800 bg-gray-950/40 px-3 py-2"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono text-xs text-gray-400">{w.date}</span>
+                    <span className="text-xs text-gray-500">
+                      {w.nightTemp}~{w.dayTemp}℃
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-white">
+                    {w.dayWeather}
+                    {w.nightWeather && w.nightWeather !== w.dayWeather && (
+                      <span className="text-gray-500"> 转 {w.nightWeather}</span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {w.windDirection} {w.windPower} 级
+                  </p>
+                </div>
+              ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <h3 className="mb-3 text-lg font-semibold text-white">交通与住宿</h3>
