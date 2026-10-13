@@ -691,3 +691,78 @@ RATE_LIMIT_BACKOFF_MS / AMAP_QPS_EXCEEDED
 
 3. 两个都可能同时发生：限流会掩盖越界问题，
    修好限流后才看得到真实的越界比例。
+
+================================
+
+# 旅行规划：有打车费却没有坐标与通勤
+
+
+现象：
+
+方案里 mapTaxiCost 大于 0、预算里也有「含市内打车约 N 元」，
+但所有活动的 coordinates 为空、通勤段为 0。
+
+
+为什么这个组合必然意味着 bug：
+
+打车费只能由驾车通勤段累加得出。
+既然有打车费，就说明通勤计算成功过，
+那坐标与通勤段不可能同时为空——
+两个数据来自同一次地图增强，必须同进同退。
+
+
+根因（实际踩过）：
+
+预算需要重算时，误用模型的原始草稿重建了整个行程：
+
+  base.itinerary = finalizeItinerary(draft.days, base.budget, dates, query)
+
+draft.days 是模型的原始输出，**不含任何地图数据**。
+这一步把刚补好的 coordinates / address /
+commuteFromPrevious / commuteLegs 全部覆盖掉了。
+mapTaxiCost 是独立字段，所以幸存下来，形成上述矛盾组合。
+
+
+正确做法：
+
+预算变化时只重新分配金额，不要重建行程：
+
+  base.itinerary = repriceItinerary(base.itinerary, base.budget)
+
+对应实现：
+
+lib/agents/travel/itinerary.ts 的 repriceItinerary
+它只改 estimatedCost，其余字段原样保留。
+
+
+## 通用教训
+
+
+凡是「重建行程」的赋值在本模块里都是危险操作：
+finalizeItinerary 的输入是模型草稿，调用它等于丢弃地图增强结果。
+需要调整金额时用 repriceItinerary，
+需要补齐天数时用 fillMissingDays，
+两者都不会覆盖已有字段。
+
+
+## 排查方法
+
+
+生产日志已内置三阶段计数快照，直接对比即可定位：
+
+
+  [travel] 地图阶段后 { activities, withCoords, legs, taxi, enriched }
+  [travel] 重排后     { ... }
+  [travel] 返回前     { ... }
+
+
+判断规则：
+
+
+1. 三个阶段的 withCoords 与 legs 应保持一致；
+   若「地图阶段后」正常而「返回前」为 0，说明中途被覆盖。
+
+2. taxi > 0 但 legs = 0 即为状态污染，一定是覆盖问题。
+
+3. 若「地图阶段后」就是 0，问题在地图增强本身，
+   转见「地理编码解析到别的省份」与「QPS 被并发打爆」两节。
