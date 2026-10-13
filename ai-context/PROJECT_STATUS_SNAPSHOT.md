@@ -511,3 +511,54 @@ AMAP_WEB_KEY（未配置时静默跳过，功能降级但不报错）
 Git基准：
 
 0c2eb19
+
+================================
+
+# 旅行规划模块：外部服务配置状态（2026-10-14）
+
+
+## 已配置并验证
+
+
+| 服务 | 用途 | 环境变量 | 状态 |
+|---|---|---|---|
+| DeepSeek | 行程编排 | DEEPSEEK_API_KEY | 正常 |
+| 高德地图 | 坐标、通勤、天气兜底 | AMAP_WEB_KEY | 正常 |
+| 和风天气 | 全球天气预报（主来源） | QWEATHER_KEY + QWEATHER_HOST | 正常 |
+
+
+和风天气注意事项：
+
+
+1. QWEATHER_HOST 必填，取自控制台「设置 → API Host」，
+   形如 https://xxxxx.re.qweatherapi.com。
+   缺它返回 403 Invalid Host。
+
+2. 请求必须带 lang=zh，否则返回当地语言。
+
+3. 控制台"无免费额度的 API"（热带气旋、海洋、辐照）
+   不要启用，否则任何请求都会计费。
+
+
+## 未配置（降级运行）
+
+
+| 服务 | 影响 | 说明 |
+|---|---|---|
+| Amadeus | 交通住宿为估算值 | 自助服务已下线，需企业对接 |
+
+
+## 待办
+
+
+| 事项 | 期限 | 说明 |
+|---|---|---|
+| 和风 JWT 迁移 | 2026-12 前 | API KEY 认证自 2027-01-01 起受限 |
+
+
+## 快速自检命令
+
+
+  npx tsx --env-file=.env.local scripts/travel/check-qweather.ts 东京
+  npx tsx --env-file=.env.local scripts/travel/check-amadeus.ts
+  npx tsx --env-file=.env.local scripts/travel/check-db.ts
