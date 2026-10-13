@@ -15,6 +15,7 @@
 import { getTravelAIModel, isTravelAIEnabled, travelChat } from "./ai";
 
 import { isAmadeusConfigured, createAmadeusProvider, describeError } from "./amadeus";
+import { enrichItinerary, haversineMeters, isAmapConfigured } from "./amap";
 import { buildBudgetPlan } from "./budget";
 import { resolveTripCities } from "./cities";
 import { isPeakSeason, resolveDuration, today } from "./date";
@@ -37,7 +38,7 @@ import {
   type QuoteContext,
   type QuoteProvider,
 } from "./providers";
-import type { TravelPlan, TravelQuotes } from "./types";
+import type { BudgetPlan, TravelPlan, TravelQuotes, TripQuery } from "./types";
 import { normalizeTripQuery } from "./validation";
 
 /**
@@ -161,10 +162,229 @@ export async function generateTravelPlan(
   base.generatedByAI = generatedByAI;
   base.model = model;
 
-  // ---------- 6. 自校验 ----------
+  // ---------- 6. 地图增强（可选）----------
+  // 用高德补齐坐标、通勤与天气。任一步失败都只影响增强项，
+  // 方案本身照常返回——地图是加分项，不是前置条件。
+  await applyMapEnrichment(base, destination.input, warnings);
+
+  // ---------- 7. 跨区通勤检查与一次重排 ----------
+  // 模型不掌握真实距离，容易把相隔几十公里的两个片区排进同一天。
+  // 拿到真实通勤数据后校验一次，超标就带着具体问题回炉重生成。
+  const violations = findLayoutIssues(base);
+
+  if (violations.length > 0) {
+    await retryForLongCommutes({
+      plan: base,
+      violations,
+      template,
+      dates,
+      budget,
+      query,
+      warnings,
+    });
+  }
+
+  // ---------- 8. 自校验 ----------
   base.warnings = [...warnings, ...auditPlan(base)];
 
   return { plan: base, warnings: base.warnings };
+}
+
+/** 单段通勤允许的上限（分钟） */
+const MAX_COMMUTE_MINUTES = 60;
+
+/** 一天之内活动点位的最大离散半径（公里），超出说明跨区了 */
+const MAX_DAY_RADIUS_KM = 30;
+
+/**
+ * 找出「通勤过长」与「当天跨区」两类问题，返回可直接喂给模型的说明。
+ *
+ * 两个信号互补：
+ *   - 通勤段超限：相邻两点之间实际太远
+ *   - 当天跨区：把某个活动点与其余点的中心比较，识别「大部分在市区、
+ *     唯独一个在几十公里外」这种模型不易自查的情况
+ */
+function findLayoutIssues(plan: TravelPlan): string[] {
+  const issues: string[] = [];
+
+  for (const day of plan.itinerary) {
+    for (const leg of day.commuteLegs ?? []) {
+      if (leg.durationMinutes > MAX_COMMUTE_MINUTES) {
+        issues.push(
+          `第 ${day.day} 天「${leg.from} → ${leg.to}」实际通勤 ${leg.durationMinutes} 分钟（${(
+            leg.distanceMeters / 1000
+          ).toFixed(1)} 公里），超过 ${MAX_COMMUTE_MINUTES} 分钟上限`,
+        );
+      }
+    }
+
+    // 当天点位离散度：用坐标的中位数作为中心，避免被单个离群点带偏
+    const points = day.activities
+      .map((activity) => activity.coordinates)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => {
+        const [lng, lat] = value.split(",").map(Number);
+
+        return { lng, lat };
+      })
+      .filter((point) => Number.isFinite(point.lng) && Number.isFinite(point.lat));
+
+    if (points.length < 3) {
+      continue;
+    }
+
+    const centerLng = median(points.map((p) => p.lng));
+    const centerLat = median(points.map((p) => p.lat));
+    const center = `${centerLng},${centerLat}`;
+
+    for (let index = 0; index < points.length; index++) {
+      const activity = day.activities.filter((a) => a.coordinates)[index];
+
+      if (!activity) {
+        continue;
+      }
+
+      const distance = haversineMeters(center, `${points[index].lng},${points[index].lat}`);
+
+      if (distance !== null && distance > MAX_DAY_RADIUS_KM * 1000) {
+        issues.push(
+          `第 ${day.day} 天「${activity.location ?? activity.title}」距离当日其他活动约 ${(
+            distance / 1000
+          ).toFixed(0)} 公里，明显不在同一片区`,
+        );
+      }
+    }
+  }
+
+  return issues;
+}
+
+/** 取中位数 */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/**
+ * 因通勤过长重生成一次行程。
+ *
+ * 只在还能调用模型、且确实拿到通勤数据时才重试；重试仍不达标就保留
+ * 结果并在告警中如实说明，不会无限循环。
+ */
+async function retryForLongCommutes(options: {
+  plan: TravelPlan;
+  violations: string[];
+  template: TemplateDraft;
+  dates: string[];
+  budget: BudgetPlan;
+  query: TripQuery;
+  warnings: string[];
+}): Promise<void> {
+  const { plan, violations, template, dates, budget, query, warnings } = options;
+
+  if (!isTravelAIEnabled()) {
+    warnings.push(...violations);
+
+    return;
+  }
+
+  warnings.push(
+    `首次行程存在 ${violations.length} 处行程布局问题，已尝试重新编排：${violations[0]}`,
+  );
+
+  const retryHint = [
+    "上一次生成的行程存在跨区问题，实测通勤时间过长：",
+    ...violations.map((item) => `- ${item}`),
+    "",
+    "请重新编排，确保：",
+    "1. 每一天的所有活动都在同一个片区，任意两点的车程不超过 60 分钟；",
+    "2. 安排了远郊景点的当天，其余活动都留在该景区附近；",
+    "3. 相邻两天尽量住在同一片区，避免每天横穿城市。",
+  ].join("\n");
+
+  try {
+    const retryResult = await composeItinerary(plan, dates, template, [], retryHint);
+
+    if (!retryResult.generatedByAI) {
+      return;
+    }
+
+    const retriedItinerary = finalizeItinerary(retryResult.draft.days, budget, dates, query);
+
+    // 用重排结果重新做地图增强，才能比较通勤是否真的改善
+    const probe: TravelPlan = {
+      ...plan,
+      itinerary: retriedItinerary,
+      weather: undefined,
+      mapEnriched: undefined,
+    };
+
+    const mapWarnings: string[] = [];
+    await applyMapEnrichment(probe, query.destination, mapWarnings);
+
+    const remaining = findLayoutIssues(probe);
+
+    if (remaining.length < violations.length) {
+      plan.itinerary = probe.itinerary;
+      plan.overview = retryResult.draft.overview || plan.overview;
+      plan.checklist = retryResult.draft.checklist.length > 0 ? retryResult.draft.checklist : plan.checklist;
+      plan.tips = retryResult.draft.tips.length > 0 ? retryResult.draft.tips : plan.tips;
+      plan.model = retryResult.model;
+      plan.weather = probe.weather;
+      plan.mapEnriched = probe.mapEnriched;
+
+      warnings.push(`已重新编排，布局问题从 ${violations.length} 处减少到 ${remaining.length} 处`);
+    } else {
+      warnings.push("重新编排后仍有跨区或过长通勤，建议手动把当天的活动集中在同一片区");
+    }
+  } catch (error) {
+    warnings.push(`重新编排失败，保留原方案：${describeError(error)}`);
+  }
+}
+
+/**
+ * 用高德数据增强行程：坐标、通勤、天气。
+ *
+ * 未配置 Key 时直接跳过，不产生任何网络请求。
+ */
+async function applyMapEnrichment(
+  plan: TravelPlan,
+  city: string,
+  warnings: string[],
+): Promise<void> {
+  if (!isAmapConfigured()) {
+    warnings.push(
+      "未配置 AMAP_WEB_KEY，行程未附地图坐标与通勤信息；配置后自动补齐",
+    );
+
+    return;
+  }
+
+  try {
+    const result = await enrichItinerary({ city, itinerary: plan.itinerary });
+
+    plan.itinerary = result.itinerary;
+    plan.mapEnriched = true;
+
+    // 高德只提供未来几天的预报。行程日期若不在预报范围内，
+    // 强行展示今天的天气会误导用户，因此这里只保留真正覆盖行程的日期。
+    const tripDates = new Set(plan.itinerary.map((day) => day.date));
+    const covered = result.weather.filter((item) => tripDates.has(item.date));
+
+    if (covered.length > 0) {
+      plan.weather = covered;
+    } else if (result.weather.length > 0) {
+      warnings.push(
+        `行程日期（${plan.query.departDate} 起）超出高德天气预报范围（仅提供未来数日），未附天气信息`,
+      );
+    }
+
+    warnings.push(...result.warnings);
+  } catch (error) {
+    warnings.push(`地图数据获取失败，行程未附通勤信息：${describeError(error)}`);
+  }
 }
 
 /**
@@ -205,6 +425,7 @@ async function composeItinerary(
   dates: string[],
   template: TemplateDraft,
   warnings: string[],
+  retryHint?: string,
 ): Promise<{ draft: ItineraryDraft; generatedByAI: boolean; model?: string }> {
   if (!isTravelAIEnabled()) {
     warnings.push("未配置 DEEPSEEK_API_KEY，行程内容由内置模板生成");
@@ -214,7 +435,10 @@ async function composeItinerary(
 
   const model = getTravelAIModel();
 
-  const user = buildUserPrompt(plan, dates);
+  const baseUser = buildUserPrompt(plan, dates);
+
+  // 重排时把「上一次哪里不通顺」直接写进提示词，比笼统要求有效得多
+  const user = retryHint ? `${baseUser}\n\n## 重排要求\n${retryHint}` : baseUser;
 
   // 最多尝试两次：模型偶发输出非法 JSON（多了说明文字、被截断、括号不配对），
   // 第二次附上更严格的格式要求。仍失败才改用模板。

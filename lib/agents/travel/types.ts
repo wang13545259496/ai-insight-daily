@@ -165,6 +165,22 @@ export interface BudgetPlan {
   diagnosis: string[];
 }
 
+/** 两个点位之间的通勤方案（接入高德后存在） */
+export interface CommuteLeg {
+  /** 起点名称 */
+  from: string;
+  /** 终点名称 */
+  to: string;
+  /** 距离（米） */
+  distanceMeters: number;
+  /** 耗时（分钟） */
+  durationMinutes: number;
+  /** 出行方式 */
+  mode: "walk" | "transit" | "drive";
+  /** 文字说明，如「地铁 8 号线，步行 400 米」 */
+  summary: string;
+}
+
 /** 单日活动安排 */
 export interface ItineraryActivity {
   /** 开始时间 HH:mm */
@@ -182,6 +198,12 @@ export interface ItineraryActivity {
   costSource: QuoteConfidence;
   /** 地址或交通方式 */
   location?: string;
+  /** 高德解析出的坐标 "lng,lat"，未接入地图时为空 */
+  coordinates?: string;
+  /** 高德整理后的规范地址 */
+  address?: string;
+  /** 从上一个活动到这里的通勤方案，未接入地图时为空 */
+  commuteFromPrevious?: CommuteLeg;
 }
 
 /** 单日行程 */
@@ -200,6 +222,19 @@ export interface ItineraryDay {
   accommodation: string;
   /** 当日提示 */
   tips?: string;
+  /** 当日通勤段（相邻活动的连接），未接入地图时为空 */
+  commuteLegs?: CommuteLeg[];
+}
+
+/** 单日天气预报（高德提供，仅中国境内） */
+export interface DailyWeather {
+  date: string;
+  dayWeather: string;
+  nightWeather: string;
+  dayTemp: string;
+  nightTemp: string;
+  windDirection: string;
+  windPower: string;
 }
 
 /** 完整旅行方案 */
@@ -224,4 +259,8 @@ export interface TravelPlan {
   generatedAt: string;
   /** 面向用户的告警：降级原因、校验提示等 */
   warnings: string[];
+  /** 逐日天气，仅在接入高德后存在 */
+  weather?: DailyWeather[];
+  /** 本次是否附带了真实地图数据（坐标与通勤） */
+  mapEnriched?: boolean;
 }
