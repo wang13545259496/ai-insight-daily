@@ -1,7 +1,14 @@
 import { after, afterEach, before, describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { clearAmapCache, enrichItinerary, haversineMeters, isAmapConfigured, pickMode } from "./amap";
+import {
+  clearAmapCache,
+  enrichItinerary,
+  haversineMeters,
+  isAmapConfigured,
+  normalizePlaceText,
+  pickMode,
+} from "./amap";
 import type { ItineraryDay } from "./types";
 
 /**
@@ -63,6 +70,20 @@ function makeDay(date: string, names: string[]): ItineraryDay {
 }
 
 describe("travel/amap 纯逻辑", () => {
+  it("normalizePlaceText 去掉括号后缀与模糊方位词", () => {
+    // 实测这类带全角括号的店名会被高德返回 30001
+    assert.equal(normalizePlaceText("陈麻婆豆腐（骡马市店）"), "陈麻婆豆腐");
+    assert.equal(normalizePlaceText("蜀大侠火锅(总府路店)"), "蜀大侠火锅");
+    assert.equal(normalizePlaceText("宽窄巷子附近"), "宽窄巷子");
+    assert.equal(normalizePlaceText("熊猫基地周边"), "熊猫基地");
+    assert.equal(normalizePlaceText(" 春熙路 商圈 "), "春熙路商圈");
+  });
+
+  it("normalizePlaceText 对正常地名保持不变", () => {
+    assert.equal(normalizePlaceText("宽窄巷子"), "宽窄巷子");
+    assert.equal(normalizePlaceText("成都天府国际机场"), "成都天府国际机场");
+  });
+
   it("haversineMeters 计算两点距离", () => {
     // 北京天安门 -> 北京故宫，约 1 公里量级
     const d = haversineMeters("116.397428,39.90923", "116.403963,39.915119");

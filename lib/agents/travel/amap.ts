@@ -1,5 +1,5 @@
 /**
- * 高德地图接入：POI 校验、真实通勤、天气预报。
+ * 高德地图接入：POI 校验、真实通勤。
  *
  * 作用：把模型生成的「浅草寺 → 上野」这类文字描述，换成有坐标、
  * 有真实通勤时间与距离的可执行行程。
@@ -7,12 +7,11 @@
  * 配额约束（个人认证开发者，见官方定价页）：
  *   - 基础 LBS 服务（地理编码、路径规划）  150,000 次/月
  *   - 基础搜索服务（POI 搜索）               5,000 次/月  ← 最紧张
- *   - 天气查询                               5,000 次/月
  * 因此实现上必须省着用：只对活动点位做地理编码（不批量搜 POI），
- * 每天只发一次路径规划请求，结果按「城市+名称」缓存。
+ * 每天最多算若干段通勤，结果按「城市 + 名称」缓存。
  *
- * 覆盖范围：仅中国境内。境外目的地会返回空结果，此时静默跳过增强，
- * 行程照常生成——绝不因为缺地图数据而让整个方案失败。
+ * 覆盖范围：仅中国大陆、香港、澳门。境外目的地由调用方
+ * （planner）在更早的环节跳过本模块，不会产生无用请求。
  */
 
 import type { CommuteLeg, ItineraryActivity, ItineraryDay } from "./types";
@@ -33,6 +32,43 @@ const MAX_LEGS_PER_DAY = 6;
  * 无意义的结果，直接跳过。
  */
 const SAME_POINT_THRESHOLD_METERS = 50;
+
+/** 超过该直线距离就不再考虑步行 */
+const WALK_CANDIDATE_LIMIT_METERS = 3000;
+
+/** 超过该直线距离就不再考虑驾车（跨城长途以公交/铁路为主） */
+const DRIVE_CANDIDATE_LIMIT_METERS = 30_000;
+
+/** 首轮结果超过该分钟数时，补查驾车方案做对比 */
+const DRIVE_FALLBACK_MINUTES = 45;
+
+/**
+ * 超过该分钟数的公交方案视为「接口失真」而非真实通勤。
+ *
+ * 典型场景：海岛类景点（如蜈支洲岛）在路网数据里位于海上，
+ * 公交规划会绕行出 60 公里、171 分钟这种明显不合理的结果。
+ * 把它当成真实通勤显示给用户，比不显示更糟。
+ */
+const IMPLAUSIBLE_TRANSIT_MINUTES = 120;
+
+/**
+ * 地理编码的并发数。
+ *
+ * 实测：并发 5 会打爆高德的单 Key QPS 限制（10021
+ * CUQPS_HAS_EXCEEDED_THE_LIMIT），连串行请求都被拒，
+ * 结果被 catch 静默转成 null，表现为「大量活动无法定位」。
+ * 因此这里取保守值，并配合下面的退避重试。
+ */
+const GEOCODE_CONCURRENCY = 2;
+
+/** 通勤查询的并发数：每段可能发 1-3 个请求，比地理编码更保守 */
+const COMMUTE_CONCURRENCY = 2;
+
+/** 命中 QPS 限制后的退避等待（毫秒） */
+const RATE_LIMIT_BACKOFF_MS = [600, 1500];
+
+/** 高德「QPS 超限」错误码 */
+const AMAP_QPS_EXCEEDED = "10021";
 
 /** 是否已配置高德 Key */
 export function isAmapConfigured(): boolean {
@@ -59,7 +95,7 @@ export interface GeoPoint {
   formattedAddress: string;
   /** 所属城市 */
   city: string;
-  /** 高德 adcode，用于天气查询 */
+  /** 高德 adcode */
   adcode: string;
 }
 
@@ -86,7 +122,10 @@ interface AmapResponse {
 }
 
 /** 带超时的 GET，返回解析后的 JSON；失败抛出便于上层统一降级 */
-async function amapGet<T extends AmapResponse>(path: string, params: Record<string, string>): Promise<T> {
+async function amapGet<T extends AmapResponse>(
+  path: string,
+  params: Record<string, string>,
+): Promise<T> {
   const key = readKey();
 
   if (!key) {
@@ -95,29 +134,94 @@ async function amapGet<T extends AmapResponse>(path: string, params: Record<stri
 
   const query = new URLSearchParams({ ...params, key });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  // 高德对单 Key 有 QPS 限制，超限返回 10021。这类错误是暂时的，
+  // 退避重试即可；不重试会把限流当成「地点不存在」，静默丢掉数据。
+  for (let attempt = 0; attempt <= RATE_LIMIT_BACKOFF_MS.length; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  try {
-    const response = await fetch(`${AMAP_HOST}${path}?${query.toString()}`, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
+    try {
+      const response = await fetch(`${AMAP_HOST}${path}?${query.toString()}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
 
-    if (!response.ok) {
-      throw new Error(`高德接口 HTTP ${response.status}`);
-    }
+      if (!response.ok) {
+        throw new Error(`高德接口 HTTP ${response.status}`);
+      }
 
-    const payload = (await response.json()) as T;
+      const payload = (await response.json()) as T;
 
-    if (payload.status !== "1") {
+      if (payload.status === "1") {
+        return payload;
+      }
+
+      if (payload.infocode === AMAP_QPS_EXCEEDED && attempt < RATE_LIMIT_BACKOFF_MS.length) {
+        await sleep(RATE_LIMIT_BACKOFF_MS[attempt]);
+        continue;
+      }
+
       throw new Error(`高德接口返回错误：${payload.info ?? "未知"}（${payload.infocode ?? "-"}）`);
+    } finally {
+      clearTimeout(timer);
     }
-
-    return payload;
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw new Error("高德接口重试后仍失败");
+}
+
+/** 等待指定毫秒 */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 清洗地点文本，提高地理编码命中率。
+ *
+ * 实测「陈麻婆豆腐（骡马市店）」这类带全角括号的店名会返回
+ * ENGINE_RESPONSE_DATA_ERROR(30001)，而高德解析不了括号后缀。
+ * 去掉后缀后通常能命中主店名或街区。
+ */
+export function normalizePlaceText(raw: string): string {
+  return raw
+    .replace(/[（(][^）)]*[）)]/g, "") // 去掉括号及其内容
+    .replace(/(附近|周边|一带|沿线|区域)$/g, "") // 去掉模糊方位词
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+/**
+ * 受控并发地按顺序处理数组。
+ *
+ * 为什么不用 Promise.all 一次性发完：高德对单 Key 有 QPS 限制，
+ * 二十多个请求一起发容易触发 10004（访问过于频繁）。这里限制同时在飞的
+ * 请求数，把等待从「次数 × 单次延迟」压到约「批数 × 单次延迟」，
+ * 又不会打爆限流。结果顺序与输入一致。
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+
+  if (items.length === 0) {
+    return results;
+  }
+
+  let cursor = 0;
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+
+      results[index] = await worker(items[index], index);
+    }
+  });
+
+  await Promise.all(runners);
+
+  return results;
 }
 
 // ============================================================
@@ -146,10 +250,7 @@ function cacheKey(city: string, name: string): string {
   return `${city}::${name}`;
 }
 
-/**
- * 解析城市，拿到 adcode 与中心坐标。
- * 找不到返回 null。
- */
+/** 解析城市，拿到 adcode 与中心坐标；找不到返回 null */
 export async function resolveCityPoint(city: string): Promise<GeoPoint | null> {
   const cached = cityCache.get(city);
 
@@ -187,18 +288,21 @@ export async function resolveCityPoint(city: string): Promise<GeoPoint | null> {
 /**
  * 把活动地点文本解析为坐标。
  *
- * 注意：这里用地理编码而非 POI 搜索——搜索服务每月只有 5000 次，
- * 地理编码属于 15 万次的基础 LBS 配额，更适合逐点解析。
+ * 注意两点：
+ *   1. 用地理编码而非 POI 搜索——搜索服务每月只有 5000 次，
+ *      地理编码属于 15 万次的基础 LBS 配额，更适合逐点解析。
+ *   2. city 参数必须保留。实测去掉后「宽窄巷子」会被匹配到
+ *      新疆博乐市的同名地点，地域完全错误。
  */
 export async function geocodePlace(city: string, name: string): Promise<GeoPoint | null> {
-  const trimmed = name.trim();
+  const cleaned = normalizePlaceText(name);
 
   // 太短或明显不是地名的文本没必要查
-  if (trimmed.length < 2 || trimmed.length > 40) {
+  if (cleaned.length < 2 || cleaned.length > 40) {
     return null;
   }
 
-  const cacheK = cacheKey(city, trimmed);
+  const cacheK = cacheKey(city, cleaned);
 
   const cached = geocodeCache.get(cacheK);
 
@@ -206,39 +310,45 @@ export async function geocodePlace(city: string, name: string): Promise<GeoPoint
     return cached;
   }
 
-  try {
-    // 带上城市限定，避免「第一市场」这类常见名匹配到别的城市
-    const payload = await amapGet<AmapResponse & { geocodes?: Array<Record<string, string>> }>(
-      "/v3/geocode/geo",
-      { address: trimmed, city },
-    );
+  // 先用清洗后的文本查；失败时再用原文查一次（有些地名括号是正式名称的一部分）
+  const candidates = cleaned === name.trim() ? [cleaned] : [cleaned, name.trim()];
 
-    const first = payload.geocodes?.[0];
+  let point: GeoPoint | null = null;
 
-    const point: GeoPoint | null = first?.location
-      ? {
+  for (const address of candidates) {
+    try {
+      const payload = await amapGet<AmapResponse & { geocodes?: Array<Record<string, string>> }>(
+        "/v3/geocode/geo",
+        { address, city },
+      );
+
+      const first = payload.geocodes?.[0];
+
+      if (first?.location) {
+        point = {
           location: first.location,
-          formattedAddress: first.formatted_address ?? trimmed,
+          formattedAddress: first.formatted_address ?? address,
           city: first.city ?? city,
           adcode: first.adcode ?? "",
-        }
-      : null;
+        };
 
-    geocodeCache.set(cacheK, point);
-
-    return point;
-  } catch {
-    geocodeCache.set(cacheK, null);
-
-    return null;
+        break;
+      }
+    } catch {
+      // 单次失败继续尝试下一个候选文本
+    }
   }
+
+  geocodeCache.set(cacheK, point);
+
+  return point;
 }
 
 // ============================================================
-// 路径规划
+// 通勤
 // ============================================================
 
-/** 两点直线距离（米），用 Haversine 公式，用于选择出行方式 */
+/** 两点距离（米），Haversine 公式，用于筛选候选出行方式 */
 export function haversineMeters(a: string, b: string): number | null {
   const [aLng, aLat] = a.split(",").map(Number);
   const [bLng, bLat] = b.split(",").map(Number);
@@ -260,37 +370,27 @@ export function haversineMeters(a: string, b: string): number | null {
   return Math.round(2 * R * Math.asin(Math.sqrt(h)));
 }
 
-/** 由直线距离选择出行方式：近距离步行，其余公交 */
+/** 由直线距离选择默认出行方式：近距离步行，其余公交 */
 export function pickMode(straightMeters: number): CommuteLeg["mode"] {
   return straightMeters <= 1200 ? "walk" : "transit";
 }
 
-/** 超过该直线距离就不再考虑步行 */
-const WALK_CANDIDATE_LIMIT_METERS = 3000;
+/** 米转成易读的距离文本 */
+function formatKm(meters: number): string {
+  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} 公里` : `${Math.round(meters)} 米`;
+}
 
-/** 超过该直线距离就不再考虑驾车（跨城长途以公交/铁路为主） */
-const DRIVE_CANDIDATE_LIMIT_METERS = 30_000;
-
-/** 首轮结果超过该分钟数时，补查驾车方案做对比 */
-const DRIVE_FALLBACK_MINUTES = 45;
-
-/**
- * 超过该分钟数的公交方案视为「接口失真」而非真实通勤。
- *
- * 典型场景：海岛类景点（如蜈支洲岛）在路网数据里位于海上，
- * 公交规划会绕行出 60 公里、171 分钟这种明显不合理的结果。
- * 把它当成真实通勤显示给用户，比不显示更糟。
- */
-const IMPLAUSIBLE_TRANSIT_MINUTES = 120;
+interface ModeResult {
+  distanceMeters: number;
+  durationMinutes: number;
+  summary: string;
+}
 
 /** 只查步行方案 */
-async function queryWalking(
-  fromLocation: string,
-  toLocation: string,
-): Promise<{ distanceMeters: number; durationMinutes: number; summary: string } | null> {
+async function queryWalking(from: string, to: string): Promise<ModeResult | null> {
   const payload = await amapGet<
     AmapResponse & { route?: { paths?: Array<{ distance?: string; duration?: string }> } }
-  >("/v3/direction/walking", { origin: fromLocation, destination: toLocation });
+  >("/v3/direction/walking", { origin: from, destination: to });
 
   const path = payload.route?.paths?.[0];
 
@@ -313,11 +413,7 @@ async function queryWalking(
 }
 
 /** 只查公交方案 */
-async function queryTransit(
-  city: string,
-  fromLocation: string,
-  toLocation: string,
-): Promise<{ distanceMeters: number; durationMinutes: number; summary: string } | null> {
+async function queryTransit(city: string, from: string, to: string): Promise<ModeResult | null> {
   const payload = await amapGet<
     AmapResponse & {
       route?: {
@@ -329,8 +425,8 @@ async function queryTransit(
       };
     }
   >("/v3/direction/transit/integrated", {
-    origin: fromLocation,
-    destination: toLocation,
+    origin: from,
+    destination: to,
     city,
     cityd: city,
     extensions: "base",
@@ -373,13 +469,10 @@ async function queryTransit(
 }
 
 /** 只查驾车方案（打车参考） */
-async function queryDriving(
-  fromLocation: string,
-  toLocation: string,
-): Promise<{ distanceMeters: number; durationMinutes: number; summary: string } | null> {
+async function queryDriving(from: string, to: string): Promise<ModeResult | null> {
   const payload = await amapGet<
     AmapResponse & { route?: { paths?: Array<{ distance?: string; duration?: string }> } }
-  >("/v3/direction/driving", { origin: fromLocation, destination: toLocation, strategy: "0" });
+  >("/v3/direction/driving", { origin: from, destination: to, strategy: "0" });
 
   const path = payload.route?.paths?.[0];
 
@@ -401,11 +494,6 @@ async function queryDriving(
   };
 }
 
-/** 米转成易读的距离文本 */
-function formatKm(meters: number): string {
-  return meters >= 1000 ? `${(meters / 1000).toFixed(1)} 公里` : `${Math.round(meters)} 米`;
-}
-
 /**
  * 查询两点之间的通勤方案。
  *
@@ -413,8 +501,8 @@ function formatKm(meters: number): string {
  * 只用「直线距离 → 单一方式」会得出离谱的耗时（例如同在亚龙湾
  * 的 8 公里被算成 75 分钟）。因此这里做多方式对比：
  *
- *   1. 先按距离筛选候选方式（近距离加步行，远距离加公交）
- *   2. 全部查一遍，取耗时最短的
+ *   1. 按距离筛选候选方式（近距离加步行，始终含公交）
+ *   2. 并行查询，取耗时最短的
  *   3. 若最短方案仍超过阈值，再补查驾车（打车往往明显更快）
  *
  * 境外或无数据时返回 null，由调用方跳过这一段。
@@ -437,7 +525,7 @@ export async function fetchCommute(options: {
   try {
     const candidates: Array<{
       mode: CommuteLeg["mode"];
-      run: () => Promise<{ distanceMeters: number; durationMinutes: number; summary: string } | null>;
+      run: () => Promise<ModeResult | null>;
     }> = [];
 
     if (straight <= WALK_CANDIDATE_LIMIT_METERS) {
@@ -446,7 +534,6 @@ export async function fetchCommute(options: {
 
     candidates.push({ mode: "transit", run: () => queryTransit(city, fromLocation, toLocation) });
 
-    // 并行查询各候选方式，任一失败不影响其它
     const settled = await Promise.all(
       candidates.map(async (candidate) => ({
         mode: candidate.mode,
@@ -455,8 +542,8 @@ export async function fetchCommute(options: {
     );
 
     const usable = settled
-      .filter((item): item is { mode: CommuteLeg["mode"]; result: NonNullable<typeof item.result> } =>
-        item.result !== null,
+      .filter(
+        (item): item is { mode: CommuteLeg["mode"]; result: ModeResult } => item.result !== null,
       )
       .sort((a, b) => a.result.durationMinutes - b.result.durationMinutes);
 
@@ -479,10 +566,7 @@ export async function fetchCommute(options: {
     }
 
     // 公交方案离谱到不可能时，不再把它当作真实通勤
-    if (
-      best.mode === "transit" &&
-      best.result.durationMinutes > IMPLAUSIBLE_TRANSIT_MINUTES
-    ) {
+    if (best.mode === "transit" && best.result.durationMinutes > IMPLAUSIBLE_TRANSIT_MINUTES) {
       return null;
     }
 
@@ -507,9 +591,12 @@ export async function fetchCommute(options: {
  * 用高德数据增强行程。
  *
  * 做三件事：
- *   1. 解析城市 adcode（后续天气要用）
- *   2. 逐个活动地理编码，拿到坐标与规范地址
- *   3. 每天计算相邻活动之间的通勤（距离、耗时、线路）
+ *   1. 解析城市坐标与 adcode（坐标供天气查询使用）
+ *   2. 为每个活动做地理编码，拿到坐标与规范地址
+ *   3. 计算相邻活动之间的真实通勤（方式、距离、耗时）
+ *
+ * 地理编码与通勤查询都采用受控并发：完全串行时二十多个活动需要
+ * 15-30 秒，受控并发可压到 5-8 秒，同时避免触发高德 QPS 限制。
  *
  * 全部为「尽力而为」：任何一步失败都只跳过该项，不影响方案本身。
  */
@@ -530,73 +617,157 @@ export async function enrichItinerary(options: {
     return { itinerary, cityCenter: null, adcode: null, warnings };
   }
 
+  // ---------- 1. 地理编码：拍平后受控并发 ----------
+  // 阶段计时用于定位性能瓶颈：受控并发 + QPS 退避会让耗时波动很大，
+  // 没有计时就只能猜。
+  let phaseStart = Date.now();
+
+  interface FlatItem {
+    dayIndex: number;
+    activityIndex: number;
+    name: string;
+  }
+
+  const flat: FlatItem[] = [];
+
+  itinerary.forEach((day, dayIndex) => {
+    day.activities.forEach((activity, activityIndex) => {
+      flat.push({
+        dayIndex,
+        activityIndex,
+        name: activity.location?.trim() || activity.title,
+      });
+    });
+  });
+
+  const points = await mapWithConcurrency(flat, GEOCODE_CONCURRENCY, (item) =>
+    geocodePlace(city, item.name),
+  );
+
+  console.info("[travel] 地理编码完成", {
+    total: flat.length,
+    located: points.filter((p) => p !== null).length,
+    elapsedMs: Date.now() - phaseStart,
+  });
+
+  phaseStart = Date.now();
+
+  // 建立「天:活动」到坐标的索引，避免在循环里做嵌套查找
+  const pointByIndex = new Map<string, GeoPoint | null>();
+
+  flat.forEach((item, index) => {
+    pointByIndex.set(`${item.dayIndex}:${item.activityIndex}`, points[index]);
+  });
+
   let geocodeFailures = 0;
-  let commuteCount = 0;
 
-  const enrichedDays: ItineraryDay[] = [];
-
-  for (const day of itinerary) {
-    const enrichedActivities: ItineraryActivity[] = [];
-
-    // 只记录「连续且都有坐标」的活动段：一旦中间某个活动没有坐标，
-    // 链条就断开，避免把不相邻的两个地点拿来算通勤
-    // （否则会出现「机场 → 大东海 17 公里」这种把中间行程吞掉的结果）
-    const chain: Array<{ index: number; name: string; location: string }> = [];
-    const legs: CommuteLeg[] = [];
-    let previousLocated = false;
-
-    for (const activity of day.activities) {
-      const name = activity.location?.trim() || activity.title;
-
-      const point = await geocodePlace(city, name);
+  const enrichedDays: ItineraryDay[] = itinerary.map((day, dayIndex) => {
+    const activities: ItineraryActivity[] = day.activities.map((activity, activityIndex) => {
+      const point = pointByIndex.get(`${dayIndex}:${activityIndex}`) ?? null;
 
       if (!point) {
         geocodeFailures++;
-        previousLocated = false;
-        enrichedActivities.push(activity);
-        continue;
+
+        return activity;
       }
 
-      const currentIndex = enrichedActivities.length;
-
-      const enriched: ItineraryActivity = {
+      return {
         ...activity,
         coordinates: point.location,
         address: point.formattedAddress,
       };
+    });
 
-      // 与上一个活动相邻且两者都有坐标时，才计算通勤
-      if (previousLocated && chain.length > 0 && legs.length < MAX_LEGS_PER_DAY) {
-        const from = chain[chain.length - 1];
+    return { ...day, activities, commuteLegs: [] as CommuteLeg[] };
+  });
 
-        const straight = haversineMeters(from.location, point.location);
+  // ---------- 2. 通勤：先构建相邻段，再受控并发查询 ----------
+  // 只保留「连续且都有坐标」的段：中间活动定位失败即断开链条，
+  // 避免把不相邻的两个地点配对（否则会出现「机场 → 市区 17 公里」
+  // 这种把中间行程吞掉的结果）
+  interface PendingLeg {
+    dayIndex: number;
+    toActivityIndex: number;
+    fromName: string;
+    fromLocation: string;
+    toName: string;
+    toLocation: string;
+  }
+
+  const pending: PendingLeg[] = [];
+
+  enrichedDays.forEach((day, dayIndex) => {
+    let previous: { name: string; location: string } | null = null;
+    let legsForDay = 0;
+
+    day.activities.forEach((activity, activityIndex) => {
+      if (!activity.coordinates) {
+        // 链条断开：后续活动不再与更早的点配对
+        previous = null;
+
+        return;
+      }
+
+      const name = activity.location?.trim() || activity.title;
+
+      if (previous && legsForDay < MAX_LEGS_PER_DAY) {
+        const straight = haversineMeters(previous.location, activity.coordinates);
 
         // 同一点位不再规划，避免「步行 1 米」
         if (straight !== null && straight >= SAME_POINT_THRESHOLD_METERS) {
-          const leg = await fetchCommute({
-            city,
-            fromName: from.name,
-            fromLocation: from.location,
+          pending.push({
+            dayIndex,
+            toActivityIndex: activityIndex,
+            fromName: previous.name,
+            fromLocation: previous.location,
             toName: name,
-            toLocation: point.location,
+            toLocation: activity.coordinates,
           });
 
-          if (leg) {
-            legs.push(leg);
-            commuteCount++;
-
-            enriched.commuteFromPrevious = leg;
-          }
+          legsForDay++;
         }
       }
 
-      chain.push({ index: currentIndex, name, location: point.location });
-      previousLocated = true;
-      enrichedActivities.push(enriched);
+      previous = { name, location: activity.coordinates };
+    });
+  });
+
+  const legs = await mapWithConcurrency(pending, COMMUTE_CONCURRENCY, (item) =>
+    fetchCommute({
+      city,
+      fromName: item.fromName,
+      fromLocation: item.fromLocation,
+      toName: item.toName,
+      toLocation: item.toLocation,
+    }),
+  );
+
+  console.info("[travel] 通勤查询完成", {
+    legs: pending.length,
+    resolved: legs.filter((l) => l !== null).length,
+    elapsedMs: Date.now() - phaseStart,
+  });
+
+  // 回填通勤信息：挂在「后一个活动」上，页面上显示在它前面
+  let commuteCount = 0;
+
+  legs.forEach((leg, index) => {
+    if (!leg) {
+      return;
     }
 
-    enrichedDays.push({ ...day, activities: enrichedActivities, commuteLegs: legs });
-  }
+    const target = pending[index];
+    const day = enrichedDays[target.dayIndex];
+    const activity = day?.activities[target.toActivityIndex];
+
+    if (!day || !activity) {
+      return;
+    }
+
+    day.activities[target.toActivityIndex] = { ...activity, commuteFromPrevious: leg };
+    day.commuteLegs = [...(day.commuteLegs ?? []), leg];
+    commuteCount++;
+  });
 
   if (geocodeFailures > 0) {
     warnings.push(`有 ${geocodeFailures} 个活动地点未能在地图上定位，已保留原始文字描述`);
