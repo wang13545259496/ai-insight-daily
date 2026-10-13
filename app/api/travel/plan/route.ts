@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 
 import { CityResolveError } from "@/lib/agents/travel/cities";
-import { listPlans, resolveQuoteMode, savePlan } from "@/lib/agents/travel/data";
+import {
+  deletePlanById,
+  findPlanByFingerprint,
+  listPlans,
+  resolveQuoteMode,
+  savePlan,
+} from "@/lib/agents/travel/data";
 import { generateTravelPlan } from "@/lib/agents/travel/planner";
 import { TravelValidationError } from "@/lib/agents/travel/validation";
 
@@ -38,13 +44,25 @@ export async function POST(request: Request) {
     typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
 
   try {
-    const { plan, warnings } = await generateTravelPlan(payload);
+    const { plan, warnings, fingerprint } = await generateTravelPlan(payload);
 
     const quoteMode = resolveQuoteMode(plan);
 
     let id: number | null = null;
+    let deduplicated = false;
 
     try {
+      // 同一需求重复提交时覆盖旧记录：fingerprint 列有唯一索引，
+      // 不先清理会直接冲突。这样既避免重复消耗模型与地图配额，
+      // 又保证「重新生成」拿到的是最新结果。
+      const existing = await findPlanByFingerprint(fingerprint);
+
+      if (existing) {
+        await deletePlanById(existing.id);
+        deduplicated = true;
+        warnings.push("该需求已有历史方案，本次已用最新生成结果替换旧记录");
+      }
+
       id = await savePlan({ plan, quoteMode });
     } catch (error) {
       // 落库失败不应让用户丢掉刚生成的方案：照常返回，仅提示未保存
@@ -59,6 +77,7 @@ export async function POST(request: Request) {
       id,
       quoteMode,
       warnings,
+      deduplicated,
     });
   } catch (error) {
     if (error instanceof TravelValidationError) {

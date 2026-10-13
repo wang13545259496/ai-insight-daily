@@ -106,7 +106,7 @@ describe("travel/amap 未配置 Key", () => {
 
     assert.equal(requests.length, 0, "未配置 Key 时不应发出请求");
     assert.equal(result.itinerary.length, 1);
-    assert.equal(result.weather.length, 0);
+    assert.equal(result.cityCenter, null);
     assert.equal(result.adcode, null);
     assert.ok(result.warnings.some((w) => w.includes("未能识别目的地")));
   });
@@ -271,10 +271,9 @@ describe("travel/amap 正常增强", () => {
     assert.ok(result.itinerary[0].commuteLegs);
     assert.equal(result.itinerary[0].commuteLegs?.length, 1);
 
-    // 天气与 adcode
+    // 天气改由 weather.ts 统一负责，这里只校验它需要的定位信息
     assert.equal(result.adcode, "460200");
-    assert.equal(result.weather.length, 1);
-    assert.equal(result.weather[0].dayWeather, "晴");
+    assert.ok(result.cityCenter, "应返回城市中心坐标供天气查询使用");
 
     // 行程内容未被改写
     assert.equal(activities.length, 2);

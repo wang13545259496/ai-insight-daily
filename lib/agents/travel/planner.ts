@@ -15,9 +15,10 @@
 import { getTravelAIModel, isTravelAIEnabled, travelChat } from "./ai";
 
 import { isAmadeusConfigured, createAmadeusProvider, describeError } from "./amadeus";
-import { enrichItinerary, haversineMeters, isAmapConfigured } from "./amap";
+import { enrichItinerary, haversineMeters, isAmapConfigured, resolveCityPoint } from "./amap";
 import { buildBudgetPlan } from "./budget";
 import { resolveTripCities } from "./cities";
+import { computeFingerprint } from "./data";
 import { isPeakSeason, resolveDuration, today } from "./date";
 import {
   buildTemplateDraft,
@@ -40,6 +41,7 @@ import {
 } from "./providers";
 import type { BudgetPlan, TravelPlan, TravelQuotes, TripQuery } from "./types";
 import { normalizeTripQuery } from "./validation";
+import { fetchTravelWeather } from "./weather";
 
 /**
  * 模型最大输出 token。
@@ -54,6 +56,8 @@ const MAX_TOKENS = 8000;
 export interface GeneratePlanResult {
   plan: TravelPlan;
   warnings: string[];
+  /** 需求指纹，供接口层做去重落库 */
+  fingerprint: string;
 }
 
 /**
@@ -73,6 +77,26 @@ function selectProvider(warnings: string[]): QuoteProvider {
 }
 
 /**
+ * 高德地图覆盖范围：仅中国大陆、香港、澳门。
+ *
+ * 判断依据是内置城市表里该城市对应的 IATA 城市码。台湾（TPE/KHH）
+ * 与所有境外城市一样走「无地图数据」分支，避免做一次必然失败的
+ * 地理编码请求，也避免给出误导性的告警。
+ */
+const AMAP_COVERED_CITY_CODES = new Set([
+  "BJS", "SHA", "CAN", "SZX", "CTU", "CKG", "HGH", "NKG", "WUH", "XIY",
+  "CSX", "KMG", "XMN", "TAO", "TSN", "CGO", "SYX", "HAK", "LXA", "URC",
+  "HRB", "SHE", "DLC", "TNA", "FOC", "NNG", "KWE", "LJG", "DLU", "ZAT",
+  "JHG", "HET", "INC", "XNN", "LHW", "TYN", "SJW", "HFE", "NGB", "WNZ",
+  "SWA", "ZUH", "HKG", "MFM",
+]);
+
+/** 目的地是否在高德覆盖范围内 */
+export function isAmapCoveredDestination(cityCode: string): boolean {
+  return AMAP_COVERED_CITY_CODES.has(cityCode.toUpperCase());
+}
+
+/**
  * 主入口：由不可信输入生成完整旅行方案。
  *
  * @throws TravelValidationError 输入非法
@@ -84,6 +108,9 @@ export async function generateTravelPlan(
 ): Promise<GeneratePlanResult> {
   // ---------- 1. 校验 ----------
   const { query, warnings: validationWarnings } = normalizeTripQuery(input);
+
+  // 需求指纹：与数据层落库时使用同一算法，保证「生成」与「去重」判定一致
+  const fingerprint = computeFingerprint(query);
 
   const duration = resolveDuration(query.departDate, query.returnDate);
 
@@ -165,7 +192,7 @@ export async function generateTravelPlan(
   // ---------- 6. 地图增强（可选）----------
   // 用高德补齐坐标、通勤与天气。任一步失败都只影响增强项，
   // 方案本身照常返回——地图是加分项，不是前置条件。
-  await applyMapEnrichment(base, destination.input, warnings);
+  await applyMapEnrichment(base, destination.input, warnings, destination.code);
 
   // ---------- 7. 跨区通勤检查与一次重排 ----------
   // 模型不掌握真实距离，容易把相隔几十公里的两个片区排进同一天。
@@ -180,6 +207,7 @@ export async function generateTravelPlan(
       dates,
       budget,
       query,
+      destinationCode: destination.code,
       warnings,
     });
   }
@@ -187,7 +215,7 @@ export async function generateTravelPlan(
   // ---------- 8. 自校验 ----------
   base.warnings = [...warnings, ...auditPlan(base)];
 
-  return { plan: base, warnings: base.warnings };
+  return { plan: base, warnings: base.warnings, fingerprint };
 }
 
 /** 单段通勤允许的上限（分钟） */
@@ -280,9 +308,10 @@ async function retryForLongCommutes(options: {
   dates: string[];
   budget: BudgetPlan;
   query: TripQuery;
+  destinationCode: string;
   warnings: string[];
 }): Promise<void> {
-  const { plan, violations, template, dates, budget, query, warnings } = options;
+  const { plan, violations, template, dates, budget, query, destinationCode, warnings } = options;
 
   if (!isTravelAIEnabled()) {
     warnings.push(...violations);
@@ -322,7 +351,7 @@ async function retryForLongCommutes(options: {
     };
 
     const mapWarnings: string[] = [];
-    await applyMapEnrichment(probe, query.destination, mapWarnings);
+    await applyMapEnrichment(probe, query.destination, mapWarnings, destinationCode);
 
     const remaining = findLayoutIssues(probe);
 
@@ -345,19 +374,47 @@ async function retryForLongCommutes(options: {
 }
 
 /**
- * 用高德数据增强行程：坐标、通勤、天气。
+ * 用地图数据增强行程：坐标、通勤、天气。
  *
- * 未配置 Key 时直接跳过，不产生任何网络请求。
+ * 分三种情况处理：
+ *   1. 未配高德 Key        → 只尝试天气，并提示可配置
+ *   2. 目的地在中国境内     → 高德完整增强（坐标 + 通勤）+ 天气
+ *   3. 目的地在境外         → 跳过坐标与通勤（高德无数据），仅取天气
+ *
+ * 地图与天气都是加分项：任何一步失败都不影响方案本身。
  */
 async function applyMapEnrichment(
   plan: TravelPlan,
   city: string,
   warnings: string[],
+  cityCode: string,
 ): Promise<void> {
   if (!isAmapConfigured()) {
+    warnings.push("未配置 AMAP_WEB_KEY，行程未附地图坐标与通勤信息；配置后自动补齐");
+
+    return;
+  }
+
+  const covered = isAmapCoveredDestination(cityCode);
+
+  // 目的地中心坐标：境外行程也要用它来查天气
+  let cityCenter: string | null = null;
+
+  try {
+    const point = await resolveCityPoint(city);
+
+    cityCenter = point?.location ?? null;
+  } catch {
+    cityCenter = null;
+  }
+
+  if (!covered) {
     warnings.push(
-      "未配置 AMAP_WEB_KEY，行程未附地图坐标与通勤信息；配置后自动补齐",
+      `目的地「${city}」不在高德地图覆盖范围内（仅中国大陆/香港/澳门），` +
+        "本次未附景点坐标与通勤时间；当地通勤请以导航软件实测为准",
     );
+
+    await attachWeather(plan, cityCenter, warnings);
 
     return;
   }
@@ -368,22 +425,48 @@ async function applyMapEnrichment(
     plan.itinerary = result.itinerary;
     plan.mapEnriched = true;
 
-    // 高德只提供未来几天的预报。行程日期若不在预报范围内，
-    // 强行展示今天的天气会误导用户，因此这里只保留真正覆盖行程的日期。
-    const tripDates = new Set(plan.itinerary.map((day) => day.date));
-    const covered = result.weather.filter((item) => tripDates.has(item.date));
-
-    if (covered.length > 0) {
-      plan.weather = covered;
-    } else if (result.weather.length > 0) {
-      warnings.push(
-        `行程日期（${plan.query.departDate} 起）超出高德天气预报范围（仅提供未来数日），未附天气信息`,
-      );
-    }
-
     warnings.push(...result.warnings);
+
+    // 天气优先用高德返回的 adcode；取不到时退回城市中心坐标
+    await attachWeather(plan, result.cityCenter ?? cityCenter, warnings, city);
   } catch (error) {
     warnings.push(`地图数据获取失败，行程未附通勤信息：${describeError(error)}`);
+
+    await attachWeather(plan, cityCenter, warnings);
+  }
+}
+
+/**
+ * 附加逐日天气。
+ *
+ * 只保留真正落在行程日期内的预报——把出发前几天的天气混进行程里
+ * 比不显示更糟。没有任何一天匹配时明确说明原因。
+ */
+async function attachWeather(
+  plan: TravelPlan,
+  location: string | null,
+  warnings: string[],
+  city?: string,
+): Promise<void> {
+  const result = await fetchTravelWeather(location, city);
+
+  if (result.warning) {
+    warnings.push(result.warning);
+  }
+
+  if (result.days.length === 0) {
+    return;
+  }
+
+  const tripDates = new Set(plan.itinerary.map((day) => day.date));
+  const covered = result.days.filter((item) => tripDates.has(item.date));
+
+  if (covered.length > 0) {
+    plan.weather = covered;
+  } else {
+    warnings.push(
+      `行程日期（${plan.query.departDate} 起）超出天气预报范围（${result.source} 仅提供近期预报），未附天气信息`,
+    );
   }
 }
 

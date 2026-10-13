@@ -1,0 +1,71 @@
+// ==============================
+// 旅行规划方案
+//
+// 存整份方案的 JSON + 少量用于列表展示与检索的标量列。
+// 之所以不做成多张表（行程日、活动各一张）：方案是一次生成、整体
+// 读取的整体对象，没有按单日查询的需求，拆表只会增加读写成本。
+// ==============================
+
+model TripPlan {
+
+  id Int @id @default(autoincrement())
+
+  // ---------- 需求摘要（用于列表展示与检索）----------
+
+  origin String
+
+  destination String
+
+  departDate String
+
+  returnDate String
+
+  adults Int @default(1)
+
+  children Int @default(0)
+
+  // 总预算（人民币元）
+  budget Int
+
+  // 预算档位：budget / comfort / premium / luxury
+  style String @default("comfort")
+
+  // 偏好标签，逗号分隔存储
+  interests String?
+
+  // ---------- 方案正文 ----------
+
+  // 完整 TravelPlan 的 JSON 字符串
+  planJson String
+
+  // 一段话总览，列表页直接展示，避免解析整份 JSON
+  overview String
+
+  // 交通与住宿报价来源：live（全部真实）/ partial（部分真实）/ estimate（全为估算）
+  quoteMode String @default("estimate")
+
+  // 行程内容是否由模型生成
+  generatedByAI Boolean @default(false)
+
+  // 生成所用模型
+  model String?
+
+  // 需求指纹：由出发地/目的地/日期/人数/预算/档位/偏好归一化后哈希得到。
+  // 用于识别「同一需求重复提交」，命中时直接返回已有方案，
+  // 避免重复消耗模型与地图接口配额。
+  fingerprint String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  // 历史列表按时间倒序
+  @@index([createdAt])
+
+  // 按目的地筛选历史方案
+  @@index([destination, createdAt])
+
+  // 同一需求只保留一条方案
+  @@unique([fingerprint])
+
+}

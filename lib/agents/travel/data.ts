@@ -6,9 +6,11 @@
  * 读取时才解析，解析失败不能让整个列表页崩掉，因此做了逐条兜底。
  */
 
+import { createHash } from "node:crypto";
+
 import { prisma } from "@/lib/prisma";
 
-import type { TravelPlan } from "./types";
+import type { TravelPlan, TripQuery } from "./types";
 
 /** 报价来源标记，用于列表页快速标注「是否真实报价」 */
 export type QuoteMode = "live" | "partial" | "estimate";
@@ -17,6 +19,70 @@ export type QuoteMode = "live" | "partial" | "estimate";
 export interface SavePlanInput {
   plan: TravelPlan;
   quoteMode: QuoteMode;
+}
+
+/**
+ * 计算需求指纹。
+ *
+ * 只纳入「影响方案内容」的字段：出发地、目的地、日期、人数、预算、
+ * 档位、偏好、补充要求；生成时间等无关字段不参与，保证同一需求
+ * 每次得到相同指纹。
+ *
+ * 为什么需要它：一次生成要调用一次大模型并发出数十次高德请求，
+ * 用户连点两次或刷新重试会造成重复消耗。指纹让重复提交直接命中已有方案。
+ */
+export function computeFingerprint(query: TripQuery): string {
+  const normalized = JSON.stringify({
+    o: query.origin.trim().toLowerCase(),
+    d: query.destination.trim().toLowerCase(),
+    dd: query.departDate,
+    rd: query.returnDate,
+    a: query.party.adults,
+    c: query.party.children,
+    b: query.budget,
+    s: query.style,
+    i: [...query.interests].sort(),
+    n: (query.notes ?? "").trim(),
+  });
+
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
+}
+
+/**
+ * 查找与本次需求完全相同的已有方案。
+ * 命中时调用方可直接复用，不必再调模型与地图接口。
+ */
+export async function findPlanByFingerprint(
+  fingerprint: string,
+): Promise<{ id: number; plan: TravelPlan } | null> {
+  const record = await prisma.tripPlan.findUnique({
+    where: { fingerprint },
+    select: { id: true, planJson: true },
+  });
+
+  if (!record) {
+    return null;
+  }
+
+  try {
+    return { id: record.id, plan: JSON.parse(record.planJson) as TravelPlan };
+  } catch (error) {
+    // 存量 JSON 损坏时不要让去重把功能卡死，退回重新生成
+    console.error("[travel] 去重命中但 JSON 解析失败", {
+      id: record.id,
+      error: String(error),
+    });
+
+    return null;
+  }
+}
+
+/**
+ * 删除指定历史方案。
+ * 重新生成时用它清理旧记录，避免与唯一索引冲突。
+ */
+export async function deletePlanById(id: number): Promise<void> {
+  await prisma.tripPlan.deleteMany({ where: { id } });
 }
 
 /** 判定报价来源：区分「全部真实」「部分真实」「全为估算」 */
@@ -55,6 +121,7 @@ export async function savePlan(input: SavePlanInput): Promise<number> {
       quoteMode,
       generatedByAI: plan.generatedByAI,
       model: plan.model ?? null,
+      fingerprint: computeFingerprint(query),
     },
     select: { id: true },
   });

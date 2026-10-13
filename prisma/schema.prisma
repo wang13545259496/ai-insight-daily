@@ -402,6 +402,9 @@ model TripPlan {
   // 生成所用模型
   model String?
 
+  // 需求指纹：同一需求重复提交时用于去重
+  fingerprint String?
+
   createdAt DateTime @default(now())
 
   updatedAt DateTime @default(now()) @updatedAt
@@ -411,5 +414,8 @@ model TripPlan {
 
   // 按目的地筛选历史方案
   @@index([destination, createdAt])
+
+  // 同一需求只保留一条方案
+  @@unique([fingerprint])
 
 }

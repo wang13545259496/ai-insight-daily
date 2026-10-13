@@ -15,9 +15,9 @@
  * 行程照常生成——绝不因为缺地图数据而让整个方案失败。
  */
 
-import type { CommuteLeg, DailyWeather, ItineraryActivity, ItineraryDay } from "./types";
+import type { CommuteLeg, ItineraryActivity, ItineraryDay } from "./types";
 
-export type { CommuteLeg, DailyWeather };
+export type { CommuteLeg };
 
 const AMAP_HOST = "https://restapi.amap.com";
 
@@ -67,9 +67,9 @@ export interface GeoPoint {
 export interface AmapEnrichment {
   /** 增强后的行程 */
   itinerary: ItineraryDay[];
-  /** 逐日天气 */
-  weather: DailyWeather[];
-  /** 目的地 adcode，供天气或后续查询复用 */
+  /** 目的地中心坐标 "lng,lat"，供天气查询复用 */
+  cityCenter: string | null;
+  /** 目的地 adcode，供高德天气查询复用 */
   adcode: string | null;
   /** 可读告警 */
   warnings: string[];
@@ -500,39 +500,6 @@ export async function fetchCommute(options: {
 }
 
 // ============================================================
-// 天气
-// ============================================================
-
-/** 查询逐日天气预报；失败返回空数组 */
-export async function fetchWeather(adcode: string): Promise<DailyWeather[]> {
-  if (!adcode) {
-    return [];
-  }
-
-  try {
-    const payload = await amapGet<
-      AmapResponse & {
-        forecasts?: Array<{ casts?: Array<Record<string, string>> }>;
-      }
-    >("/v3/weather/weatherInfo", { city: adcode, extensions: "all" });
-
-    const casts = payload.forecasts?.[0]?.casts ?? [];
-
-    return casts.map((cast) => ({
-      date: cast.date ?? "",
-      dayWeather: cast.dayweather ?? "",
-      nightWeather: cast.nightweather ?? "",
-      dayTemp: cast.daytemp ?? "",
-      nightTemp: cast.nighttemp ?? "",
-      windDirection: cast.daywind ?? "",
-      windPower: cast.daypower ?? "",
-    }));
-  } catch {
-    return [];
-  }
-}
-
-// ============================================================
 // 行程增强主流程
 // ============================================================
 
@@ -560,7 +527,7 @@ export async function enrichItinerary(options: {
       `高德未能识别目的地「${city}」，本次未附地图信息（境外目的地无数据属正常）`,
     );
 
-    return { itinerary, weather: [], adcode: null, warnings };
+    return { itinerary, cityCenter: null, adcode: null, warnings };
   }
 
   let geocodeFailures = 0;
@@ -639,9 +606,12 @@ export async function enrichItinerary(options: {
     warnings.push("已获取地点坐标，但未能生成通勤方案（可能是点位过近或接口无数据）");
   }
 
-  const weather = await fetchWeather(cityPoint.adcode);
-
-  return { itinerary: enrichedDays, weather, adcode: cityPoint.adcode, warnings };
+  return {
+    itinerary: enrichedDays,
+    cityCenter: cityPoint.location,
+    adcode: cityPoint.adcode,
+    warnings,
+  };
 }
 
 /** 统计已定位的活动数量 */
