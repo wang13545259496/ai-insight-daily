@@ -59,10 +59,10 @@ function getTrendLabel(
   }
 
   if (recent72h === 1) {
-    return "近72小时出现新的相关信息，建议继续观察后续变化。";
+    return "持续关注该事件后续产业影响与市场变化。";
   }
 
-  return "目前缺少近期新增信息，暂作为背景事件观察。";
+  return "暂无最新动态，持续作为产业趋势背景观察。";
 }
 
 function getScoreLabel(score: number) {
@@ -105,7 +105,9 @@ function getEventTypeLabel(type: string | null | undefined) {
 function safeText(value: string | null | undefined, fallback: string) {
   const text = value?.trim();
 
-  return text ? text : fallback;
+  if (!text) return fallback;
+
+  return text.length > 220 ? text.slice(0, 220) + "…" : text;
 }
 
 
@@ -127,7 +129,7 @@ export default async function HomePage() {
   const now = new Date();
 
   const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const last72h = new Date(now.getTime() - 72 * 60 * 60 * 1000);
+  const last72h = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const [
     allEvents,
@@ -147,9 +149,6 @@ export default async function HomePage() {
         news: {
           where: {
             dataStatus: "active",
-            publishedAt: {
-              gte: last72h,
-            },
           },
           orderBy: {
             publishedAt: "desc",
@@ -169,8 +168,9 @@ export default async function HomePage() {
         },
       },
       orderBy: {
-        updatedAt: "desc",
+        heatScore: "desc",
       },
+      take: 10,
     }),
 
     prisma.news.findMany({
@@ -182,27 +182,14 @@ export default async function HomePage() {
         aiScore: {
           gte: 40,
         },
-      },
-      orderBy: [
-        {
-          aiScore: "desc",
+        publishedAt: {
+          gte: last72h,
         },
-        {
-          publishedAt: "desc",
-        },
-      ],
-      take: 30,
-      select: {
-        id: true,
-        title: true,
-        summary: true,
-        source: true,
-        category: true,
-        publishedAt: true,
-        createdAt: true,
-        aiScore: true,
-        eventId: true,
       },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 6,
     }),
 
     prisma.businessOpportunity.findMany({
@@ -263,11 +250,11 @@ export default async function HomePage() {
   const focusEvents = allEvents
     .map((event) => {
       const recentNews = event.news.filter(
-        (item) => new Date(item.publishedAt ?? item.createdAt).getTime() >= last72h.getTime()
+        (item: any) => new Date(item.publishedAt ?? item.createdAt).getTime() >= last72h.getTime()
       );
 
       const recent24News = recentNews.filter(
-        (item) => new Date(item.publishedAt ?? item.createdAt).getTime() >= last24h.getTime()
+        (item: any) => new Date(item.publishedAt ?? item.createdAt).getTime() >= last24h.getTime()
       );
 
       const latestNews = recentNews[0] ?? null;
@@ -283,7 +270,7 @@ export default async function HomePage() {
 
       const focusScore =
         recent24h * 100 +
-        recent72h * 18 +
+        recent72h * 25 +
         recentAiScore * 0.8 +
         event.qualityScore * 0.65 +
         Math.min(120, event.heatScore * 0.22);
@@ -299,7 +286,11 @@ export default async function HomePage() {
         focusScore,
       };
     })
-    .filter((event) => event.recent72h > 0 || event.heatScore >= 40)
+    .filter((event) => event.recent72h > 0 || event.heatScore >= 0)
+    .map((event) => {
+      console.log("FOCUS_EVENT", event.id, event.title, event.recent72h, event.heatScore);
+      return event;
+    })
     .sort((a, b) => {
       if (b.focusScore !== a.focusScore) {
         return b.focusScore - a.focusScore;
@@ -323,6 +314,15 @@ export default async function HomePage() {
 
       return b.qualityScore - a.qualityScore;
     })
+    .filter((event) =>
+      ![
+        "AI Agent",
+        "大模型竞争",
+        "AI产业应用",
+        "OpenAI生态",
+        "AI安全治理"
+      ].includes(event.title)
+    )
     .slice(0, 6);
 
   const focusIds = new Set(focusEvents.map((item) => item.id));
@@ -366,7 +366,7 @@ export default async function HomePage() {
               </h2>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                优先展示最近24小时出现新动态、且仍在持续发展的AI产业事件。
+                优先展示近期出现新动态、且仍在持续发展的AI产业事件。
               </p>
             </div>
 

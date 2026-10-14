@@ -1,16 +1,18 @@
-import { prisma } from "@/lib/prisma";
-import { analyzeNews } from "@/lib/news/analyzeNews";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
 
 async function main() {
+  const { prisma } = await import("@/lib/prisma");
+  const { analyzeNews } = await import("@/lib/news/analyzeNews");
+
   const newsList = await prisma.news.findMany({
     where: {
       analysisStatus: "pending",
     },
-
     orderBy: {
       createdAt: "desc",
     },
-
     take: 50,
   });
 
@@ -31,6 +33,8 @@ async function main() {
   }
 
   console.log("AI新闻增强完成");
+
+  await prisma.$disconnect();
 }
 
-main().finally(() => prisma.$disconnect());
+main();

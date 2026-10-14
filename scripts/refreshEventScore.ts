@@ -46,10 +46,14 @@ const event of events
 
 
 
-const score =
+let score =
 calculateEventScore(
 event.news
 );
+
+if(event.eventType==="trend"){
+  score = Math.round(score * 0.35);
+}
 
 
 

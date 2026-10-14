@@ -30,9 +30,9 @@ function fallbackAnalysis(title: string, content: string): AIAnalysisResult {
       : `${title}是当前AI产业值得关注的行业动态。`,
     content: text || title,
     insight: "建议持续关注该事件后续技术进展、产品落地和产业影响。",
-    impact: "该事件可能影响相关技术路线、企业竞争格局及AI应用生态。",
-    businessOpportunity: "重点观察企业服务、AI应用、Agent及相关基础设施的商业化机会。",
-    investmentView: "建议关注事件对相关产业链企业的收入增长、技术壁垒和市场竞争的实际影响。",
+    impact: "该事件对AI产业的具体影响需要结合技术进展、应用场景和市场反馈进一步判断。",
+    businessOpportunity: "该事件潜在商业价值需要结合产品落地、用户需求和产业链变化进一步评估。",
+    investmentView: "该事件的投资价值需要结合产业竞争格局、企业优势和长期商业化能力综合判断。",
     aiScore: 50,
   };
 }
@@ -64,7 +64,7 @@ function parseAIResponse(text: string, title: string, content: string) {
 
     return {
       ...fallback,
-      summary: text.trim().slice(0, 500) || fallback.summary,
+      summary: text.trim().slice(0, 180) || fallback.summary,
       content: text.trim() || fallback.content,
     };
   }
@@ -89,6 +89,7 @@ export async function generateSummary(
     return fallbackAnalysis(title, content);
   }
 
+  console.time("DeepSeek API");
   const response = await client.chat.completions.create({
     model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
     temperature: 0.2,
@@ -112,7 +113,7 @@ aiScore：0-100整数
 
 重要要求：
 1. 不得虚构新闻中不存在的事实、公司、数字、时间或人物。
-2. 新闻信息不足时明确使用“信息有限”“仍需关注后续确认”等表述。
+2. 新闻信息不足时，请用自然语言说明缺失信息或待验证部分，避免反复使用“信息有限”“仍需关注”等固定模板词。
 3. businessOpportunity和investmentView必须基于新闻内容推断，不得把推测写成事实。
 4. aiScore综合考虑事件重要性、产业影响、信息完整度、商业价值和可信度。
 5. 只输出JSON，不要Markdown。`,
@@ -123,11 +124,12 @@ aiScore：0-100整数
 ${title}
 
 新闻正文：
-${content || "正文信息有限，请基于标题谨慎分析。"}`
+${content || "正文内容缺失，请基于标题和已有信息进行谨慎分析。"}`
       },
     ],
   });
 
+  console.timeEnd("DeepSeek API");
   const text = response.choices?.[0]?.message?.content || "";
 
   return parseAIResponse(text, title, content);

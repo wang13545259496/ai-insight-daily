@@ -5,9 +5,20 @@ async function main(){
 
   const list = await prisma.news.findMany({
     where:{
-      insight:{
-        contains:"建议持续关注该事件后续技术进展"
-      }
+      OR:[
+        {
+          impact:
+            "该事件对AI产业的具体影响需要结合技术进展、应用场景和市场反馈进一步判断。"
+        },
+        {
+          businessOpportunity:
+            "该事件潜在商业价值需要结合产品落地、用户需求和产业链变化进一步评估。"
+        },
+        {
+          investmentView:
+            "该事件的投资价值需要结合产业竞争格局、企业优势和长期商业化能力综合判断。"
+        }
+      ]
     }
   });
 
@@ -48,6 +59,7 @@ async function main(){
     }catch(e){
       console.error("失败:",news.id,e);
     }
+
   }
 
   console.log("修复完成:",done);

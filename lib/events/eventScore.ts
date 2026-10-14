@@ -230,7 +230,6 @@ export function generateTrendSummary(
  score:number
 ){
 
-
   if(score>=400){
 
     return "重大AI产业事件，多来源快速扩散，建议重点跟踪";
@@ -240,11 +239,18 @@ export function generateTrendSummary(
 
   if(score>=150){
 
-    return "AI产业事件保持稳定关注";
+    return "产业影响持续释放，建议持续跟踪后续发展";
 
   }
 
 
-  return "事件热度下降，进入观察阶段";
+  if(score>=50){
+
+    return "事件保持行业关注，持续观察产业进展";
+
+  }
+
+
+  return "事件进入稳定观察阶段";
 
 }

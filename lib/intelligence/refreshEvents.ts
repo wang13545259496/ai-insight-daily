@@ -133,7 +133,7 @@ export async function refreshEventScores() {
         ? "24小时内出现新的相关信息，属于当前值得关注的产业动态。"
         : trendStatus === "持续关注"
         ? "72小时内仍有持续信息进入，事件保持一定行业关注度。"
-        : "近期新增信息有限，事件即时关注度有所下降。";
+        : "近期新增信息趋于稳定，事件进入持续跟踪阶段。";
 
     await prisma.newsEvent.update({
       where: {
