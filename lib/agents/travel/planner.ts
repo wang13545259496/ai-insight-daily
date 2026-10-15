@@ -14,9 +14,10 @@
 
 import { getTravelAIModel, isTravelAIEnabled, travelChat } from "./ai";
 
-import { isAmadeusConfigured, createAmadeusProvider, describeError } from "./amadeus";
-import { createRollingGoProvider } from "./rollinggoProvider";
+import { describeError } from "./amadeus";
+import { createLiveQuoteProvider } from "./liveQuoteProvider";
 import { isRollingGoConfigured } from "./rollinggo";
+import { isVariflightConfigured } from "./variflight";
 import { enrichItinerary, haversineMeters, isAmapConfigured, resolveCityPoint } from "./amap";
 import { buildBudgetPlan } from "./budget";
 import { resolveTripCities } from "./cities";
@@ -88,31 +89,33 @@ function noopProgress(): void {
  * 选择报价 Provider。
  *
  * 优先级：
- *   1. RollingGo —— 自助接入的实时酒店报价（实测可用，无需企业资质）
- *   2. Amadeus   —— 企业凭据配置后的实时报价（机票 + 酒店）
- *   3. 纯估算    —— 无任何凭据时的兜底
+ *   1. 组合 Provider —— 飞常准（机票）+ RollingGo（酒店），
+ *      任一实时源已配置即启用，两者各自独立降级
+ *   2. 纯估算       —— 两个实时源都未配置时的兜底
  *
- * 说明：Amadeus 的自助服务门户已于 2026-07 关闭，其分支保留仅为
- * 兼容既有企业凭据；新的实时报价能力由 RollingGo 提供。
+ * 不再使用 Amadeus：其自助服务门户已于 2026-07 关闭，
+ * 新开发者无免费额度且仅限企业合作，而组合 Provider 已覆盖机票与酒店。
  */
 function selectProvider(warnings: string[]): QuoteProvider {
-  if (isRollingGoConfigured()) {
-    return createRollingGoProvider();
-  }
+  const hasVariflight = isVariflightConfigured();
+  const hasRollingGo = isRollingGoConfigured();
 
-  if (isAmadeusConfigured()) {
-    return createAmadeusProvider();
+  if (hasVariflight || hasRollingGo) {
+    if (!hasVariflight) {
+      warnings.push("未配置 VARIFLIGHT_API_KEY，机票将按航线距离估算");
+    }
+
+    if (!hasRollingGo) {
+      warnings.push("未配置 ROLLINGGO_API_KEY，酒店将按目的地档位估算");
+    }
+
+    return createLiveQuoteProvider();
   }
 
   warnings.push(
-    "未配置 ROLLINGGO_API_KEY，当前为估算模式；配置后自动切换为实时酒店报价",
+    "未配置 VARIFLIGHT_API_KEY 与 ROLLINGGO_API_KEY，当前为估算模式；" +
+      "配置后自动切换为实时报价（机票用飞常准，酒店用 RollingGo）",
   );
-
-  if (!isAmadeusConfigured()) {
-    warnings.push(
-      "AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET 亦未配置（Amadeus 自助服务门户已于 2026-07 关闭）",
-    );
-  }
 
   return createEstimateProvider();
 }
