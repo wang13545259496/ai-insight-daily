@@ -627,6 +627,43 @@ export async function fetchDrivingRoute(
 }
 
 /**
+ * 取两点之间的驾车路径折线（供逐日路线图使用）。
+ *
+ * 为什么单独一个函数而不复用 fetchDrivingRoute：那条路径还承担跨城自驾
+ * 的成本估算，而折线只有画图需要；且本函数接受坐标字符串，
+ * 不做城市名解析（避免把坐标当城市名拿去地理编码）。
+ *
+ * 高德返回的 polyline 是「经度,纬度;经度,纬度」的字符串，
+ * 可直接用于静态图的 paths 参数（格式一致）。
+ *
+ * @param origin 起点坐标 "lng,lat"
+ * @param destination 终点坐标 "lng,lat"
+ * @returns polyline 字符串；取不到时为 null
+ */
+export async function fetchDrivingPolyline(
+  origin: string,
+  destination: string,
+): Promise<string | null> {
+  if (!isAmapConfigured()) return null;
+
+  const payload = await amapGet<
+    AmapResponse & { route?: { paths?: Array<{ steps?: Array<{ polyline?: string }> }> } }
+  >("/v3/direction/driving", { origin, destination, strategy: "0" });
+
+  const steps = payload.route?.paths?.[0]?.steps;
+
+  if (!Array.isArray(steps) || steps.length === 0) return null;
+
+  // 各段的 polyline 首尾相接，直接拼起来即可
+  const polyline = steps
+    .map((s) => String(s.polyline || "").trim())
+    .filter((p) => p.length > 0)
+    .join(";");
+
+  return polyline.length > 0 ? polyline : null;
+}
+
+/**
  * 自驾成本估算（油费 + 过路费）。
  *
  * 为什么不取接口字段：高德只返回过路费，不返回油费 ——

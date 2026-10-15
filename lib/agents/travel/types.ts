@@ -295,5 +295,13 @@ export interface TravelPlan {
     sights: PoiItem[];
     restaurants: PoiItem[];
   };
+  /**
+   * 逐日路线折线（真实道路），键为天数（从 1 开始）。
+   *
+   * 由高德驾车接口逐段取回后拼接，用于绘制逐日路线图。
+   * 没有值时前端回退为直连 —— 直连会穿过不可通行区域，
+   * 因此仅在取不到真实路线时才使用。
+   */
+  dayRoutePolylines?: Record<number, string>;
 }
 

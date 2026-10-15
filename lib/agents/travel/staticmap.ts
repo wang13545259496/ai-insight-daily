@@ -62,9 +62,12 @@ export function isValidLocation(location: string): boolean {
  * 生成一天的路线静态图 URL。
  *
  * @param points 当天有坐标的地点，按游览顺序
+ * @param routePolyline 真实道路折线（可选）。有值时按它画路线，
+ *        否则用各点直连 —— 直连会穿过不可通行区域
+ *        （实测北京第 2 天的直连线穿过了故宫）
  * @returns 图片 URL；坐标不足或未配置 Key 时返回 null
  */
-export function buildDayMapUrl(points: MapPoint[]): string | null {
+export function buildDayMapUrl(points: MapPoint[], routePolyline?: string | null): string | null {
   const key = process.env.AMAP_WEB_KEY?.trim();
 
   if (!key) return null;
@@ -82,10 +85,14 @@ export function buildDayMapUrl(points: MapPoint[]): string | null {
     .map((p) => `large,${ROUTE_COLOR},${p.index}:${p.location}`)
     .join("|");
 
-  // paths 用分号分隔
-  const paths = `${used.length > 1 ? "5" : "0"},${ROUTE_COLOR},1,,:${used
-    .map((p) => p.location)
-    .join(";")}`;
+  // paths 用分号分隔。注意：真实折线本身也是分号分隔的坐标串，
+  // 结构与直连一致，因此两种来源可以走同一段逻辑。
+  const routePoints =
+    routePolyline && routePolyline.length > 0
+      ? routePolyline
+      : used.map((p) => p.location).join(";");
+
+  const paths = `5,${ROUTE_COLOR},1,,:${routePoints}`;
 
   const params = [
     `size=${MAP_WIDTH}*${MAP_HEIGHT}`,
@@ -96,6 +103,136 @@ export function buildDayMapUrl(points: MapPoint[]): string | null {
   ];
 
   return `${STATIC_MAP_URL}?${params.join("&")}`;
+}
+
+/**
+ * URL 长度上限（字符）。
+ *
+ * 真实道路折线比直连长得多（每个点约 20 字符），
+ * 高德对 URL 长度有限制，超长会返回错误。
+ * 实测一条 3 公里的城市路线 polyline 约 1500 字符，
+ * 因此设置上限并对超长折线做抽稀。
+ */
+const MAX_URL_LENGTH = 3500;
+
+/**
+ * 抽稀折线：按等间隔保留点，使 URL 不超长。
+ *
+ * 为什么可以抽稀：折线用于「示意路线走向」，
+ * 保留每 N 个点仍能表达形状；而标记点用的是原始坐标，位置精确。
+ */
+export function thinPolyline(polyline: string, maxLength = 2000): string {
+  if (polyline.length <= maxLength) return polyline;
+
+  const points = polyline.split(";").filter((p) => p.trim().length > 0);
+
+  if (points.length <= 2) return polyline;
+
+  // 目标点数：按当前平均每点长度反推
+  const avgLen = polyline.length / points.length;
+  const targetCount = Math.max(2, Math.floor(maxLength / avgLen));
+
+  if (targetCount >= points.length) return polyline;
+
+  const step = points.length / targetCount;
+  const kept: string[] = [];
+
+  for (let i = 0; i < targetCount; i++) {
+    kept.push(points[Math.floor(i * step)]);
+  }
+
+  // 末点单独补上，避免路线终点缺失
+  const last = points[points.length - 1];
+
+  if (kept[kept.length - 1] !== last) kept.push(last);
+
+  return kept.join(";");
+}
+
+/** 生成 URL 时对折线做长度保护 */
+export function buildDayMapUrlSafe(
+  points: MapPoint[],
+  routePolyline?: string | null,
+): string | null {
+  const url = buildDayMapUrl(points, routePolyline ? thinPolyline(routePolyline) : null);
+
+  if (!url) return null;
+
+  // 兜底：即便抽稀后仍超长，退回直连
+  if (url.length > MAX_URL_LENGTH) {
+    return buildDayMapUrl(points, null);
+  }
+
+  return url;
+}
+
+/**
+ * 取一天内相邻地点之间的真实道路折线，拼接成整日路线。
+ *
+ * 为什么要真实路线：直连会穿过不可通行区域 ——
+ * 实测北京第 2 天「故宫」与「景山公园」的直连线穿过了故宫本体，
+ * 用户看到会以为可以横穿。
+ *
+ * 成本：相邻点对数 - 1 次高德驾车请求（免费），并行发起。
+ * 任一段失败时跳过该段（仍用其它段拼出的不完整路线，
+ * 或最终回退直连），不因单点失败导致整天没图。
+ *
+ * @param locations 当天有坐标的地点，按游览顺序
+ * @returns 拼接后的 polyline；全部失败时返回 null
+ */
+export async function buildDayRoutePolyline(
+  locations: string[],
+  fetchPolyline: (from: string, to: string) => Promise<string | null>,
+): Promise<string | null> {
+  const valid = locations.filter((l) => isValidLocation(l));
+
+  if (valid.length < 2) return null;
+
+  // 控制段数：点太多时只取前 6 个，避免请求数与 URL 长度失控
+  const points = valid.slice(0, 6);
+
+  const segments: Array<[string, string]> = [];
+
+  for (let i = 0; i < points.length - 1; i++) {
+    segments.push([points[i], points[i + 1]]);
+  }
+
+  const results = await Promise.all(
+    segments.map(async ([from, to]) => {
+      try {
+        return await fetchPolyline(from, to);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  const parts = results.filter((r): r is string => typeof r === "string" && r.length > 0);
+
+  if (parts.length === 0) return null;
+
+  /**
+   * 拼接各段并去掉共享端点。
+   *
+   * 相邻两段的折线首尾相接（前段末点 = 后段首点），
+   * 直接 join 会产生重复点。虽然重复点不影响渲染，
+   * 但会让折线长度虚增，浪费 URL 配额。
+   */
+  const merged: string[] = [];
+
+  for (const part of parts) {
+    const points = part.split(";").filter((p) => p.trim().length > 0);
+
+    for (const point of points) {
+      // 与前一个已加入的点相同则跳过
+      if (merged.length > 0 && merged[merged.length - 1] === point) continue;
+
+      merged.push(point);
+    }
+  }
+
+  // 只取到部分段时也返回 —— 有真实路线的一段总比整条直线更准确
+  return merged.length > 0 ? merged.join(";") : null;
 }
 
 /**

@@ -18,9 +18,16 @@ import { describeError } from "./amadeus";
 import { createLiveQuoteProvider } from "./liveQuoteProvider";
 import { compareIntercityOptions } from "./intercityOptions";
 import { fetchDestinationPois } from "./poi";
+import { buildDayRoutePolyline } from "./staticmap";
 import { isRollingGoConfigured } from "./rollinggo";
 import { isVariflightConfigured } from "./variflight";
-import { enrichItinerary, haversineMeters, isAmapConfigured, resolveCityPoint } from "./amap";
+import {
+  enrichItinerary,
+  fetchDrivingPolyline,
+  haversineMeters,
+  isAmapConfigured,
+  resolveCityPoint,
+} from "./amap";
 import { buildBudgetPlan } from "./budget";
 import { resolveTripCities } from "./cities";
 import { computeFingerprint } from "./data";
@@ -345,6 +352,39 @@ export async function generateTravelPlan(
 
     logEnrichmentCounts(base, "重排后");
   }
+  // ---------- 7.5 逐日路线折线（真实道路） ----------
+  // 放在重排之后：重排会改变当天的活动顺序与地点，
+  // 之前算好的折线会与实际行程不符。
+  //
+  // 为什么需要它：直连线会穿过不可通行区域 ——
+  // 实测北京第 2 天「故宫」与「景山公园」的直连穿过了故宫本体。
+  // 成本为每天（相邻点数 - 1）次高德驾车请求，免费。
+  //
+  // 判据用 isAmapConfigured 而非 base.mapEnriched：后者要到
+  // enrichItinerary 内部（applyMapEnrichment）才赋值，晚于这里，
+  // 曾经因此让整段逻辑恒不执行。实际能取到坐标即可画图。
+  if (isAmapConfigured() && base.itinerary.some((d) => d.activities.some((a) => a.coordinates))) {
+    onProgress("map", "正在生成逐日路线图");
+
+    const polylines: Record<number, string> = {};
+
+    for (const day of base.itinerary) {
+      const locations = day.activities
+        .map((a) => a.coordinates)
+        .filter((c): c is string => typeof c === "string" && c.length > 0);
+
+      if (locations.length < 2) continue;
+
+      const polyline = await buildDayRoutePolyline(locations, fetchDrivingPolyline);
+
+      if (polyline) polylines[day.day] = polyline;
+    }
+
+    if (Object.keys(polylines).length > 0) {
+      base.dayRoutePolylines = polylines;
+    }
+  }
+
   // ---------- 8. 自校验 ----------
   logEnrichmentCounts(base, "返回前");
   base.warnings = [...warnings, ...auditPlan(base)];
