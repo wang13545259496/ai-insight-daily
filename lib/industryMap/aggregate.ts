@@ -21,8 +21,8 @@ import {
 /** 地图统计的时间窗口（天） */
 const MAP_WINDOW_DAYS = 30;
 
-/** 每层展示的代表性新闻条数 */
-const SAMPLES_PER_LAYER = 3;
+/** 每层展示的代表性新闻条数（首页默认显示 1 条，展开后显示到上限） */
+const SAMPLES_PER_LAYER = 12;
 
 /** 每层展示的公司/来源标签数 */
 const TAGS_PER_LAYER = 5;
@@ -36,7 +36,7 @@ export interface MapLayer {
   count: number;
   /** 占已归类新闻的比例（0-100，保留一位小数） */
   percent: number;
-  /** 代表性新闻 */
+  /** 代表新闻（按 aiScore 降序，最多 SAMPLES_PER_LAYER 条） */
   samples: Array<{
     id: number;
     title: string;
@@ -44,6 +44,13 @@ export interface MapLayer {
     aiScore: number;
     publishedAt: number;
   }>;
+  /**
+   * 该层全部新闻的 id 与标题。
+   *
+   * 与 samples 的区别：samples 有数量上限（用于展示），
+   * all 用于「展开查看全部」——只带 id 与标题，避免传输长列表的完整字段。
+   */
+  all: Array<{ id: number; title: string }>;
   /** 该层高频出现的来源（作为「谁在这一层活跃」的粗略指标） */
   topSources: string[];
 }
@@ -159,6 +166,7 @@ export async function buildIndustryMap(
       count: matched.length,
       percent: total > 0 ? Math.round((matched.length / total) * 1000) / 10 : 0,
       samples,
+      all: matched.map((c) => ({ id: c.id, title: c.title })),
       topSources,
     };
   });

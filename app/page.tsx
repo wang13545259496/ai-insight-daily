@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildIndustryMap } from "@/lib/industryMap/aggregate";
 import { getTier } from "@/lib/ranking/scoreBreakdown";
+import IndustryLayerList from "@/app/components/IndustryLayerList";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -670,46 +671,7 @@ export default async function HomePage() {
             <p className="text-sm text-gray-500">当前时间窗口内暂无产业动态。</p>
           ) : (
             <>
-              <div className="border border-gray-200 bg-white">
-                {industryMap.layers.map((layer) => (
-                  <div
-                    key={layer.name}
-                    className="border-b border-gray-100 px-5 py-4 last:border-b-0"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-24 shrink-0">
-                        <div className="text-sm font-bold">{layer.name}</div>
-                        <div className="text-xs text-gray-400 tabular-nums">
-                          {layer.count} 条 · {layer.percent}%
-                        </div>
-                      </div>
-
-                      <div className="h-1.5 min-w-0 flex-1 bg-gray-100">
-                        <div
-                          className="h-1.5 bg-black"
-                          style={{ width: `${Math.min(100, layer.percent)}%` }}
-                        />
-                      </div>
-
-                      <div className="hidden w-56 shrink-0 text-right text-xs text-gray-400 lg:block">
-                        {layer.description}
-                      </div>
-                    </div>
-
-                    {layer.samples.length > 0 && (
-                      <div className="mt-2 flex items-baseline gap-2 text-sm lg:pl-28">
-                        <span className="shrink-0 text-xs text-gray-400">代表</span>
-                        <a
-                          href={`/news/${layer.samples[0].id}`}
-                          className="line-clamp-1 min-w-0 hover:underline"
-                        >
-                          {layer.samples[0].title}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <IndustryLayerList layers={industryMap.layers} />
 
               {industryMap.capital.length > 0 && (
                 <div className="mt-6 border border-gray-200 bg-white">
