@@ -19,6 +19,8 @@ import { createLiveQuoteProvider } from "./liveQuoteProvider";
 import { compareIntercityOptions } from "./intercityOptions";
 import { fetchDestinationPois } from "./poi";
 import { buildDayRoutePolyline } from "./staticmap";
+import { fetchHotelDetail } from "./rollinggo";
+import type { RoomOption } from "./rollinggo";
 import { isRollingGoConfigured } from "./rollinggo";
 import { isVariflightConfigured } from "./variflight";
 import {
@@ -32,6 +34,7 @@ import { buildBudgetPlan } from "./budget";
 import { resolveTripCities } from "./cities";
 import { computeFingerprint } from "./data";
 import { isPeakSeason, resolveDuration, today } from "./date";
+import { addDays } from "./date";
 import {
   buildTemplateDraft,
   countGeneratedDays,
@@ -238,6 +241,38 @@ export async function generateTravelPlan(
     );
   }
 
+  // ---------- 3.5 酒店房型明细（二次查价） ----------
+  // 搜索结果只给「最低价」，而用户决定预订前通常想知道有哪些房型、
+  // 含不含早、能否免费取消。这些只有 getHotelDetail 提供。
+  // 失败不影响主流程：房型是加分项，成交价仍以 quotes.hotel 为准。
+  let hotelRooms: RoomOption[] = [];
+
+  const hotelId = quotes.sources?.hotelId;
+
+  if (hotelId && duration.nights > 0) {
+    onProgress("quotes", "正在查询酒店房型明细");
+
+    const checkIn = query.departDate;
+    // addDays 返回 string | null，解析失败时退化为「按晚数加天数」
+    const checkOut =
+      addDays(checkIn, duration.nights) ??
+      new Date(Date.parse(`${checkIn}T00:00:00`) + duration.nights * 86400000)
+        .toISOString()
+        .slice(0, 10);
+
+    const detail = await fetchHotelDetail(hotelId, checkIn, checkOut, query.party.adults, 6);
+
+    if (detail.error) {
+      warnings.push(`房型明细查询失败：${detail.error}`);
+    } else {
+      hotelRooms = detail.rooms;
+
+      if (hotelRooms.length > 0) {
+        warnings.push(`已获取该酒店的 ${hotelRooms.length} 个房型报价（含早餐与退改说明）`);
+      }
+    }
+  }
+
   // ---------- 4. 预算分配 ----------
   // 市内打车费要等地图阶段才知道，因此预算先按长途交通算，
   // 地图增强后再用真实打车费修正（见 applyMapEnrichment 之后的修正步骤）。
@@ -265,6 +300,7 @@ export async function generateTravelPlan(
     budget,
     intercityOptions: intercity.options,
     discovery: { sights: discovery.sights, restaurants: discovery.restaurants },
+    hotelRooms: hotelRooms.length > 0 ? hotelRooms : undefined,
     overview: "",
     itinerary: [],
     checklist: [],

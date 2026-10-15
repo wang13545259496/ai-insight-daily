@@ -164,6 +164,57 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
               <Fact label="合计" value={`${hotel.totalPrice} 元`} />
             </div>
 
+            {/*
+              预订链接做成按钮而非写进说明文本：URL 混在长段落里
+              既占篇幅又不可点击，用户得手动复制。
+              目前只有 RollingGo 提供可直接下单的链接。
+            */}
+            {hotel.bookingUrl && (
+              <a
+                href={hotel.bookingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-1 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-sky-200"
+              >
+                查看房型并预订
+                <span aria-hidden="true">↗</span>
+              </a>
+            )}
+
+            {/*
+              房型明细来自选定酒店的二次查价（getHotelDetail）。
+              只列前 4 个：列表越长越难比较，而最低价已在上方「每晚」体现。
+            */}
+            {plan.hotelRooms && plan.hotelRooms.length > 0 && (
+              <div className="mt-3 border-t border-gray-800 pt-3">
+                <p className="text-xs text-gray-500">
+                  可选房型 <span className="text-gray-600">（含早与退改说明，按价格排序）</span>
+                </p>
+
+                <ul className="mt-2 space-y-1.5">
+                  {plan.hotelRooms.slice(0, 4).map((room, index) => (
+                    <li
+                      key={`${room.roomName}-${index}`}
+                      className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs"
+                    >
+                      <span className="w-20 shrink-0 text-amber-400">¥{room.averagePrice}</span>
+                      <span className="min-w-0 flex-1 text-gray-300">{room.roomName}</span>
+                      <span className="shrink-0 text-gray-500">
+                        {[room.bedType, room.meal, room.size ? `${room.size}㎡` : ""]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                      {room.cancelable && (
+                        <span className="shrink-0 rounded bg-emerald-500/10 px-1 text-[10px] text-emerald-400">
+                          可免费取消
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <p className="mt-3 text-xs text-gray-500">{hotel.note}</p>
           </>
         ) : (

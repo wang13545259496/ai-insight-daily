@@ -9,6 +9,7 @@
 
 import type { IntercityOption } from "./intercityOptions";
 import type { PoiItem } from "./poi";
+import type { RoomOption } from "./rollinggo";
 
 /** 预算档位，决定分配权重与住宿档次 */
 export type TravelStyle = "budget" | "comfort" | "premium" | "luxury";
@@ -113,6 +114,14 @@ export interface HotelQuote extends QuoteMeta {
   rooms: number;
   /** 位置描述 */
   location?: string;
+  /**
+   * 预订链接。
+   *
+   * 为什么单独一个字段而不只放在 note 里：note 是给人读的来源说明，
+   * 把 URL 混在长文本里既占篇幅又不可点击。界面需要把它渲染成按钮。
+   * 目前只有 RollingGo 提供（其返回的 bookingUrl 可直接下单）。
+   */
+  bookingUrl?: string;
 }
 
 /** 报价聚合结果 */
@@ -121,6 +130,17 @@ export interface TravelQuotes {
   hotel: HotelQuote | null;
   /** 询价过程中出现的可读告警（不阻断主流程） */
   warnings: string[];
+  /**
+   * 报价来源的引用信息。
+   *
+   * 与 HotelQuote 的分工：HotelQuote 是面向用户的展示字段，
+   * 而这里放的是「供后续查询使用的标识」——例如 RollingGo 的酒店 ID，
+   * 拿到它才能二次查询房型明细。混进展示字段会让两者职责不清。
+   */
+  sources?: {
+    /** RollingGo 的酒店 ID */
+    hotelId?: number;
+  };
 }
 
 /** 经费科目 */
@@ -303,5 +323,14 @@ export interface TravelPlan {
    * 因此仅在取不到真实路线时才使用。
    */
   dayRoutePolylines?: Record<number, string>;
+  /**
+   * 酒店房型明细（选定酒店后的二次查价）。
+   *
+   * 与 quotes.hotel 的分工：hotel 是「这家酒店每晚多少钱」（成交口径，
+   * 取搜索结果的最低价），本字段回答「有哪些房型、含不含早、
+   * 能否免费取消」——用户决定预订前需要这些信息，
+   * 而搜索接口不提供，只有 getHotelDetail 提供。
+   */
+  hotelRooms?: RoomOption[];
 }
 

@@ -253,3 +253,165 @@ export async function searchHotels(
     clearTimeout(timer);
   }
 }
+
+// ============================================================
+// 房型明细（getHotelDetail）
+// ============================================================
+
+/** 一个房型报价（已归一化） */
+export interface RoomOption {
+  /** 房型名 */
+  roomName: string;
+  /** 每晚均价（元） */
+  averagePrice: number;
+  /** 床型描述，如「1 大床」 */
+  bedType: string;
+  /** 早餐说明，如「含早餐」 */
+  meal: string;
+  /** 退改政策说明 */
+  cancelPolicy: string;
+  /** 是否可免费取消 */
+  cancelable: boolean;
+  /** 房间面积（平方米，字符串因为接口会给「12–16」这类区间） */
+  size: string;
+  /** 最大入住人数 */
+  maxOccupancy: number | null;
+}
+
+/** 房型查询结果 */
+export interface HotelDetailResult {
+  rooms: RoomOption[];
+  error: string | null;
+}
+
+/** 把接口返回的房型归一化 */
+function normalizeRoom(raw: Record<string, unknown>): RoomOption | null {
+  const price = Number(raw.averagePrice);
+
+  if (!Number.isFinite(price) || price <= 0) return null;
+
+  const roomInfo =
+    raw.roomInfo && typeof raw.roomInfo === "object" && !Array.isArray(raw.roomInfo)
+      ? (raw.roomInfo as Record<string, unknown>)
+      : {};
+
+  const maxOcc = Number(roomInfo.maxOccupancy);
+
+  return {
+    roomName: String(raw.roomName || raw.ratePlanName || "未知房型"),
+    averagePrice: price,
+    bedType: String(raw.bedTypeDescription || ""),
+    meal: String(raw.mealTypeStr || ""),
+    cancelPolicy: String(raw.cancelPolicy || ""),
+    cancelable: raw.cancelable === true,
+    size: String(roomInfo.size || ""),
+    maxOccupancy: Number.isFinite(maxOcc) && maxOcc > 0 ? maxOcc : null,
+  };
+}
+
+/**
+ * 查询单个酒店的实时房型与价格明细。
+ *
+ * 用途：搜索结果只给「最低价」，用户决定预订前通常想知道
+ * 有哪些房型、是否含早、能否免费取消 —— 这些只有本接口提供。
+ *
+ * @param limit 最多返回几个房型（按价格升序），默认 6
+ */
+export async function fetchHotelDetail(
+  hotelId: number,
+  checkInDate: string,
+  checkOutDate: string,
+  adultCount = 2,
+  limit = 6,
+): Promise<HotelDetailResult> {
+  const key = process.env.ROLLINGGO_API_KEY?.trim();
+
+  if (!key) {
+    return { rooms: [], error: "未配置 ROLLINGGO_API_KEY" };
+  }
+
+  if (!Number.isFinite(hotelId) || hotelId <= 0) {
+    return { rooms: [], error: "酒店 ID 无效" };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(MCP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "getHotelDetail",
+          arguments: {
+            hotelId,
+            dateParam: { checkInDate, checkOutDate },
+            occupancyParam: { adultCount },
+          },
+        },
+        id: 1,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      return { rooms: [], error: `房型查询返回 HTTP ${res.status}` };
+    }
+
+    const parsed = parseMcpPayload(await res.text());
+
+    if (!parsed) {
+      return { rooms: [], error: "房型响应无法解析" };
+    }
+
+    const obj = parsed as Record<string, unknown>;
+
+    if (typeof obj.__error === "string") {
+      return { rooms: [], error: `房型接口报错：${obj.__error}` };
+    }
+
+    /**
+     * 实测返回结构（与参数 schema 的推测不同）：
+     *   { success, hotelId, bookingUrl, name, starRating, checkIn, checkOut,
+     *     roomRatePlans: [...], code, message }
+     * 房型数组在**顶层**的 roomRatePlans，不在 data.roomList 里。
+     * 这里仍保留 data 嵌套形态的兼容，以防服务端后续调整。
+     */
+    const data =
+      obj.data && typeof obj.data === "object" && !Array.isArray(obj.data)
+        ? (obj.data as Record<string, unknown>)
+        : {};
+
+    const list = Array.isArray(obj.roomRatePlans)
+      ? obj.roomRatePlans
+      : Array.isArray(data.roomRatePlans)
+        ? data.roomRatePlans
+        : Array.isArray(data.roomList)
+          ? data.roomList
+          : [];
+
+    const rooms = list
+      .map((r) => normalizeRoom(r as Record<string, unknown>))
+      .filter((r): r is RoomOption => r !== null)
+      .sort((a, b) => a.averagePrice - b.averagePrice)
+      .slice(0, Math.max(1, limit));
+
+    return { rooms, error: null };
+  } catch (e) {
+    const msg = String(e);
+
+    return {
+      rooms: [],
+      error: msg.includes("abort") ? "房型查询超时" : `房型查询异常：${msg.slice(0, 80)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}

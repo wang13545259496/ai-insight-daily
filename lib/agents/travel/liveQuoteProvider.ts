@@ -91,8 +91,9 @@ export function toHotelQuote(
     ...makeQuoteMeta(
       "live",
       "rollinggo",
-      `RollingGo 实时报价：${hotel.name}${starText}｜${ruleNote}｜` +
-        `房源与价格以预订页为准${hotel.bookingUrl ? `（${hotel.bookingUrl}）` : ""}`,
+      // URL 不再写进说明文本：界面会用 bookingUrl 字段渲染成按钮，
+      // 混在长文本里既占篇幅又不可点击
+      `RollingGo 实时报价：${hotel.name}${starText}｜${ruleNote}｜房源与价格以预订页为准`,
     ),
     name: hotel.name,
     rating: hotel.starRating > 0 ? hotel.starRating : null,
@@ -101,6 +102,7 @@ export function toHotelQuote(
     currency: "CNY",
     rooms,
     location: hotel.address || context.destinationCity,
+    bookingUrl: hotel.bookingUrl || undefined,
   };
 }
 
@@ -328,7 +330,8 @@ export function createLiveQuoteProvider(): QuoteProvider {
         `酒店为 RollingGo 实时报价（${result.hotels.length} 家候选中按「${rule.note}」筛选）`,
       );
 
-      return { flight, hotel, warnings };
+      // 带上酒店 ID，供上层二次查询房型明细
+      return { flight, hotel, warnings, sources: { hotelId: picked.hotelId } };
     },
   };
 }

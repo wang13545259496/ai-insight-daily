@@ -7,6 +7,7 @@ import TripPlannerForm from "@/components/travel/TripPlannerForm";
 
 import { isRollingGoConfigured } from "@/lib/agents/travel/rollinggo";
 import { isVariflightConfigured } from "@/lib/agents/travel/variflight";
+import { summaryOf } from "@/lib/agents/travel/summary";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
@@ -175,8 +176,13 @@ async function HistoryList() {
               {STYLE_LABELS[plan.style] ?? plan.style}
             </p>
 
+            {/*
+              摘要在服务端取完整首句（summaryOf），不再靠 line-clamp 硬裁。
+              中文没有词边界，按行裁切会落在句中，读起来像文本重复。
+              仍保留 line-clamp-2 作为兜底：首句本身极长时不会撑破卡片。
+            */}
             <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-gray-400">
-              {plan.overview}
+              {summaryOf(plan.overview)}
             </p>
           </Link>
         );
