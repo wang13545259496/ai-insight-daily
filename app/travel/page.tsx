@@ -4,8 +4,9 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 
 import TripPlannerForm from "@/components/travel/TripPlannerForm";
-import { isAmadeusConfigured, isAmadeusSandbox } from "@/lib/agents/travel/amadeus";
+
 import { isRollingGoConfigured } from "@/lib/agents/travel/rollinggo";
+import { isVariflightConfigured } from "@/lib/agents/travel/variflight";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
@@ -46,32 +47,31 @@ function quoteModeLabel(mode: string): { text: string; className: string } {
  * 如实告知用户当前报价与模型是否真的接通，避免把估算值当成实时价格。
  */
 function StatusBanner() {
+  const variflightReady = isVariflightConfigured();
   const rollingGoReady = isRollingGoConfigured();
-  const amadeusReady = isAmadeusConfigured();
-  const sandbox = amadeusReady && isAmadeusSandbox();
   const aiReady = isTravelAIEnabled();
   const mapReady = isAmapConfigured();
 
-  /** 是否取得了酒店实时报价能力 */
-  const hotelLive = rollingGoReady || amadeusReady;
+  /** 两类报价各自的实时能力 */
+  const flightLive = variflightReady;
+  const hotelLive = rollingGoReady;
+  const anyLive = flightLive || hotelLive;
 
   /** 组成一条条状态 */
   const items: Array<{ label: string; ok: boolean; note: string }> = [
+    {
+      label: "机票报价",
+      ok: flightLive,
+      note: variflightReady
+        ? "飞常准实时票价：覆盖国内全部航司与舱位，取当日最低价"
+        : "未配置 VARIFLIGHT_API_KEY，当前按航线距离估算",
+    },
     {
       label: "住宿报价",
       ok: hotelLive,
       note: rollingGoReady
         ? "RollingGo 实时报价：库存直连，结果可直接预订"
-        : amadeusReady
-          ? sandbox
-            ? "Amadeus 测试环境：接口已接通，价格为示例数据，非真实可订价"
-            : "Amadeus 生产环境：返回可用于报价的数据"
-          : "未配置 ROLLINGGO_API_KEY，当前按目的地档位估算",
-    },
-    {
-      label: "机票报价",
-      ok: false,
-      note: "按航线距离估算（RollingGo 的机票端点当前不可用），实际以航司或购票平台为准",
+        : "未配置 ROLLINGGO_API_KEY，当前按目的地档位估算",
     },
     {
       label: "行程编排模型",
@@ -111,14 +111,14 @@ function StatusBanner() {
         ))}
       </ul>
 
-      {!hotelLive && (
+      {!anyLive && (
         <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-500">
           在{" "}
           <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">.env.local</code> 中填入{" "}
+          <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">VARIFLIGHT_API_KEY</code>
+          （机票，申请：ai.variflight.com）与{" "}
           <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">ROLLINGGO_API_KEY</code>
-          （免费申请：travelportal-partner-center.dida.com）后重启服务，即自动切换为实时酒店报价。
-          <br />
-          机票暂无免费实时报价源：Amadeus 自助服务门户已于 2026-07 关闭，因此保持按航线距离估算。
+          （酒店，申请：travelportal-partner-center.dida.com）后重启服务，即自动切换为实时报价。
         </p>
       )}
     </div>
