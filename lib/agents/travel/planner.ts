@@ -15,6 +15,8 @@
 import { getTravelAIModel, isTravelAIEnabled, travelChat } from "./ai";
 
 import { isAmadeusConfigured, createAmadeusProvider, describeError } from "./amadeus";
+import { createRollingGoProvider } from "./rollinggoProvider";
+import { isRollingGoConfigured } from "./rollinggo";
 import { enrichItinerary, haversineMeters, isAmapConfigured, resolveCityPoint } from "./amap";
 import { buildBudgetPlan } from "./budget";
 import { resolveTripCities } from "./cities";
@@ -84,16 +86,33 @@ function noopProgress(): void {
 
 /**
  * 选择报价 Provider。
- * 配了 Amadeus 凭据就走真实询价，否则走估算兜底。
+ *
+ * 优先级：
+ *   1. RollingGo —— 自助接入的实时酒店报价（实测可用，无需企业资质）
+ *   2. Amadeus   —— 企业凭据配置后的实时报价（机票 + 酒店）
+ *   3. 纯估算    —— 无任何凭据时的兜底
+ *
+ * 说明：Amadeus 的自助服务门户已于 2026-07 关闭，其分支保留仅为
+ * 兼容既有企业凭据；新的实时报价能力由 RollingGo 提供。
  */
 function selectProvider(warnings: string[]): QuoteProvider {
+  if (isRollingGoConfigured()) {
+    return createRollingGoProvider();
+  }
+
   if (isAmadeusConfigured()) {
     return createAmadeusProvider();
   }
 
   warnings.push(
-    "未配置 AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET，当前为估算模式；配置后自动切换为实时询价",
+    "未配置 ROLLINGGO_API_KEY，当前为估算模式；配置后自动切换为实时酒店报价",
   );
+
+  if (!isAmadeusConfigured()) {
+    warnings.push(
+      "AMADEUS_CLIENT_ID / AMADEUS_CLIENT_SECRET 亦未配置（Amadeus 自助服务门户已于 2026-07 关闭）",
+    );
+  }
 
   return createEstimateProvider();
 }
