@@ -170,9 +170,25 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-/** 判断发布时间是否在有效期内 */
+/**
+ * 判断发布时间是否在有效期内。
+ *
+ * 「无发布日期的条目拒绝入库」——这条规则来自一次真实事故：
+ * OpenAI 官方博客的 RSS 返回 1293 条、时间跨度近 11 年，
+ * 而采集时未应用时间过滤，把 1249 条历史归档全部入库，
+ * 使该源在内容池中占比达 77%，并产生大量无谓的 AI 分析调用。
+ *
+ * 之所以原实现写 `if (!date) return true`，推测是为了「宁可多收不可漏收」，
+ * 但新闻的价值高度依赖时效性：无法确定发布时间的条目，
+ * 既无法判断是否属于「近期动态」，也无法参与热度与趋势计算，
+ * 收录只会污染内容池。因此改为拒绝。
+ *
+ * 若某个源确实不提供任何时间信息（实测：DeepSeek 文档动态的 sitemap
+ * 不含 <lastmod>，页面也无日期标记），应在采集层为该源补充时间提取逻辑，
+ * 而不是在此处放行无日期条目。
+ */
 function isRecent(date: Date | undefined): boolean {
-  if (!date) return true;
+  if (!date) return false;
 
   const limit = Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000;
 
