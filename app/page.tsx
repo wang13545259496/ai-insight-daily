@@ -14,6 +14,7 @@ function formatDate(date: Date | string | null | undefined) {
   }
 
   return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -48,21 +49,33 @@ function getTrendLabel(
   recent72h: number,
   latestNewsTitle?: string | null
 ) {
+  const title = latestNewsTitle || "";
+
   if (recent24h > 0) {
-    return latestNewsTitle
-      ? "过去24小时出现新动态，说明该事件仍在持续发展。"
-      : "过去24小时出现新动态，值得持续跟踪。";
+    if (/融资|投资|资本|收购|上市/.test(title)) {
+      return "资本市场出现新信号，关注商业化推进节奏。";
+    }
+
+    if (/发布|推出|上线|模型|产品/.test(title)) {
+      return "产品与技术方向出现新进展，产业落地持续推进。";
+    }
+
+    if (/OpenAI|Anthropic|Google|微软|Meta|百度|阿里|腾讯/.test(title)) {
+      return "头部企业持续释放动作，行业竞争格局正在变化。";
+    }
+
+    return "近期出现新增动态，产业影响正在持续扩散。";
   }
 
   if (recent72h >= 2) {
-    return "近72小时持续出现相关信息，热度仍在延续。";
+    return "多条信息持续汇聚，该方向热度仍在上升。";
   }
 
   if (recent72h === 1) {
-    return "持续关注该事件后续产业影响与市场变化。";
+    return "已有相关进展，持续观察后续产业影响。";
   }
 
-  return "暂无最新动态，持续作为产业趋势背景观察。";
+  return "暂无近期动态，作为长期产业趋势观察。";
 }
 
 function getScoreLabel(score: number) {
@@ -129,7 +142,7 @@ export default async function HomePage() {
   const now = new Date();
 
   const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const last72h = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const last72h = new Date(now.getTime() - 72 * 60 * 60 * 1000);
 
   const [
     allEvents,
@@ -144,16 +157,35 @@ export default async function HomePage() {
     prisma.newsEvent.findMany({
       where: {
         status: "active",
+        // 只取产业相关事件：eventType 由 lib/intelligence/refreshEvents.ts
+        // 依据 lib/ranking/industryScore.ts 的合格性判定写入
+        // （industry = 产业相关，filtered = 单篇弱信号或学术占比过高）。
+        // industryScore 下限与 industryScore 模块的 minScore 保持一致。
+        eventType: "industry",
+        industryScore: { gte: 60 },
       },
-      include: {
+      select: {
+        // 标量字段必须显式列出：使用 select 后，未列出的字段不会返回，
+        // 而下方 filter 与渲染逻辑会读取它们。
+        id: true,
+        title: true,
+        summary: true,
+        keywords: true,
+        category: true,
+        heatScore: true,
+        peakScore: true,
+        trendStatus: true,
+        trendSummary: true,
+        eventType: true,
+        qualityScore: true,
+        industryScore: true,
+        createdAt: true,
+        updatedAt: true,
         news: {
           where: {
             dataStatus: "active",
           },
-          orderBy: {
-            publishedAt: "desc",
-          },
-          take: 8,
+          // 时间与排序字段都要取：下方按 publishedAt ?? createdAt 判断新近度
           select: {
             id: true,
             title: true,
@@ -165,12 +197,21 @@ export default async function HomePage() {
             aiScore: true,
             category: true,
           },
+          orderBy: {
+            publishedAt: "desc",
+          },
+          take: 20,
         },
       },
-      orderBy: {
-        heatScore: "desc",
-      },
-      take: 10,
+      orderBy: [
+        {
+          industryScore: "desc",
+        },
+        {
+          heatScore: "desc",
+        },
+      ],
+      take: 200,
     }),
 
     prisma.news.findMany({
@@ -182,13 +223,15 @@ export default async function HomePage() {
         aiScore: {
           gte: 40,
         },
-        publishedAt: {
-          gte: last72h,
+      },
+      orderBy: [
+        {
+          publishedAt: "desc",
         },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+        {
+          createdAt: "desc",
+        },
+      ],
       take: 6,
     }),
 
@@ -268,11 +311,21 @@ export default async function HomePage() {
       const recent24h = recent24News.length;
       const recent72h = recentNews.length;
 
+      /*
+       * 今日重点排序分。
+       *
+       * industryScore 是主排序依据——它由 lib/ranking/industryScore.ts 计算，
+       * 含义是「热度 + 企业权重 + 商业价值 + 投资价值 − 学术噪声」，
+       * 已包含 heatScore 与质量维度，因此权重最高。
+       *
+       * 后面的 recent24h / recent72h 用于保证「今天有新动态」的事件优先，
+       * 避免老事件靠历史积累长期霸榜。
+       */
       const focusScore =
+        event.industryScore * 1.15 +
         recent24h * 100 +
         recent72h * 25 +
         recentAiScore * 0.8 +
-        event.qualityScore * 0.65 +
         Math.min(120, event.heatScore * 0.22);
 
       return {
@@ -286,7 +339,34 @@ export default async function HomePage() {
         focusScore,
       };
     })
-    .filter((event) => event.recent72h > 0 || event.heatScore >= 0)
+    .map((event) => {
+      console.log("BEFORE_FILTER", event.id, event.title, {
+        recent24h: event.recent24h,
+        recent72h: event.recent72h,
+        news: event.news.length,
+        heat: event.heatScore,
+        quality: event.qualityScore
+      });
+      return event;
+    })
+    .filter((event) =>
+      /*
+       * 产业相关性由 industryScore 模块判定，结果写在 eventType 上
+       * （industry = 产业相关，filtered = 单篇弱信号或学术占比过高）。
+       * 这样「arXiv 论文」「技术随笔」「品牌联名活动」在入库时就被标记，
+       * 不必在此处用标题正则逐个打补丁。
+       */
+      event.eventType === "industry" &&
+      (
+        // 产业相关性已由 eventType 保证（单篇事件必须有产业信号），
+        // 这里只需确认事件近期仍活跃
+        // 必须有近期动态：仅靠历史多篇新闻不构成「今日重点」，
+        // 否则多年前的论文会因累计篇数进入焦点位
+        event.recent24h > 0 ||
+        event.recent72h > 0 ||
+        (event.news.length >= 2 && event.heatScore >= 50)
+      )
+    )
     .map((event) => {
       console.log("FOCUS_EVENT", event.id, event.title, event.recent72h, event.heatScore);
       return event;
@@ -314,16 +394,14 @@ export default async function HomePage() {
 
       return b.qualityScore - a.qualityScore;
     })
-    .filter((event) =>
-      ![
-        "AI Agent",
-        "大模型竞争",
-        "AI产业应用",
-        "OpenAI生态",
-        "AI安全治理"
-      ].includes(event.title)
-    )
     .slice(0, 6);
+
+  console.log("FOCUS_COUNT", focusEvents.length);
+
+  console.log(
+    "FINAL_FOCUS",
+    focusEvents.map((item) => item.title)
+  );
 
   const focusIds = new Set(focusEvents.map((item) => item.id));
 
@@ -423,12 +501,14 @@ export default async function HomePage() {
                           safeText(event.summary, "暂无最新动态")}
                       </div>
 
-                      {latestNews && (
-                        <div className="mt-2 text-xs text-gray-500">
-                          {formatDate(latestNews.publishedAt ?? latestNews.createdAt)} ·{" "}
-                          {safeText(latestNews.source, "AI情报源")}
-                        </div>
-                      )}
+                      <div className="mt-2 text-xs text-gray-500">
+                        {latestNews
+                          ? `${formatDate(latestNews.publishedAt ?? latestNews.createdAt)} · ${safeText(
+                              latestNews.source,
+                              "AI情报源"
+                            )}`
+                          : "暂无最新时间"}
+                      </div>
                     </div>
 
                     <p className="mt-5 text-sm leading-6 text-gray-600">
@@ -511,11 +591,20 @@ export default async function HomePage() {
                     </div>
 
                     <h3 className="text-base font-bold leading-7 group-hover:underline">
-                      {item.title}
+                      {safeText(
+                        (item as any).titleCn,
+                        item.title
+                      )}
                     </h3>
 
                     <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-500">
-                      {safeText(item.summary, "暂无摘要")}
+                      {safeText(
+                        (item as any).summaryCn,
+                        safeText(item.summary, "暂无摘要")
+                      )
+                        .replace(/\s+/g, " ")
+                        .replace(/(.{20,})\1+/g, "$1")
+                        .trim()}
                     </p>
                   </div>
 

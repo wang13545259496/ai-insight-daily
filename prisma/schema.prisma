@@ -288,6 +288,10 @@ model NewsEvent {
 
   qualityScore Float @default(0)
 
+  // 产业价值分：首页今日重点排序依据
+  // 热度 + 企业权重 + 商业价值 + 投资价值 - 学术噪声
+  industryScore Float @default(0)
+
   createdAt DateTime @default(now())
 
   updatedAt DateTime @default(now())
