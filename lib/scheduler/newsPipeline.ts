@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { fetchRSSNewsDetailed } from "@/lib/rss";
 import { ingestNewsItems } from "@/lib/news/ingest";
 import { generateSummary } from "@/lib/ai-summary";
+import { mapWithConcurrency } from "@/lib/concurrency";
 import { buildEventClusters } from "@/lib/intelligence/eventCluster";
 import { linkNewsEvents } from "@/lib/intelligence/linkNewsEvent";
 import { refreshEventScores } from "@/lib/intelligence/refreshEvents";
@@ -26,6 +27,20 @@ import { saveDailyReport } from "@/lib/daily/saveDailyReport";
 
 /** 每次流水线最多做多少条 AI 分析，控制耗时与调用成本 */
 const ANALYSIS_BATCH_LIMIT = 30;
+
+/**
+ * AI 分析的并发度。
+ *
+ * 实测（2026-10）：并发 12 时单条耗时（2.0 秒）与串行（1.7 秒）基本持平，
+ * 未出现限流；DeepSeek 官方并发上限为 2500，余量极大。
+ * 取 6 是保守选择——30 条分析从约 51 秒降至约 10 秒，
+ * 同时避免与同日其它任务叠加时产生意外压力。
+ *
+ * 注意：并发度不是越高越好。大模型接口的吞吐受服务端调度影响，
+ * 过高并发在服务降级时会放大失败（2026-10 故障期实测：
+ * 请求挂起且无 HTTP 状态码，此时高并发会让整批一起卡住）。
+ */
+const ANALYSIS_CONCURRENCY = 6;
 
 export async function runNewsPipeline() {
   const startedAt = Date.now();
@@ -64,36 +79,70 @@ export async function runNewsPipeline() {
   let analyzed = 0;
   let analysisFailed = 0;
 
-  for (const item of pending) {
-    try {
-      const result = await generateSummary(item.title, item.content);
+  const analysisStartedAt = Date.now();
 
-      await prisma.news.update({
-        where: { id: item.id },
-        data: {
-          background: result.background,
-          summary: result.summary,
-          content: result.content,
-          insight: result.insight,
-          impact: result.impact,
-          businessOpportunity: result.businessOpportunity,
-          investmentView: result.investmentView,
-          aiScore: result.aiScore,
-          analysisStatus: "completed",
-        },
-      });
+  /*
+   * 受控并发执行。
+   *
+   * 原实现逐条 await，30 条需 51 秒以上（单条超时 30 秒、重试 2 次时
+   * 最坏 45 分钟）。改为并发后总耗时取决于最慢的一条，而非累加。
+   *
+   * mapWithConcurrency 保证：单条失败不中断整批（返回 null），
+   * 结果顺序与输入一致。
+   */
+  await mapWithConcurrency(
+    pending,
+    ANALYSIS_CONCURRENCY,
+    async (item) => {
+      try {
+        const result = await generateSummary(item.title, item.content);
 
-      analyzed++;
-    } catch (error) {
-      analysisFailed++;
+        await prisma.news.update({
+          where: { id: item.id },
+          data: {
+            background: result.background,
+            summary: result.summary,
+            content: result.content,
+            insight: result.insight,
+            impact: result.impact,
+            businessOpportunity: result.businessOpportunity,
+            investmentView: result.investmentView,
+            aiScore: result.aiScore,
+            analysisStatus: "completed",
+          },
+        });
 
-      console.error(`AI分析失败 #${item.id}:`, error);
+        analyzed++;
+      } catch (error) {
+        analysisFailed++;
 
-      await prisma.news.update({
-        where: { id: item.id },
-        data: { analysisStatus: "failed" },
-      });
-    }
+        console.error(`AI分析失败 #${item.id}:`, String(error).split("\n")[0]);
+
+        await prisma.news.update({
+          where: { id: item.id },
+          data: { analysisStatus: "failed" },
+        });
+      }
+
+      return item.id;
+    },
+    (done, total) => {
+      // 每 5 条报一次进度，便于在日志里观察并发效果
+      if (done % 5 === 0 || done === total) {
+        const elapsed = ((Date.now() - analysisStartedAt) / 1000).toFixed(1);
+
+        console.log(`[pipeline] AI 分析进度 ${done}/${total}（${elapsed}s）`);
+      }
+    },
+  );
+
+  if (pending.length > 0) {
+    const elapsed = ((Date.now() - analysisStartedAt) / 1000).toFixed(1);
+
+    console.log(
+      `[pipeline] AI 分析完成：${analyzed} 条成功、${analysisFailed} 条失败，` +
+        `用时 ${elapsed}s（并发 ${ANALYSIS_CONCURRENCY}）`,
+    );
   }
 
   // ---------- 4. 事件与报告 ----------
