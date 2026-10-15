@@ -548,8 +548,8 @@ export default async function HomePage() {
 
 {/* ---------- 产业链总览 ---------- */}
       <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
             <div>
               <h2 className="text-2xl font-black">产业链总览</h2>
               <p className="mt-2 text-sm text-gray-500">
@@ -569,7 +569,7 @@ export default async function HomePage() {
               <div className="space-y-6">
                 {industryMap.layers.map((layer) => (
                   <div key={layer.name} className="border border-gray-200">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-gray-50 px-5 py-3">
+                    <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
                       <div className="flex items-center gap-3">
                         <h3 className="text-base font-bold">{layer.name}</h3>
                         <span className="text-xs text-gray-500">{layer.description}</span>
@@ -597,7 +597,7 @@ export default async function HomePage() {
                               <span className="mt-1.5 h-1 w-1 shrink-0 bg-gray-400" />
                               <a
                                 href={`/news/${s.id}`}
-                                className="line-clamp-1 hover:underline"
+                                className="line-clamp-2 min-w-0 hover:underline sm:line-clamp-1"
                               >
                                 {s.title}
                               </a>
@@ -636,7 +636,7 @@ export default async function HomePage() {
                   </div>
                   <ul className="divide-y divide-gray-100">
                     {industryMap.capital.map((c) => (
-                      <li key={c.id} className="flex items-start gap-3 px-5 py-3 text-sm">
+                      <li key={c.id} className="flex flex-col gap-1 px-5 py-3 text-sm sm:flex-row sm:items-start sm:gap-3">
                         <span className="shrink-0 text-xs text-gray-400">
                           {new Date(c.publishedAt).toLocaleDateString("zh-CN")}
                         </span>
