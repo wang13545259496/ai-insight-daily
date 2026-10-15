@@ -12,6 +12,11 @@
  */
 
 import { getStylePreset } from "./budget";
+import {
+  describeFareBasis,
+  estimatePerAdultFare,
+  routeDistance,
+} from "./fareEstimate";
 import type {
   FlightLeg,
   FlightQuote,
@@ -145,29 +150,74 @@ export function estimateHotelQuote(context: QuoteContext): HotelQuote {
 }
 
 /**
- * 估算机票：拿不到报价时，按「档位人均价 × 人数」生成，
- * 并明确标注为估算，避免用户误以为是可下单价格。
+ * 估算机票：拿不到实时报价时，按**实际航线距离**推算。
+ *
+ * 原实现按档位固定基准价（budget 400 / comfort 700 / …），
+ * 与航线距离无关 —— 飞 300 公里的邻近城市与飞 3000 公里的乌鲁木齐
+ * 报价完全相同，用户能一眼看出不合理。
+ *
+ * 现改为调用 fareEstimate 模块：由起降城市的经纬度算大圆距离，
+ * 再按「基础费 + 每公里费率 × 距离衰减」计算，并计入舱位、
+ * 旺季、提前期系数（依据见 lib/agents/travel/fareEstimate.ts）。
+ *
+ * 回退：城市未收录坐标时（如用户直接填了三字码而该城市不在表中），
+ * 仍按原有的档位固定价估算，保证功能不因数据缺失而中断。
  */
 export function estimateFlightQuote(context: QuoteContext): FlightQuote {
   const preset = getStylePreset(context.style);
-  const seasonFactor = context.peakSeason ? 1.3 : 1;
 
-  // 把档位换算成人均往返机票基准（与 budget.ts 的兜底值保持同一量纲）
-  const perAdultBase: Record<TravelStyle, number> = {
-    budget: 400,
-    comfort: 700,
-    premium: 1300,
-    luxury: 2400,
+  // 舱位映射：档位越高，对应舱位越高（影响 fareEstimate 的舱位系数）
+  const cabinByStyle: Record<TravelStyle, "economy" | "premium" | "business"> = {
+    budget: "economy",
+    comfort: "economy",
+    premium: "premium",
+    luxury: "business",
   };
 
-  const pricePerAdult = Math.round(perAdultBase[context.style] * seasonFactor);
+  // 距出发天数：用于提前期系数（临期上浮、提前预订优惠）
+  const departMs = Date.parse(`${context.departDate}T00:00:00`);
+  const daysUntilDeparture = Number.isNaN(departMs)
+    ? null
+    : Math.max(0, Math.round((departMs - Date.now()) / 86400000));
+
+  const distanceKm = routeDistance(context.originCode, context.destinationCode);
+
+  let pricePerAdult: number;
+  let basisNote: string;
+
+  if (distanceKm !== null && distanceKm > 0) {
+    // 距离可得：按航线距离推算
+    const input = {
+      distanceKm,
+      roundTrip: true,
+      cabin: cabinByStyle[context.style],
+      peakSeason: context.peakSeason,
+      daysUntilDeparture,
+    };
+
+    pricePerAdult = estimatePerAdultFare(input);
+    basisNote = `未取得实时报价，按航线距离估算（${describeFareBasis(input, pricePerAdult)}）`;
+  } else {
+    // 距离不可得：回退到档位固定价
+    const seasonFactor = context.peakSeason ? 1.3 : 1;
+    const perAdultBase: Record<TravelStyle, number> = {
+      budget: 400,
+      comfort: 700,
+      premium: 1300,
+      luxury: 2400,
+    };
+
+    pricePerAdult = Math.round(perAdultBase[context.style] * seasonFactor);
+    basisNote = `未取得实时报价，且该航线距离未知，按${preset.label}往返人均 ${pricePerAdult} 元估算`;
+  }
+
   const total = totalFlightPrice(pricePerAdult, context.party);
 
   return {
     ...makeQuoteMeta(
       "estimate",
       "heuristic",
-      `未取得实时机票报价，按${preset.label}往返人均 ${pricePerAdult} 元估算，实际以航司或购票平台为准`,
+      `${basisNote}，实际以航司或购票平台为准`,
     ),
     pricePerAdult,
     totalPrice: total,
