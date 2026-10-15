@@ -134,24 +134,86 @@ const EVENT_TOPICS = [
 
 function detectTopic(text:string){
 
-  const value =
-  text.toLowerCase();
+  const t=text.toLowerCase();
 
+  const topicRules=[
 
-  for(const topic of EVENT_TOPICS){
+    {
+      name:"OpenAI生态",
+      keywords:[
+        "openai",
+        "chatgpt",
+        "gpt",
+        "sora",
+        "dall",
+        "operator",
+        "fine-tuning",
+        "human feedback",
+        "ai progress",
+        "third party assessments",
+        "unconference",
+        "magic studio",
+        "multilingual influence",
+        "influence activity"
+      ]
+    },
+
+    {
+      name:"AI Agent",
+      keywords:[
+        "agent",
+        "智能体",
+        "operator"
+      ]
+    },
+
+    {
+      name:"大模型竞争",
+      keywords:[
+        "gemini",
+        "claude",
+        "llama",
+        "frontier model",
+        "大模型",
+        "foundation model"
+      ]
+    },
+
+    {
+      name:"AI安全治理",
+      keywords:[
+        "safety",
+        "security",
+        "alignment",
+        "治理",
+        "assessment"
+      ]
+    },
+
+    {
+      name:"AI基础设施演进",
+      keywords:[
+        "chip",
+        "gpu",
+        "infrastructure",
+        "infra",
+        "cuda"
+      ]
+    }
+
+  ];
+
+  for(const rule of topicRules){
 
     if(
-      topic.keywords.some(
-        k=>value.includes(k.toLowerCase())
+      rule.keywords.some(
+        k=>t.includes(k.toLowerCase())
       )
     ){
-
-      return topic.name;
-
+      return rule.name;
     }
 
   }
-
 
   return null;
 
@@ -350,7 +412,7 @@ export async function buildEventClusters() {
       }
     }
 
-    if (bestEvent && bestScore >= 0.25) {
+    if (bestEvent && bestScore >= 0.45) {
       await prisma.news.update({
         where: { id: item.id },
         data: {
@@ -400,6 +462,88 @@ export async function buildEventClusters() {
 
       }
 
+
+      const companyTopic =
+        /openai|chatgpt|operator|dall·e|dalle|codex|gpt|anthropic|claude|gemini|deepmind|nvidia|microsoft|meta/i.test(item.title);
+
+
+      if(companyTopic){
+
+        const companyEvent =
+          await prisma.newsEvent.findFirst({
+            where:{
+              title:{
+                in:[
+                  "OpenAI生态",
+                  "大模型竞争"
+                ]
+              },
+              status:"active"
+            }
+          });
+
+
+        if(companyEvent){
+
+          await prisma.news.update({
+
+            where:{
+              id:item.id
+            },
+
+            data:{
+              eventId:companyEvent.id
+            }
+
+          });
+
+
+          linked++;
+
+          continue;
+
+        }
+
+      }
+
+    }
+
+
+    const standaloneSignals = [
+      "融资",
+      "收购",
+      "并购",
+      "估值",
+      "投资",
+      "战略合作",
+      "重大合作",
+      "openai",
+      "anthropic",
+      "google",
+      "deepmind",
+      "nvidia",
+      "microsoft",
+      "meta",
+      "deepseek",
+      "百度",
+      "腾讯",
+      "阿里",
+      "华为",
+      "模型",
+      "大模型",
+      "agent",
+      "智能体",
+      "芯片",
+      "gpu"
+    ];
+
+    const allowStandalone =
+      standaloneSignals.some(
+        k => item.title.toLowerCase().includes(k.toLowerCase())
+      );
+
+    if(!allowStandalone){
+      continue;
     }
 
 
@@ -415,8 +559,18 @@ export async function buildEventClusters() {
         category: item.category,
         summary:
           `围绕“${item.title}”形成的AI产业事件。系统将持续聚合相关来源并跟踪后续发展。`,
-        heatScore: 10,
-        peakScore: 10,
+        heatScore: Math.min(
+          100,
+          30 +
+          Math.min(40, (item.sourceCount ?? 1) * 10) +
+          (item.verified ? 20 : 0)
+        ),
+        peakScore: Math.min(
+          100,
+          30 +
+          Math.min(40, (item.sourceCount ?? 1) * 10) +
+          (item.verified ? 20 : 0)
+        ),
         trendStatus: "rising",
         trendSummary: "新事件进入监测阶段。",
         eventType: "news",
@@ -424,7 +578,7 @@ export async function buildEventClusters() {
           100,
           40 +
             (item.verified ? 20 : 0) +
-            Math.min(30, item.sourceCount * 10)
+            Math.min(30, (item.sourceCount ?? 1) * 10)
         ),
       },
     });
