@@ -6,12 +6,34 @@ import { getTier } from "@/lib/ranking/scoreBreakdown";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-function formatDate(date: Date | string | null | undefined) {
-  if (!date) return "暂无时间";
+/**
+ * 钳制未来时间。
+ *
+ * 实测问题：InfoQ 中文 的 RSS 把北京时间标注为 GMT，导致其条目的
+ * publishedAt 比真实时刻晚约 8 小时，首页因此显示「未来时间」。
+ * 例如显示 2026/10/15 19:05，而当前时刻才 15:44。
+ *
+ * 处理方式：时间晚于当前时刻时按当前时刻返回。
+ * 不修改数据库中的原始值——无法确定源站的真实偏移量，
+ * 入库时改写会永久污染数据，且此钳制对未来出现的其它源同样有效。
+ */
+function clampFuture(date: Date | string | null | undefined, now = Date.now()): Date | null {
+  if (!date) return null;
 
   const d = new Date(date);
 
-  if (Number.isNaN(d.getTime())) {
+  if (Number.isNaN(d.getTime())) return null;
+
+  return d.getTime() > now ? new Date(now) : d;
+}
+
+function formatDate(date: Date | string | null | undefined) {
+  if (!date) return "暂无时间";
+
+  // 钳制未来时间（InfoQ 把北京时间标成 GMT，见 clampFuture 说明）
+  const d = clampFuture(date);
+
+  if (!d) {
     return "暂无时间";
   }
 
@@ -29,11 +51,12 @@ function formatDate(date: Date | string | null | undefined) {
 function getTimeAgo(date: Date | string | null | undefined) {
   if (!date) return "";
 
-  const time = new Date(date).getTime();
+  // 钳制后再算差值，避免出现「未来 N 小时」这类无意义结果
+  const clamped = clampFuture(date);
 
-  if (Number.isNaN(time)) return "";
+  if (!clamped) return "";
 
-  const diff = Date.now() - time;
+  const diff = Date.now() - clamped.getTime();
 
   if (diff < 60 * 60 * 1000) {
     return "刚刚更新";
