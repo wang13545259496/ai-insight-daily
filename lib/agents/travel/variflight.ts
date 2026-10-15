@@ -595,3 +595,238 @@ export function lowestSeatPrice(
   // 最后才考虑无座
   return choose(train.seats);
 }
+
+// ============================================================
+// 空铁联运（Tripmatch）
+// ============================================================
+
+/** 联运方案中的一段（可能是航班或火车） */
+export interface TransferSegment {
+  /** 段类型：「航班」或「火车」 */
+  kind: string;
+  /** 班次号，如 MU5826 或 G2789 */
+  number: string;
+  /** 出发站/机场名 */
+  fromName: string;
+  /** 出发三字码 */
+  fromCode: string;
+  /** 到达站/机场名 */
+  toName: string;
+  /** 到达三字码 */
+  toCode: string;
+  /** 出发时间（毫秒时间戳） */
+  departAt: number | null;
+  /** 到达时间（毫秒时间戳） */
+  arriveAt: number | null;
+}
+
+/** 一个联运方案（由若干段组成） */
+export interface TransferItinerary {
+  segments: TransferSegment[];
+  /** 是否含火车段 */
+  hasTrain: boolean;
+  /** 是否含航班段 */
+  hasFlight: boolean;
+  /** 总历时（分钟），由首段出发到末段到达推算 */
+  durationMinutes: number;
+  /** 中转城市名（中间段的到达城市），无中转时为空数组 */
+  transferCities: string[];
+}
+
+/** 联运查询结果 */
+export interface TransferResult {
+  itineraries: TransferItinerary[];
+  error: string | null;
+}
+
+/** 把接口返回的一段归一化 */
+function normalizeSegment(raw: Record<string, unknown>): TransferSegment | null {
+  const number = String(raw.num || "").trim();
+
+  if (!number) return null;
+
+  const dep = Number(raw.deptime);
+  const arr = Number(raw.arrtime);
+
+  return {
+    kind: String(raw.type || "").trim(),
+    number,
+    fromName: String(raw.src || ""),
+    fromCode: String(raw.srcCode || ""),
+    toName: String(raw.dst || ""),
+    toCode: String(raw.dstCode || ""),
+    departAt: Number.isFinite(dep) && dep > 0 ? dep : null,
+    arriveAt: Number.isFinite(arr) && arr > 0 ? arr : null,
+  };
+}
+
+/**
+ * 查询空铁联运方案。
+ *
+ * 接口行为（实测确认）：
+ *   · 返回的是「方案列表」，每个方案由 1 至多段组成，
+ *     段类型可能是「航班」或「火车」—— 这是它区别于纯机票查询的关键
+ *   · **不返回价格**，只有班次与时刻，票价需另行估算
+ *   · 对已有多班直达车的线路价值有限（拉萨→上海只给直飞），
+ *     对缺少直达的小城市线路价值明显（盐城→北京给出 9 个火车方案，
+ *     含「盐城→徐州东 ＋ 徐州东→北京南」这类中转）
+ *
+ * 参数用 IATA 三字码（与火车票接口用中文城市名不同）。
+ */
+export async function fetchTransferItineraries(
+  depCity: string,
+  arrCity: string,
+  depDate: string,
+  limit = 12,
+): Promise<TransferResult> {
+  const key = process.env.VARIFLIGHT_API_KEY?.trim();
+
+  if (!key) {
+    return { itineraries: [], error: "未配置 VARIFLIGHT_API_KEY" };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(TRIPMATCH_MCP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        "X-API-Key": key,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "getFlightAndTrainTransferInfo",
+          arguments: {
+            depcity: depCity.toUpperCase(),
+            arrcity: arrCity.toUpperCase(),
+            depdate: depDate,
+            limit,
+            // summary 足以拿到班次与时刻；full 会显著放大响应体积
+            detail: "summary",
+          },
+        },
+        id: 1,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      return { itineraries: [], error: `联运查询返回 HTTP ${res.status}` };
+    }
+
+    const textBlock = extractTextBlock(await res.text());
+
+    if (!textBlock) {
+      return { itineraries: [], error: "联运响应无法解析" };
+    }
+
+    if (textBlock.startsWith("__ERROR__")) {
+      return { itineraries: [], error: `联运接口报错：${textBlock.slice(9)}` };
+    }
+
+    let data: unknown;
+
+    try {
+      data = JSON.parse(pythonDictToJson(textBlock));
+    } catch {
+      return { itineraries: [], error: "联运数据格式无法解析" };
+    }
+
+    const obj = data as Record<string, unknown>;
+
+    if (Number(obj.code) !== 200) {
+      return { itineraries: [], error: `联运返回失败：${String(obj.message || obj.code)}` };
+    }
+
+    // data 是「方案的数组」，每个方案是「段的数组」
+    const rawOptions = Array.isArray(obj.data) ? (obj.data as unknown[]) : [];
+
+    const itineraries: TransferItinerary[] = [];
+
+    for (const raw of rawOptions) {
+      if (!Array.isArray(raw) || raw.length === 0) continue;
+
+      const segments = raw
+        .map((s) => normalizeSegment(s as Record<string, unknown>))
+        .filter((s): s is TransferSegment => s !== null);
+
+      if (segments.length === 0) continue;
+
+      const first = segments[0];
+      const last = segments[segments.length - 1];
+
+      const durationMinutes =
+        first.departAt !== null && last.arriveAt !== null && last.arriveAt > first.departAt
+          ? Math.round((last.arriveAt - first.departAt) / 60000)
+          : 0;
+
+      // 中转城市：中间段的到达地名（去掉「市」「机场」后缀便于展示）
+      const transferCities = segments
+        .slice(0, -1)
+        .map((s) => s.toName.replace(/机场$/, "").replace(/市$/, ""));
+
+      itineraries.push({
+        segments,
+        hasTrain: segments.some((s) => s.kind.includes("火车")),
+        hasFlight: segments.some((s) => s.kind.includes("航班")),
+        durationMinutes,
+        transferCities,
+      });
+    }
+
+    return { itineraries, error: null };
+  } catch (e) {
+    const msg = String(e);
+
+    return {
+      itineraries: [],
+      error: msg.includes("abort") ? "联运查询超时" : `联运查询异常：${msg.slice(0, 80)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 从联运方案中挑选可用的中转方案。
+ *
+ * 优先级：
+ *   1. 含火车段的方案（「飞机接高铁」）—— 这是空铁联运特有的价值，
+ *      纯航班中转与机票查询重复
+ *   2. 没有火车段时，回退到纯航班中转方案 —— 在缺直达的线路上，
+ *      它们仍比「无方案」有用（实测西双版纳→上海只有航班中转）
+ *
+ * 同类中取段数最少的：段数越多换乘越麻烦。接口按相关度排序，
+ * 前几条常是直飞，因此需要自己筛。
+ */
+export function pickTransferItineraries(
+  itineraries: TransferItinerary[],
+  max = 2,
+): TransferItinerary[] {
+  const byPreference = (a: TransferItinerary, b: TransferItinerary) => {
+    if (a.segments.length !== b.segments.length) {
+      return a.segments.length - b.segments.length;
+    }
+
+    return a.durationMinutes - b.durationMinutes;
+  };
+
+  // 只考虑多段方案：单段的就是直达，与其它查询重复
+  const multiLeg = itineraries.filter((it) => it.segments.length >= 2);
+
+  const withTrain = multiLeg.filter((it) => it.hasTrain).sort(byPreference);
+
+  if (withTrain.length > 0) {
+    return withTrain.slice(0, max);
+  }
+
+  return multiLeg
+    .filter((it) => it.hasFlight)
+    .sort(byPreference)
+    .slice(0, max);
+}

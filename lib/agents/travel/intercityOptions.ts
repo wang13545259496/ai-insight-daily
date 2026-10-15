@@ -17,13 +17,20 @@
  */
 
 import { estimateDrivingCost, fetchDrivingRoute, isAmapConfigured } from "./amap";
+import { estimatePerAdultFare, routeDistance } from "./fareEstimate";
 import { isMajorRoute, trainPriorityScore } from "./stationRank";
 import type { TravelParty, TravelStyle } from "./types";
-import { fetchTrainTickets, isVariflightConfigured, lowestSeatPrice } from "./variflight";
+import {
+  fetchTrainTickets,
+  fetchTransferItineraries,
+  isVariflightConfigured,
+  lowestSeatPrice,
+  pickTransferItineraries,
+} from "./variflight";
 import type { TrainTicket } from "./variflight";
 
 /** 出行方式 */
-export type IntercityMode = "train" | "drive" | "flight";
+export type IntercityMode = "train" | "drive" | "flight" | "transfer";
 
 /** 一个跨城方案 */
 export interface IntercityOption {
@@ -326,6 +333,173 @@ export async function fetchDriveOption(
 }
 
 /**
+ * 查询空铁联运方案（仅在缺少直达车次时调用）。
+ *
+ * 价格处理：联运接口**不返回票价**，只有班次与时刻。
+ * 因此按各段的起降城市对查坐标、算大圆距离，再用 fareEstimate
+ * 的定价模型估算 —— 与「机票距离估算」同一口径，标注为 estimate。
+ *
+ * 为什么按「每段单程 × 2」算往返：接口给的是单程方案，
+ * 而其余方案的人均价也是单程口径，保持一致才能横向比较。
+ */
+export async function fetchTransferOptions(params: {
+  originCode: string;
+  destinationCode: string;
+  departDate: string;
+  passengerCount: number;
+}): Promise<{ options: IntercityOption[]; error: string | null }> {
+  if (!isVariflightConfigured()) {
+    return { options: [], error: "未配置 VARIFLIGHT_API_KEY" };
+  }
+
+  const result = await fetchTransferItineraries(
+    params.originCode,
+    params.destinationCode,
+    params.departDate,
+  );
+
+  if (result.error) {
+    return { options: [], error: result.error };
+  }
+
+  const picked = pickTransferItineraries(result.itineraries, 2);
+
+  if (picked.length === 0) {
+    return { options: [], error: null };
+  }
+
+  const options: IntercityOption[] = [];
+
+  for (const itinerary of picked) {
+    // 按段累加距离，再套用定价模型
+    let totalDistanceKm = 0;
+    let unknownLegs = 0;
+
+    for (const seg of itinerary.segments) {
+      const d =
+        routeDistance(seg.fromCode, seg.toCode) ??
+        // 火车站三字码不在航空坐标表里，退回用城市名匹配
+        routeDistance(codeOfCityName(seg.fromName), codeOfCityName(seg.toName));
+
+      if (d === null) {
+        unknownLegs++;
+      } else {
+        totalDistanceKm += d;
+      }
+    }
+
+    // 全部段都无法算距离时无法估价，跳过
+    if (totalDistanceKm === 0) continue;
+
+    const perAdult = estimatePerAdultFare({
+      distanceKm: totalDistanceKm,
+      roundTrip: true,
+      cabin: "economy",
+      peakSeason: false,
+      daysUntilDeparture: null,
+    });
+
+    const first = itinerary.segments[0];
+    const last = itinerary.segments[itinerary.segments.length - 1];
+
+    const fmtTime = (ms: number | null) =>
+      ms === null
+        ? ""
+        : new Date(ms).toLocaleTimeString("zh-CN", {
+            timeZone: "Asia/Shanghai",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+
+    const hours = Math.floor(itinerary.durationMinutes / 60);
+    const mins = itinerary.durationMinutes % 60;
+
+    const legText = itinerary.segments
+      .map((s) => `${s.kind === "火车" ? "火车" : "航班"} ${s.number} ${s.fromName}→${s.toName}`)
+      .join(" ＋ ");
+
+    // 标签区分「空铁联运」与「航班中转」：前者是飞机接高铁，
+    // 后者只是转机，用户看到的预期不同
+    const label = itinerary.hasTrain ? "空铁联运" : "航班中转";
+
+    options.push({
+      mode: "transfer",
+      label,
+      totalPrice: perAdult * params.passengerCount,
+      perPerson: perAdult,
+      durationMinutes: itinerary.durationMinutes,
+      reference: itinerary.segments.map((s) => s.number).join("+"),
+      departTime: fmtTime(first.departAt),
+      arriveTime: fmtTime(last.arriveAt),
+      breakdown:
+        `${legText}（${hours}小时${mins}分）｜需自行分段购票` +
+        `｜价格按航程 ${totalDistanceKm} 公里估算${unknownLegs > 0 ? `，其中 ${unknownLegs} 段距离未知` : ""}`,
+      confidence: "estimate",
+    });
+  }
+
+  return { options, error: null };
+}
+
+/**
+ * 把站名/机场名转成坐标表里可能存在的城市码。
+ *
+ * 联运返回的火车站三字码（如 SZQ 深圳、AFH 盐城）与航空城市码
+ * （SZX、YNZ）不同，因此优先用名称匹配：去掉「机场」「市」后缀后，
+ * 在城市的坐标表里按名称反查。
+ */
+function codeOfCityName(name: string): string {
+  const cleaned = String(name || "")
+    .replace(/机场$/, "")
+    .replace(/站$/, "")
+    .replace(/市$/, "")
+    .trim();
+
+  if (!cleaned) return "";
+
+  // 坐标表的键是 IATA 码，这里用一份小的中文名 → 码映射兜底
+  return CITY_NAME_TO_CODE[cleaned] ?? cleaned;
+}
+
+/** 常见城市中文名 → IATA 城市码（用于火车站名反查坐标） */
+const CITY_NAME_TO_CODE: Record<string, string> = {
+  北京: "BJS",
+  上海: "SHA",
+  广州: "CAN",
+  深圳: "SZX",
+  成都: "CTU",
+  重庆: "CKG",
+  杭州: "HGH",
+  南京: "NKG",
+  武汉: "WUH",
+  西安: "XIY",
+  长沙: "CSX",
+  昆明: "KMG",
+  厦门: "XMN",
+  青岛: "TAO",
+  天津: "TSN",
+  郑州: "CGO",
+  三亚: "SYX",
+  海口: "HAK",
+  拉萨: "LXA",
+  乌鲁木齐: "URC",
+  哈尔滨: "HRB",
+  沈阳: "SHE",
+  大连: "DLC",
+  济南: "TNA",
+  福州: "FOC",
+  南宁: "NNG",
+  贵阳: "KWE",
+  盐城: "YNZ",
+  徐州: "XUZ",
+  赣州: "KOW",
+  宿迁: "SQD",
+  济南西: "TNA",
+  徐州东: "XUZ",
+};
+
+/**
  * 对比火车与自驾方案。
  *
  * 两者并行查询；任一失败不影响另一个 —— 与项目既有的降级策略一致。
@@ -334,11 +508,29 @@ export async function fetchDriveOption(
 export async function compareIntercityOptions(params: {
   originCity: string;
   destinationCity: string;
+  /**
+   * 出发/到达的 IATA 三字码。
+   * 空铁联运接口用三字码（与火车票用中文城市名不同），
+   * 缺省时跳过联运查询。
+   */
+  originCode?: string;
+  destinationCode?: string;
   departDate: string;
   party: TravelParty;
   style: TravelStyle;
   /** 是否包含自驾（默认包含） */
   includeDrive?: boolean;
+  /**
+   * 机票报价。仅在「既无直达车次、又无联运方案」时使用 ——
+   * 此时若不给兜底，跨城区块会整块消失，而用户明明可以坐飞机。
+   */
+  flightQuote?: {
+    pricePerAdult: number;
+    totalPrice: number;
+    totalDurationMinutes: number;
+    confidence: "live" | "estimate";
+    outbound: Array<{ from: string; to: string; departAt: string; arriveAt: string; flightNumber: string }>;
+  } | null;
 }): Promise<IntercityComparison> {
   const passengerCount = Math.max(1, params.party.adults + params.party.children);
   const warnings: string[] = [];
@@ -371,6 +563,57 @@ export async function compareIntercityOptions(params: {
     warnings.push(`自驾方案不可用：${driveResult.error}`);
   } else if (driveResult.option) {
     options.push(driveResult.option);
+  }
+
+  // ---------- 缺直达时的兜底：空铁联运，其次机票 ----------
+  // 触发条件：火车查询失败或没有结果。理由有两条 ——
+  //   1. 联运接口按次计费，有直达车次时它提供不了额外价值
+  //      （实测拉萨→上海只返回直飞方案）
+  //   2. 它**不返回价格**，只能按距离估算，精度低于直达车次的实时票价
+  const lacksDirect = trainResult.options.length === 0;
+
+  if (lacksDirect && params.originCode && params.destinationCode && isVariflightConfigured()) {
+    const transfer = await fetchTransferOptions({
+      originCode: params.originCode,
+      destinationCode: params.destinationCode,
+      departDate: params.departDate,
+      passengerCount,
+    });
+
+    if (transfer.error) {
+      warnings.push(`空铁联运查询失败：${transfer.error}`);
+    } else if (transfer.options.length > 0) {
+      options.push(...transfer.options);
+      warnings.push(
+        `未查到直达车次，已补充 ${transfer.options.length} 个` +
+          `${transfer.options[0].label}方案（价格按航线距离估算，且需分段购票）`,
+      );
+    }
+  }
+
+  // ---------- 仍然没有任何方案时，用机票兜底 ----------
+  // 实测西双版纳→上海属于这种情况：无直达火车、自驾 2890 公里超出范围、
+  // 联运接口也只返回直飞（没有多段组合）。此时若无兜底，
+  // 跨城区块会整块消失 —— 而用户明明可以坐飞机。
+  if (options.length === 0 && params.flightQuote) {
+    const f = params.flightQuote;
+
+    options.push({
+      mode: "flight",
+      label: "航班",
+      totalPrice: f.totalPrice,
+      perPerson: f.pricePerAdult,
+      // 航班总历时含往返两段，单程取一半作为对比口径
+      durationMinutes: Math.round(f.totalDurationMinutes / 2),
+      reference: f.outbound[0]?.flightNumber ?? "航班",
+      departTime: (f.outbound[0]?.departAt ?? "").slice(11, 16),
+      arriveTime: (f.outbound[0]?.arriveAt ?? "").slice(11, 16),
+      breakdown:
+        `${f.outbound[0]?.from ?? ""} → ${f.outbound[0]?.to ?? ""} 直飞` +
+        `｜${f.confidence === "live" ? "实时票价" : "估算"}` +
+        `｜无直达车次，此为可用的替代方式`,
+      confidence: f.confidence,
+    });
   }
 
   options.sort((a, b) => {

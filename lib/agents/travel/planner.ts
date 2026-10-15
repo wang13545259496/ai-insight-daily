@@ -203,9 +203,14 @@ export async function generateTravelPlan(
   const intercity = await compareIntercityOptions({
     originCity: query.origin,
     destinationCity: query.destination,
+    // 三字码供空铁联运查询使用（该接口只接受 IATA 码）
+    originCode: origin.code,
+    destinationCode: destination.code,
     departDate: query.departDate,
     party: query.party,
     style: query.style,
+    // 兜底用：既无直达车次、又无联运方案时，用机票作为替代方式
+    flightQuote: quotes.flight,
   });
 
   warnings.push(...intercity.warnings);
