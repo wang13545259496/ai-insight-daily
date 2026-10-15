@@ -50,15 +50,19 @@ export interface PoiSearchResult {
 /**
  * 检索类别与关键字。
  *
- * 关键字的选择依据：
- *   · 景点用「风景名胜」而非泛词「景点」—— 实测「景点」会召回
- *     教堂、CBD公园、江堤步道这类弱相关的 POI，且只取到 1 条西湖；
- *     「风景名胜」更贴近用户的真实意图
- *   · 餐厅用「美食」，实测召回质量好，19/20 条带人均消费
+ * 关键字的选择依据（实测得出的结论）：
+ *   · 景点用**多个词**而非单一大类词 —— 单一关键词的召回有天花板，
+ *     同类 POI 全在一个词下竞争。实测只用「风景名胜」时杭州返回 20 条、
+ *     西湖只占 2 条（主景区 + 断桥残雪），而「苏堤春晓」「三潭印月」
+ *     这类真实存在的著名景点都没进候选
+ *   · 用「风景名胜」而非泛词「景点」—— 后者会召回教堂、
+ *     CBD公园、江堤步道这类弱相关 POI
+ *   · 餐厅用「美食」「特色小吃」「本地菜」，实测美食一词 20/20 条
+ *     带人均消费，质量好；补两个词是为了覆盖小吃与本地菜馆
  */
-const SIGHT_KEYWORD = "风景名胜";
-const SIGHT_TYPES = "110000"; // 风景名胜
-const RESTAURANT_KEYWORD = "美食";
+const SIGHT_KEYWORDS = ["风景名胜", "博物馆", "公园", "古镇"];
+const SIGHT_TYPES = "110000|140000"; // 风景名胜 | 科教文化服务（含博物馆、美术馆）
+const RESTAURANT_KEYWORDS = ["美食", "特色小吃", "本地菜"];
 const RESTAURANT_TYPES = "050000"; // 餐饮服务
 
 /**
@@ -70,8 +74,15 @@ const RESTAURANT_TYPES = "050000"; // 餐饮服务
  */
 export const SIGHT_COST_UNAVAILABLE = true;
 
-/** 每类取多少条候选 */
-export const POI_LIMIT = 20;
+/**
+ * 每类取多少条候选。
+ *
+ * 从 20 提到 40 的原因：实测 20 条覆盖不了目的地的全部著名景点 ——
+ * 杭州行程里模型用到的「苏堤春晓」「浙江省博物馆之江馆」都是真实地点，
+ * 但不在 20 条候选内，于是模型只能靠自己的知识补充。
+ * 提高上限后这类补充会减少。
+ */
+export const POI_LIMIT = 40;
 
 /** 单次请求超时（毫秒） */
 const REQUEST_TIMEOUT_MS = 12_000;
@@ -153,40 +164,104 @@ async function searchPoi(
 }
 
 /**
- * 按两个排序规则各取一次并合并去重。
+ * 判断 POI 是否属于旅游相关类型。
  *
- * 为什么取两次：`sortrule=weight`（综合权重）偏向交通便利的热门点，
- * `sortrule=rating`（评分）偏向口碑好的点，两者结果差异明显。
- * 只取一种会漏掉用户真正想去的地方 —— 实测杭州按权重排序时
- * 西湖只出现 1 条，且夹杂教堂、CBD公园等弱相关 POI。
+ * 为什么需要它：按评分排序会让无关 POI 排到前面 ——
+ * 实测杭州结果里「建兰中学」「浙江音乐学院」「某酒店」都是 5.0 分，
+ * 把 4.9 分的西湖挤到后面。中小学与高校的评分虚高是普遍现象。
+ *
+ * 高德的 type 字段形如「科教文化服务;学校;中学」或「风景名胜;公园广场」，
+ * 因此按分号分段做白名单匹配。
+ */
+const TOURISM_TYPE_HINTS = [
+  "风景名胜",
+  "公园广场",
+  "博物馆",
+  "美术馆",
+  "展览馆",
+  "图书馆",
+  "科技馆",
+  "文化宫",
+  "游乐场",
+  "动物园",
+  "植物园",
+  "寺庙道观",
+  "教堂",
+  "古镇",
+  "旅游景点",
+  "纪念馆",
+  "剧院",
+  "体育休闲",
+];
+
+function isTourismType(type: string): boolean {
+  const t = String(type || "");
+
+  // 学校、酒店、住宅等明确排除
+  if (/学校|中学|小学|大学|学院|幼儿园|培训/.test(t)) return false;
+  if (/住宿服务|宾馆|酒店|旅馆/.test(t)) return false;
+  if (/住宅|商务住宅|写字楼|公司企业/.test(t)) return false;
+  if (/餐饮服务/.test(t)) return false;
+
+  return TOURISM_TYPE_HINTS.some((h) => t.includes(h));
+}
+
+/**
+ * 多关键词 + 双排序检索并合并去重。
+ *
+ * 为什么需要这种组合：
+ *   · 单关键词的召回有天花板 —— 同类 POI 都在一个词下竞争，
+ *     实测杭州用「风景名胜」只取到 2 条西湖相关
+ *   · 单排序的偏好不同 —— `weight`（综合权重）偏向交通便利的热门点，
+ *     `rating`（评分）偏向口碑好的点，实测两者结果差异明显
+ *
+ * 排序规则：先按「是否旅游相关类型」分层，层内再按评分降序。
+ * 这样既能把无关 POI 压到后面，又能在真正的景点之间按口碑排序。
+ *
+ * 请求数 = 关键词数 × 2，高德的 place/text 免费，可接受。
  */
 async function searchPoiMerged(
-  keyword: string,
+  keywords: string[],
   city: string,
   types: string,
   limit: number,
 ): Promise<{ items: PoiItem[]; error: string | null }> {
-  const [byWeight, byRating] = await Promise.all([
-    searchPoi(keyword, city, types, limit, "weight"),
-    searchPoi(keyword, city, types, limit, "rating"),
+  const perQuery = Math.min(25, Math.max(1, limit));
+
+  const tasks = keywords.flatMap((kw) => [
+    searchPoi(kw, city, types, perQuery, "weight"),
+    searchPoi(kw, city, types, perQuery, "rating"),
   ]);
 
-  const error = byWeight.error ?? byRating.error;
+  const results = await Promise.all(tasks);
+
+  // 只要有一个关键词成功就算成功，避免单个词无结果就整块失败
+  const anySuccess = results.some((r) => r.error === null);
+  const error = anySuccess ? null : (results[0]?.error ?? null);
 
   const seen = new Set<string>();
-  const merged: PoiItem[] = [];
+  const unique: PoiItem[] = [];
 
-  // 评分优先：口碑好的点更值得推荐
-  for (const item of [...byRating.items, ...byWeight.items]) {
+  for (const item of results.flatMap((r) => r.items)) {
     const key = item.id || item.name;
 
     if (seen.has(key)) continue;
 
     seen.add(key);
-    merged.push(item);
+    unique.push(item);
   }
 
-  return { items: merged.slice(0, limit), error };
+  // 分层排序：旅游相关类型优先，层内按评分降序
+  unique.sort((a, b) => {
+    const ta = isTourismType(a.type) ? 1 : 0;
+    const tb = isTourismType(b.type) ? 1 : 0;
+
+    if (ta !== tb) return tb - ta;
+
+    return (b.rating ?? 0) - (a.rating ?? 0);
+  });
+
+  return { items: unique.slice(0, limit), error };
 }
 
 /**
@@ -205,8 +280,8 @@ export async function fetchDestinationPois(
   const warnings: string[] = [];
 
   const [sightResult, restaurantResult] = await Promise.all([
-    searchPoiMerged(SIGHT_KEYWORD, city, SIGHT_TYPES, limit),
-    searchPoiMerged(RESTAURANT_KEYWORD, city, RESTAURANT_TYPES, limit),
+    searchPoiMerged(SIGHT_KEYWORDS, city, SIGHT_TYPES, limit),
+    searchPoiMerged(RESTAURANT_KEYWORDS, city, RESTAURANT_TYPES, limit),
   ]);
 
   if (sightResult.error) warnings.push(`景点检索失败：${sightResult.error}`);

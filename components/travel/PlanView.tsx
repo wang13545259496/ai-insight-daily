@@ -9,6 +9,7 @@ import Link from "next/link";
 
 import { formatDuration } from "@/lib/agents/travel/providers";
 import { VEHICLE_DEFAULTS } from "@/lib/agents/travel/amap";
+import { buildDayMapUrl, MAP_HEIGHT, MAP_WIDTH } from "@/lib/agents/travel/staticmap";
 import type {
   BudgetCategory,
   ItineraryActivity,
@@ -277,6 +278,16 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
 
 /** 单日活动时间线 */
 function DayCard({ day, nights }: { day: TravelPlan["itinerary"][number]; nights: number }) {
+  /**
+   * 当日路线图。按游览顺序给有坐标的活动编号，
+   * 少于两个坐标时不画（一个点无法表达路线）。
+   */
+  const mapPoints = day.activities
+    .filter((a) => typeof a.coordinates === "string" && a.coordinates.length > 0)
+    .map((a, index) => ({ location: a.coordinates as string, index: index + 1 }));
+
+  const mapUrl = buildDayMapUrl(mapPoints);
+
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-950/40">
       <div className="flex flex-wrap items-center gap-3 border-b border-gray-800 px-4 py-3">
@@ -335,6 +346,25 @@ function DayCard({ day, nights }: { day: TravelPlan["itinerary"][number]; nights
         <span>住宿：{day.accommodation}</span>
         {nights === 0 && <span className="text-gray-600">（一日游）</span>}
       </div>
+
+      {mapUrl && (
+        <div className="border-t border-gray-800 px-4 py-3">
+          <p className="mb-2 text-xs text-gray-500">
+            当日路线 <span className="text-gray-600">（编号对应下方活动顺序）</span>
+          </p>
+          {/* 静态图由高德生成，逐日一张；用原生 img 而非 next/image，
+              因为图片来自外部域名且尺寸固定，无需优化管线 */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={mapUrl}
+            alt={`第 ${day.day} 天路线图`}
+            width={MAP_WIDTH}
+            height={MAP_HEIGHT}
+            loading="lazy"
+            className="w-full rounded border border-gray-800"
+          />
+        </div>
+      )}
 
       {day.commuteLegs && day.commuteLegs.length > 0 && (
         <div className="border-t border-gray-800 bg-gray-900/30 px-4 py-2">
