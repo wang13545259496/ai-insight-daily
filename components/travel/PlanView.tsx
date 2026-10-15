@@ -516,14 +516,31 @@ function PlanHeader({ plan, planId }: { plan: TravelPlan; planId?: number | null
         />
       </div>
 
-      {planId != null && (
-        <p className="mt-4 text-xs text-gray-500">
-          方案编号 <span className="font-mono text-gray-400">#{planId}</span> · 分享链接{" "}
-          <Link href={`/travel/${planId}`} className="text-sky-400 hover:text-sky-300">
-            /travel/{planId}
-          </Link>
-        </p>
-      )}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+        {planId != null && (
+          <p className="text-xs text-gray-500">
+            方案编号 <span className="font-mono text-gray-400">#{planId}</span> · 分享链接{" "}
+            <Link href={`/travel/${planId}`} className="text-sky-400 hover:text-sky-300">
+              /travel/{planId}
+            </Link>
+          </p>
+        )}
+
+        {/*
+          下载按钮用原生 <a> 而非 fetch + Blob：
+          文档由服务端生成，直接让浏览器走下载流程更简单，
+          且能正确处理 Content-Disposition 里的中文文件名。
+        */}
+        {planId != null && (
+          <a
+            href={`/api/travel/${planId}/download`}
+            className="inline-flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-sky-200"
+          >
+            <span aria-hidden="true">⬇</span>
+            下载行程单（Word）
+          </a>
+        )}
+      </div>
     </div>
   );
 }
