@@ -10,6 +10,7 @@ import {
 } from "@/lib/agents/travel/data";
 import { generateTravelPlan, type PlanProgressReporter } from "@/lib/agents/travel/planner";
 import { TravelValidationError } from "@/lib/agents/travel/validation";
+import { requireTravelAccess } from "@/lib/travel-access-server";
 
 /**
  * 旅行方案接口。
@@ -41,6 +42,14 @@ function ndjson(value: unknown): Uint8Array {
 }
 
 export async function POST(request: Request) {
+  /**
+   * 访问校验放在最前：生成行程会消耗模型与地图配额，
+   * 必须在做任何工作之前拦截，而不是等流式输出开始后才发现未授权。
+   */
+  const denied = await requireTravelAccess(request);
+
+  if (denied) return denied;
+
   let body: unknown;
 
   try {

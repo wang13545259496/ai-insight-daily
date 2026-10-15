@@ -8,6 +8,8 @@ import TripPlannerForm from "@/components/travel/TripPlannerForm";
 import { isRollingGoConfigured } from "@/lib/agents/travel/rollinggo";
 import { isVariflightConfigured } from "@/lib/agents/travel/variflight";
 import { summaryOf } from "@/lib/agents/travel/summary";
+import { isTravelProtected } from "@/lib/travel-access";
+import TravelLogoutButton from "@/components/travel/TravelLogoutButton";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
@@ -192,15 +194,22 @@ async function HistoryList() {
 }
 
 export default function TravelPage() {
+  // 只在启用口令保护时显示退出按钮：未启用时没有"登录态"可退
+  const protectedMode = isTravelProtected();
+
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <header>
-        <h1 className="text-3xl font-bold text-white">旅行规划</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
-          输入出发地、目的地、去返程日期、同行人数与总预算，自动生成一份完整方案：往返交通、住宿、
-          餐饮与门票的预算分配，以及逐日可执行的行程安排。金额由确定性算法计算，行程内容由
-          AI 编排，并标注每一笔价格的来源。
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white">旅行规划</h1>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
+            输入出发地、目的地、去返程日期、同行人数与总预算，自动生成一份完整方案：往返交通、住宿、
+            餐饮与门票的预算分配，以及逐日可执行的行程安排。金额由确定性算法计算，行程内容由
+            AI 编排，并标注每一笔价格的来源。
+          </p>
+        </div>
+
+        {protectedMode && <TravelLogoutButton />}
       </header>
 
       <div className="mt-8 space-y-8">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getPlanById } from "@/lib/agents/travel/data";
+import { requireTravelAccess } from "@/lib/travel-access-server";
 
 /**
  * 单份旅行方案接口。
@@ -11,7 +12,11 @@ export const runtime = "nodejs";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const denied = await requireTravelAccess(request);
+
+  if (denied) return denied;
+
   const { id } = await context.params;
   const numericId = Number(id);
 

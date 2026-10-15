@@ -5,6 +5,7 @@ import { buildPlanDocument, documentFileName } from "@/lib/agents/travel/export"
 import type { ExportOptions } from "@/lib/agents/travel/export";
 import { renderPlanDocx } from "@/lib/agents/travel/exportDocx";
 import { fetchDayMapImages } from "@/lib/agents/travel/exportImages";
+import { requireTravelAccess } from "@/lib/travel-access-server";
 
 /**
  * 旅行方案下载。
@@ -41,6 +42,10 @@ function parseOptions(url: URL): ExportOptions {
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const denied = await requireTravelAccess(request);
+
+  if (denied) return denied;
+
   const { id } = await context.params;
   const numericId = Number(id);
 
