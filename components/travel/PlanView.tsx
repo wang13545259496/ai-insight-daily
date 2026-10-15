@@ -229,20 +229,28 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
                 {dur(option.durationMinutes)}
               </span>
 
-              <span className="w-20 shrink-0 text-sm text-white">¥{option.perPerson}/人</span>
-
-              <span className="min-w-0 flex-1 text-xs text-gray-500">
-                {option.breakdown}
+              <span className="w-20 shrink-0 text-sm text-white">
+                ¥{option.perPerson}
+                <span className="text-xs text-gray-500">/人</span>
               </span>
 
-              <span className="flex shrink-0 gap-1">
+              {/*
+                徽标紧跟价格列，而不是推到最右。
+                原来放在最右端时，扫视价格列会完全看不到徽标 ——
+                用户需要横向跨过整段说明文字才能发现「最低价」。
+              */}
+              <span className="w-24 shrink-0">
                 {isCheapest && (
                   <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-400">
                     最低价
                   </span>
                 )}
-                {isFastest && !isCheapest && (
-                  <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-400">
+                {isFastest && (
+                  <span
+                    className={`rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-400 ${
+                      isCheapest ? "ml-1" : ""
+                    }`}
+                  >
                     最快
                   </span>
                 )}
@@ -252,6 +260,8 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
                   </span>
                 )}
               </span>
+
+              <span className="min-w-0 flex-1 text-xs text-gray-500">{option.breakdown}</span>
             </div>
           );
         })}

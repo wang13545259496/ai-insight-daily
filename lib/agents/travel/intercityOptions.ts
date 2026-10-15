@@ -178,33 +178,16 @@ export async function fetchTrainOptions(
     .sort((a, b) => b.score - a.score);
 
   /**
-   * 结果去重：同一对起降车站最多保留 2 趟。
+   * 结果选择：显式覆盖「综合最优 / 最便宜 / 最快」三种诉求。
    *
-   * 理由：枢纽站的车次得分接近，容易把 4 个名额全占满，
-   * 用户就看不到「便宜但稍远」「夜间卧铺」等替代选项。
-   * 限制每对车站的数量，可以保证推荐的多样性。
+   * 为什么不只用分数取前 N 名：实测「上海→北京」按分数取前四，
+   * 结果是四个耗时与价格都接近的高铁，界面上的「最低价」与「最快」
+   * 徽标落在同一行，用户真正会问的三个问题没有各自得到回答。
    */
-  const MAX_PER_STATION_PAIR = 2;
-  const pairCount = new Map<string, number>();
-  const picked: typeof scored = [];
-
-  for (const item of scored) {
-    const pair = `${item.train.fromStation}→${item.train.toStation}`;
-    const used = pairCount.get(pair) ?? 0;
-
-    if (used >= MAX_PER_STATION_PAIR) continue;
-
-    pairCount.set(pair, used + 1);
-    picked.push(item);
-
-    if (picked.length >= MAX_OPTIONS) break;
-  }
+  const picked = pickTrainOptions(scored);
 
   const options: IntercityOption[] = picked.map(({ train, seat }) => {
     const total = seat.price * passengerCount;
-    const hours = Math.floor(train.durationMinutes / 60);
-    const mins = train.durationMinutes % 60;
-    const durationText = hours > 0 ? `${hours}小时${mins}分` : `${mins}分`;
 
     const overnightNote =
       isSleeper(seat.seatName) && isOvernight(train) ? "｜夕发朝至，可省一晚住宿" : "";
@@ -228,15 +211,61 @@ export async function fetchTrainOptions(
       reference: train.trainNumber,
       departTime: train.departTime,
       arriveTime: train.arriveTime,
-      breakdown:
-        `${train.fromStation}→${train.toStation} ${train.departTime}-${train.arriveTime}` +
-        `（${durationText}）｜${seat.seatName} ¥${seat.price}/人 × ${passengerCount} 人` +
-        `${overnightNote}${majorNote}`,
+      // 时刻与历时已在独立列展示，此处不再重复，只保留列里没有的信息
+      breakdown: `${train.fromStation}→${train.toStation}｜${seat.seatName}${overnightNote}${majorNote}`,
       confidence: "live",
     };
   });
 
   return { options, error: null };
+}
+
+/** 同一对起降车站最多保留几趟 */
+const MAX_PER_STATION_PAIR = 2;
+
+/**
+ * 结果选择：显式覆盖「综合最优 / 最便宜 / 最快」三种诉求。
+ *
+ * 为什么不只用分数取前 N 名：实测「上海→北京」按分数取前四，
+ * 结果是四个耗时与价格都接近的高铁，界面上的「最低价」与「最快」
+ * 徽标落在同一行，用户真正会问的三个问题没有各自得到回答。
+ */
+function pickTrainOptions<
+  T extends { train: TrainTicket; seat: { seatName: string; price: number } },
+>(scored: T[]): T[] {
+  const picked: T[] = [];
+  const pairCount = new Map<string, number>();
+
+  const add = (item: T | undefined) => {
+    if (!item) return;
+    if (picked.some((p) => p.train.trainNumber === item.train.trainNumber)) return;
+
+    const pair = `${item.train.fromStation}→${item.train.toStation}`;
+    const used = pairCount.get(pair) ?? 0;
+
+    if (used >= MAX_PER_STATION_PAIR) return;
+
+    pairCount.set(pair, used + 1);
+    picked.push(item);
+  };
+
+  // 1. 综合最优（枢纽度 + 高铁 + 价格 + 耗时）
+  add(scored[0]);
+
+  // 2. 最便宜
+  add([...scored].sort((a, b) => a.seat.price - b.seat.price)[0]);
+
+  // 3. 最快
+  add([...scored].sort((a, b) => a.train.durationMinutes - b.train.durationMinutes)[0]);
+
+  // 4. 其余按分数补齐
+  for (const item of scored) {
+    if (picked.length >= MAX_OPTIONS) break;
+
+    add(item);
+  }
+
+  return picked.slice(0, MAX_OPTIONS);
 }
 
 /**
