@@ -175,10 +175,6 @@ export default async function HomePage() {
     latestNews,
     opportunities,
     investments,
-    newsCount,
-    eventCount,
-    opportunityCount,
-    investmentCount,
   ] = await Promise.all([
     prisma.newsEvent.findMany({
       where: {
@@ -274,22 +270,6 @@ export default async function HomePage() {
       },
       take: 6,
     }),
-
-    prisma.news.count({
-      where: {
-        dataStatus: "active",
-      },
-    }),
-
-    prisma.newsEvent.count({
-      where: {
-        status: "active",
-      },
-    }),
-
-    prisma.businessOpportunity.count(),
-
-    prisma.investment.count(),
   ]);
 
   /*
@@ -873,171 +853,10 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ============================================================
-          AI产业全景
-      ============================================================ */}
-      <section className="bg-gray-100">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-          <div className="mb-8">
-            <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-400">
-              AI INDUSTRY OVERVIEW
-            </div>
-
-            <h2 className="text-2xl font-black">AI产业全景</h2>
-
-            <p className="mt-2 text-sm text-gray-500">
-              数据规模、事件活跃度与当前首页情报强度。
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-bold tracking-wider text-gray-400">
-                AI资讯
-              </div>
-
-              <div className="mt-3 text-4xl font-black">
-                {newsCount.toLocaleString()}
-              </div>
-
-              <div className="mt-2 text-xs text-gray-400">
-                当前有效新闻
-              </div>
-            </div>
-
-            <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-bold tracking-wider text-gray-400">
-                AI事件
-              </div>
-
-              <div className="mt-3 text-4xl font-black">
-                {eventCount.toLocaleString()}
-              </div>
-
-              <div className="mt-2 text-xs text-gray-400">
-                当前活跃事件
-              </div>
-            </div>
-
-            <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-bold tracking-wider text-gray-400">
-                商业机会
-              </div>
-
-              <div className="mt-3 text-4xl font-black">
-                {opportunityCount.toLocaleString()}
-              </div>
-
-              <div className="mt-2 text-xs text-gray-400">
-                AI创业机会节点
-              </div>
-            </div>
-
-            <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-bold tracking-wider text-gray-400">
-                投资观察
-              </div>
-
-              <div className="mt-3 text-4xl font-black">
-                {investmentCount.toLocaleString()}
-              </div>
-
-              <div className="mt-2 text-xs text-gray-400">
-                AI投资项目数据
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-
-      {/* ============================================================
-          AI生态入口
-      ============================================================ */}
-      <section className="bg-black text-white">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-
-          <div className="mb-8">
-            <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-500">
-              AI ECOSYSTEM
-            </div>
-
-            <h2 className="text-2xl font-black">
-              AI产业生态入口
-            </h2>
-
-            <p className="mt-2 text-sm text-gray-400">
-              从基础模型、智能体应用、产业趋势到资本机会，构建AI产业观察体系。
-            </p>
-          </div>
-
-
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-
-
-            <Link
-              href="/models"
-              className="border border-gray-800 bg-gray-950 p-6 hover:border-white"
-            >
-              <div className="text-xl font-black">
-                🤖 模型生态
-              </div>
-
-              <p className="mt-3 text-sm text-gray-400">
-                OpenAI、Google、Anthropic及国产模型能力演进。
-              </p>
-            </Link>
 
 
 
-            <Link
-              href="/agent"
-              className="border border-gray-800 bg-gray-950 p-6 hover:border-white"
-            >
-              <div className="text-xl font-black">
-                🧠 Agent生态
-              </div>
 
-              <p className="mt-3 text-sm text-gray-400">
-                AI智能体、企业服务与下一代应用入口。
-              </p>
-            </Link>
-
-
-
-            <Link
-              href="/trend/predict"
-              className="border border-gray-800 bg-gray-950 p-6 hover:border-white"
-            >
-              <div className="text-xl font-black">
-                🔮 趋势预测
-              </div>
-
-              <p className="mt-3 text-sm text-gray-400">
-                基于产业数据判断未来AI方向。
-              </p>
-            </Link>
-
-
-
-            <Link
-              href="/investment"
-              className="border border-gray-800 bg-gray-950 p-6 hover:border-white"
-            >
-              <div className="text-xl font-black">
-                📈 投资观察
-              </div>
-
-              <p className="mt-3 text-sm text-gray-400">
-                AI创业公司、融资动态与商业模式。
-              </p>
-            </Link>
-
-
-          </div>
-
-        </div>
-      </section>
 
       </main>
   );
