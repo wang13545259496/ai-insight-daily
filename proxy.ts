@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { COOKIE_MAX_AGE, TRAVEL_COOKIE, cookieSecure, hasValidAccess, isTravelProtected, travelToken } from "./lib/travel-access";
+import { TRAVEL_COOKIE, accessCookieOptions, hasValidAccess, isTravelProtected } from "./lib/travel-access";
 
 /**
  * Next.js 16 起 middleware 更名为 proxy，文件名与导出名都必须使用 proxy。
@@ -79,6 +79,23 @@ export async function proxy(request: NextRequest) {
 
         return NextResponse.redirect(url);
       }
+
+      /**
+       * 已通过校验：顺带续期。
+       *
+       * 为什么需要显式续期：Cookie 的过期时间只在**设置它的那一刻**确定，
+       * 浏览器不会因为"一直在用"而自动延后。因此若不重设，
+       * 无论用得多频繁，满 30 天都会被要求重新输口令。
+       * 这里每次通过校验都重下一次，效果是「只要 30 天内有访问就不用重输」，
+       * 同时保留「闲置 30 天自动失效」的安全边界。
+       *
+       * 只重设值、不改属性，属性由 renewAccessCookie 统一处理。
+       */
+      const response = NextResponse.next();
+
+      renewAccessCookie(response, cookie as string);
+
+      return response;
     }
   }
 
@@ -89,7 +106,7 @@ export const config = {
   matcher: [
     // 接口层：调试接口的生产环境保护
     "/api/:path*",
-    // 旅行页面：访问口令。刻意不匹配 /api/travel —— 
+    // 旅行页面：访问口令。刻意不匹配 /api/travel ——
     // 那些接口在各自路由内校验，因为生成行程是流式响应，
     // 在 Proxy 里统一返回 401 反而更难处理。
     "/travel",
@@ -98,24 +115,13 @@ export const config = {
 };
 
 /**
- * 生成「已登录」的响应：写入访问 Cookie。
+ * 续期访问 Cookie。
  *
- * 与校验逻辑共用 lib/travel-access 里的常量，
- * 避免名称或有效期在读写两处不一致。
+ * 用同一个令牌值重下一次，仅刷新过期时间 ——
+ * 令牌由 HMAC 派生且与时间无关，因此无需重新计算或轮换。
+ *
+ * @param value 当前 Cookie 值（已通过校验，必定非空）
  */
-export async function attachAccessCookie(response: NextResponse): Promise<NextResponse> {
-  const token = await travelToken();
-
-  if (!token) return response;
-
-  response.cookies.set(TRAVEL_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    // 只认 COOKIE_SECURE，不看 NODE_ENV（后者在 pm2 启动时未必设置）
-    secure: cookieSecure(),
-    path: "/",
-    maxAge: COOKIE_MAX_AGE,
-  });
-
-  return response;
+function renewAccessCookie(response: NextResponse, value: string): void {
+  response.cookies.set(TRAVEL_COOKIE, value, accessCookieOptions());
 }

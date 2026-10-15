@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { COOKIE_MAX_AGE, TRAVEL_COOKIE, cookieSecure, isTravelProtected, travelToken, verifyPassword } from "@/lib/travel-access";
+import { TRAVEL_COOKIE, accessCookieOptions, clearCookieOptions, isTravelProtected, travelToken, verifyPassword } from "@/lib/travel-access";
 
 /**
  * 旅行模块口令的校验与注销。
@@ -60,14 +60,8 @@ export async function POST(request: Request) {
     next: safeNext(body.next),
   });
 
-  response.cookies.set(TRAVEL_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    // 只认 COOKIE_SECURE（站点已启用 Always Use HTTPS，应设为 1）
-    secure: cookieSecure(),
-    path: "/",
-    maxAge: COOKIE_MAX_AGE,
-  });
+  // 属性统一由 lib/travel-access 提供，保证登录、续期、退出三处一致
+  response.cookies.set(TRAVEL_COOKIE, token, accessCookieOptions());
 
   return response;
 }
@@ -75,13 +69,8 @@ export async function POST(request: Request) {
 export async function DELETE() {
   const response = NextResponse.json({ success: true, message: "已退出" });
 
-  // 用 maxAge: 0 清除，与写入时保持同样的 path，否则清不掉
-  response.cookies.set(TRAVEL_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 0,
-  });
+  // 用 maxAge: 0 清除；path 必须与写入时一致，否则浏览器不会清除
+  response.cookies.set(TRAVEL_COOKIE, "", clearCookieOptions());
 
   return response;
 }

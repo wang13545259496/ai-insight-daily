@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import {
+  ACCESS_COOKIE_OPTIONS,
   COOKIE_MAX_AGE,
   TRAVEL_COOKIE,
+  accessCookieOptions,
+  clearCookieOptions,
   cookieSecure,
   hasValidAccess,
   isTravelProtected,
@@ -225,5 +228,57 @@ describe("travel-access Cookie Secure 标志", () => {
     process.env.COOKIE_SECURE = " 1 ";
 
     assert.equal(cookieSecure(), true);
+  });
+});
+
+describe("travel-access Cookie 属性", () => {
+  const ORIGINAL_SECURE = process.env.COOKIE_SECURE;
+
+  afterEach(() => {
+    if (ORIGINAL_SECURE === undefined) delete process.env.COOKIE_SECURE;
+    else process.env.COOKIE_SECURE = ORIGINAL_SECURE;
+  });
+
+  it("★ 登录与续期用同一份属性（保证续期不会改掉原有行为）", () => {
+    process.env.COOKIE_SECURE = "1";
+
+    // 续期时用的就是 accessCookieOptions，与登录完全一致
+    assert.deepEqual(accessCookieOptions(), {
+      ...ACCESS_COOKIE_OPTIONS,
+      secure: true,
+      maxAge: COOKIE_MAX_AGE,
+    });
+  });
+
+  it("★ 清除用的属性除 maxAge 外与写入一致", () => {
+    process.env.COOKIE_SECURE = "1";
+
+    const write = accessCookieOptions();
+    const clear = clearCookieOptions();
+
+    assert.equal(clear.maxAge, 0, "清除时 maxAge 应为 0");
+    assert.equal(clear.path, write.path, "path 不一致会导致清不掉");
+    assert.equal(clear.httpOnly, write.httpOnly);
+    assert.equal(clear.sameSite, write.sameSite);
+    assert.equal(clear.secure, write.secure);
+  });
+
+  it("HttpOnly 与 SameSite=lax 恒定", () => {
+    assert.equal(ACCESS_COOKIE_OPTIONS.httpOnly, true, "HttpOnly 防 XSS 读取");
+    assert.equal(ACCESS_COOKIE_OPTIONS.sameSite, "lax");
+    assert.equal(ACCESS_COOKIE_OPTIONS.path, "/");
+  });
+
+  it("Secure 跟随 COOKIE_SECURE", () => {
+    process.env.COOKIE_SECURE = "1";
+    assert.equal(accessCookieOptions().secure, true);
+
+    delete process.env.COOKIE_SECURE;
+    assert.equal(accessCookieOptions().secure, false);
+  });
+
+  it("续期不会改变有效期长度（始终 30 天滚动）", () => {
+    assert.equal(accessCookieOptions().maxAge, COOKIE_MAX_AGE);
+    assert.equal(COOKIE_MAX_AGE, 60 * 60 * 24 * 30);
   });
 });

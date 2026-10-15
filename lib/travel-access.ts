@@ -66,6 +66,36 @@ export function cookieSecure(): boolean {
 }
 
 /**
+ * 访问 Cookie 的属性。
+ *
+ * 集中在这里而不是各处手写：登录、续期、退出三处必须一致 ——
+ * 尤其是 path，若退出时 path 与写入时不同，浏览器不会清除该 Cookie。
+ */
+export const ACCESS_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+};
+
+/** 生成「已登录」用的 Cookie 属性（含有效期与 Secure） */
+export function accessCookieOptions() {
+  return {
+    ...ACCESS_COOKIE_OPTIONS,
+    secure: cookieSecure(),
+    maxAge: COOKIE_MAX_AGE,
+  };
+}
+
+/** 生成「清除」用的 Cookie 属性（maxAge 为 0） */
+export function clearCookieOptions() {
+  return {
+    ...ACCESS_COOKIE_OPTIONS,
+    secure: cookieSecure(),
+    maxAge: 0,
+  };
+}
+
+/**
  * 由口令派生会话令牌。
  *
  * 用 HMAC 而不是直接哈希口令：HMAC 需要一个"密钥"，
