@@ -16,6 +16,7 @@ import { getTravelAIModel, isTravelAIEnabled, travelChat } from "./ai";
 
 import { describeError } from "./amadeus";
 import { createLiveQuoteProvider } from "./liveQuoteProvider";
+import { compareIntercityOptions } from "./intercityOptions";
 import { isRollingGoConfigured } from "./rollinggo";
 import { isVariflightConfigured } from "./variflight";
 import { enrichItinerary, haversineMeters, isAmapConfigured, resolveCityPoint } from "./amap";
@@ -194,6 +195,19 @@ export async function generateTravelPlan(
 
   const quotes = await fetchQuotesWithFallback(provider, quoteContext, warnings);
 
+  // 跨城方案对比：火车与自驾。失败不影响主流程，仅记录告警。
+  onProgress("quotes", "正在对比火车与自驾方案");
+
+  const intercity = await compareIntercityOptions({
+    originCity: query.origin,
+    destinationCity: query.destination,
+    departDate: query.departDate,
+    party: query.party,
+    style: query.style,
+  });
+
+  warnings.push(...intercity.warnings);
+
   // ---------- 4. 预算分配 ----------
   // 市内打车费要等地图阶段才知道，因此预算先按长途交通算，
   // 地图增强后再用真实打车费修正（见 applyMapEnrichment 之后的修正步骤）。
@@ -217,6 +231,7 @@ export async function generateTravelPlan(
     duration,
     quotes,
     budget,
+    intercityOptions: intercity.options,
     overview: "",
     itinerary: [],
     checklist: [],

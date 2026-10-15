@@ -7,6 +7,8 @@
  *   避免把模型编的价格当真实价格展示给用户
  */
 
+import type { IntercityOption } from "./intercityOptions";
+
 /** 预算档位，决定分配权重与住宿档次 */
 export type TravelStyle = "budget" | "comfort" | "premium" | "luxury";
 
@@ -267,4 +269,13 @@ export interface TravelPlan {
   mapEnriched?: boolean;
   /** 市内打车费合计（元），由高德驾车方案估算，已计入预算的交通科目 */
   mapTaxiCost?: number;
+  /**
+   * 跨城出行方案对比（火车 / 自驾）。
+   *
+   * 与 quotes.flight 的关系：flight 是「这一趟机票多少钱」，
+   * 而本字段回答「有哪几种走法、各自多少钱多少时间」——
+   * 国内中长途的实际主力是高铁，此前完全没有覆盖。
+   */
+  intercityOptions?: IntercityOption[];
 }
+

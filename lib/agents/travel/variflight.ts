@@ -366,3 +366,232 @@ export function lowestPrice(
 
   return best;
 }
+
+// ============================================================
+// 火车票（Tripmatch MCP）
+// ============================================================
+
+/** Tripmatch 端点：提供火车票与空铁联运 */
+const TRIPMATCH_MCP_URL = "https://ai.variflight.com/servers/tripmatch/mcp";
+
+/** 一个座席报价 */
+export interface TrainSeat {
+  /** 座席名，如「二等座」 */
+  seatName: string;
+  /** 票价（元） */
+  price: number;
+  /** 余票数；接口用 -1 或缺失表示未知 */
+  ticketsLeft: number | null;
+}
+
+/** 一趟列车（已归一化） */
+export interface TrainTicket {
+  /** 车次，如 G532 */
+  trainNumber: string;
+  /** 出发站名 */
+  fromStation: string;
+  /** 到达站名 */
+  toStation: string;
+  /** 发车时刻 HH:mm */
+  departTime: string;
+  /** 到达时刻 HH:mm */
+  arriveTime: string;
+  /** 历时（分钟） */
+  durationMinutes: number;
+  /** 各座席报价 */
+  seats: TrainSeat[];
+}
+
+/** 火车票查询结果 */
+export interface TrainTicketResult {
+  trains: TrainTicket[];
+  error: string | null;
+}
+
+/** 把接口返回的单趟列车归一化 */
+function normalizeTrain(raw: Record<string, unknown>): TrainTicket | null {
+  const trainNumber = String(raw.trainNumber || "").trim();
+
+  if (!trainNumber) return null;
+
+  const seatsRaw = Array.isArray(raw.seatLists) ? raw.seatLists : [];
+
+  const seats: TrainSeat[] = seatsRaw
+    .map((s) => {
+      const seat = s as Record<string, unknown>;
+      const price = Number(seat.seatPrice);
+
+      if (!Number.isFinite(price) || price <= 0) return null;
+
+      const left = Number(seat.ticketLeft);
+
+      return {
+        seatName: String(seat.seatName || ""),
+        price,
+        ticketsLeft: Number.isFinite(left) ? left : null,
+      };
+    })
+    .filter((s): s is TrainSeat => s !== null);
+
+  const useTime = Number(raw.useTime);
+
+  return {
+    trainNumber,
+    fromStation: String(raw.fromStation || ""),
+    toStation: String(raw.toStation || ""),
+    departTime: String(raw.fromTime || ""),
+    arriveTime: String(raw.toTime || ""),
+    durationMinutes: Number.isFinite(useTime) && useTime > 0 ? useTime : 0,
+    seats,
+  };
+}
+
+/**
+ * 按出发/到达城市与日期查询火车票。
+ *
+ * 注意：参数用的是**中文城市名**（如「上海」「北京」），
+ * 与机票接口用 IATA 三字码不同 —— 实测确认。
+ *
+ * 失败返回 { trains: [], error }，不抛异常。
+ */
+export async function fetchTrainTickets(
+  fromCity: string,
+  toCity: string,
+  date: string,
+): Promise<TrainTicketResult> {
+  const key = process.env.VARIFLIGHT_API_KEY?.trim();
+
+  if (!key) {
+    return { trains: [], error: "未配置 VARIFLIGHT_API_KEY" };
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(TRIPMATCH_MCP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        "X-API-Key": key,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "tools/call",
+        params: {
+          name: "searchTrainTickets",
+          arguments: {
+            from_city: fromCity,
+            to_city: toCity,
+            date,
+          },
+        },
+        id: 1,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      return { trains: [], error: `飞常准火车票返回 HTTP ${res.status}` };
+    }
+
+    const textBlock = extractTextBlock(await res.text());
+
+    if (!textBlock) {
+      return { trains: [], error: "飞常准火车票响应无法解析" };
+    }
+
+    if (textBlock.startsWith("__ERROR__")) {
+      return { trains: [], error: `飞常准火车票接口报错：${textBlock.slice(9)}` };
+    }
+
+    let data: unknown;
+
+    try {
+      data = JSON.parse(pythonDictToJson(textBlock));
+    } catch {
+      return { trains: [], error: "飞常准火车票数据格式无法解析" };
+    }
+
+    const obj = data as Record<string, unknown>;
+
+    if (Number(obj.code) !== 200) {
+      return { trains: [], error: `飞常准火车票返回失败：${String(obj.message || obj.code)}` };
+    }
+
+    // 实测结构是嵌套的：{ code, message, data: { code, msg, data: [...] } }
+    const inner = obj.data as Record<string, unknown> | undefined;
+    const list = Array.isArray(inner?.data)
+      ? (inner.data as unknown[])
+      : Array.isArray(obj.data)
+        ? (obj.data as unknown[])
+        : [];
+
+    const trains = list
+      .map((item) => normalizeTrain(item as Record<string, unknown>))
+      .filter((t): t is TrainTicket => t !== null);
+
+    return { trains, error: null };
+  } catch (e) {
+    const msg = String(e);
+
+    return {
+      trains: [],
+      error: msg.includes("abort")
+        ? "飞常准火车票请求超时"
+        : `飞常准火车票请求异常：${msg.slice(0, 80)}`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 不推荐的座席：无座在长途上不可接受，只在无其它选择时才用 */
+const DISCOURAGED_SEATS = ["无座"];
+
+/**
+ * 取某趟列车指定座席的最低票价。
+ *
+ * 座席偏好按档位映射（见 intercityOptions 的说明）：
+ * 经济型看二等座，品质型看一等座，奢华看商务座。
+ *
+ * 「无座」被排除在正常选择之外 —— 实测它常常是最低价，
+ * 于是慢车 + 无座会被排到高铁前面，这对用户毫无价值。
+ * 只有当该车次除无座外无票时，才退回无座。
+ */
+export function lowestSeatPrice(
+  train: TrainTicket,
+  preferredSeats: string[],
+): { seatName: string; price: number } | null {
+  const choose = (candidates: TrainSeat[]): { seatName: string; price: number } | null => {
+    let best: TrainSeat | null = null;
+
+    for (const seat of candidates) {
+      if (!Number.isFinite(seat.price) || seat.price <= 0) continue;
+
+      if (!best || seat.price < best.price) best = seat;
+    }
+
+    return best ? { seatName: best.seatName, price: best.price } : null;
+  };
+
+  const seated = train.seats.filter(
+    (s) => !DISCOURAGED_SEATS.some((d) => s.seatName.includes(d)),
+  );
+
+  // 按偏好顺序命中
+  for (const pref of preferredSeats) {
+    const hit = choose(seated.filter((s) => s.seatName.includes(pref)));
+
+    if (hit) return hit;
+  }
+
+  // 偏好都没命中时，在非无座里取最低价
+  const anySeated = choose(seated);
+
+  if (anySeated) return anySeated;
+
+  // 最后才考虑无座
+  return choose(train.seats);
+}

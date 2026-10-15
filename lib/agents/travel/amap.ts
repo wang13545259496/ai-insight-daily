@@ -555,6 +555,112 @@ export function estimateTaxiFare(distanceMeters: number): number {
   return Math.round(TAXI_BASE_FARE + Math.max(0, km - TAXI_BASE_KM) * TAXI_PER_KM);
 }
 
+/**
+ * 驾车路线详情（供跨城自驾方案使用）。
+ *
+ * 与 queryDriving 的区别：本函数返回接口原样的距离、时长与**过路费**，
+ * 不做打车费换算 —— 跨城自驾的费用构成是油费 + 过路费，不是打车费。
+ * 实测高德 v3 驾车接口会返回 tolls（过路费，元）字段。
+ */
+export interface DrivingRoute {
+  /** 导航距离（米） */
+  distanceMeters: number;
+  /** 预计耗时（分钟，含实时路况） */
+  durationMinutes: number;
+  /** 过路费（元）；接口未返回时为 null */
+  tolls: number | null;
+  /** 途经道路摘要，如「京沪高速 → 沪蓉高速」 */
+  summary: string;
+}
+
+export async function fetchDrivingRoute(
+  origin: string,
+  destination: string,
+): Promise<DrivingRoute | null> {
+  // 驾车接口只接受 "lng,lat"，直接传城市名会返回 INVALID_PARAMS（实测）。
+  // 因此先把城市名解析为坐标；解析失败则按原样传（调用方可能已给坐标）。
+  const [fromPoint, toPoint] = await Promise.all([
+    resolveCityPoint(origin),
+    resolveCityPoint(destination),
+  ]);
+
+  const from = fromPoint?.location || origin;
+  const to = toPoint?.location || destination;
+
+  const payload = await amapGet<
+    AmapResponse & {
+      route?: {
+        paths?: Array<{
+          distance?: string;
+          duration?: string;
+          tolls?: string;
+          steps?: Array<{ road?: string }>;
+        }>;
+      };
+    }
+  >("/v3/direction/driving", { origin: from, destination: to, strategy: "0" });
+
+  const path = payload.route?.paths?.[0];
+
+  if (!path) return null;
+
+  const distance = Number(path.distance ?? 0);
+
+  if (!Number.isFinite(distance) || distance <= 0) return null;
+
+  const duration = Math.round(Number(path.duration ?? 0) / 60);
+  const tollsRaw = Number(path.tolls);
+
+  const tolls = Number.isFinite(tollsRaw) && tollsRaw > 0 ? tollsRaw : null;
+
+  // 途经道路：取前两条有名字的路拼成摘要
+  const roads = (path.steps || [])
+    .map((s) => String(s.road || "").trim())
+    .filter((r) => r.length > 1 && r !== "[]");
+
+  return {
+    distanceMeters: distance,
+    durationMinutes: duration > 0 ? duration : Math.max(1, Math.round(distance / 700)),
+    tolls,
+    summary: roads.length > 0 ? roads.slice(0, 2).join(" → ") : "",
+  };
+}
+
+/**
+ * 自驾成本估算（油费 + 过路费）。
+ *
+ * 为什么不取接口字段：高德只返回过路费，不返回油费 ——
+ * 油费取决于车型、油价与实际油耗，属于用户侧参数。
+ * 因此用可解释的经验值计算：
+ *
+ *   油费 = 距离(km) / 100 × 油耗(L/100km) × 油价(元/L)
+ *
+ * 默认油耗 7.5 L/100km、油价 7.5 元/L（92 号汽油常见水平），
+ * 对应约 0.56 元/公里，与国内家用车实际水平相符。
+ */
+export const VEHICLE_DEFAULTS = {
+  /** 百公里油耗（升） */
+  fuelPer100Km: 7.5,
+  /** 油价（元/升） */
+  fuelPricePerLiter: 7.5,
+};
+
+export function estimateDrivingCost(
+  distanceMeters: number,
+  tolls: number | null,
+  options: { fuelPer100Km?: number; fuelPricePerLiter?: number } = {},
+): { fuel: number; tolls: number; total: number } {
+  const fuelPer100Km = options.fuelPer100Km ?? VEHICLE_DEFAULTS.fuelPer100Km;
+  const fuelPricePerLiter = options.fuelPricePerLiter ?? VEHICLE_DEFAULTS.fuelPricePerLiter;
+
+  const km = Math.max(0, distanceMeters) / 1000;
+
+  const fuel = Math.round((km / 100) * fuelPer100Km * fuelPricePerLiter);
+  const toll = Math.max(0, Math.round(tolls ?? 0));
+
+  return { fuel, tolls: toll, total: fuel + toll };
+}
+
 /** 只查驾车方案（打车参考） */
 async function queryDriving(from: string, to: string): Promise<ModeResult | null> {
   const payload = await amapGet<

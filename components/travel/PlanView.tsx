@@ -8,6 +8,7 @@
 import Link from "next/link";
 
 import { formatDuration } from "@/lib/agents/travel/providers";
+import { VEHICLE_DEFAULTS } from "@/lib/agents/travel/amap";
 import type {
   BudgetCategory,
   ItineraryActivity,
@@ -169,6 +170,98 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 跨城方式对比（火车 / 自驾）。
+ *
+ * 排序由后端给出（按人均价升序），前端不再重排 ——
+ * 保持「哪里算的就在哪里定序」，避免两端规则不一致。
+ */
+function IntercitySection({ plan }: { plan: TravelPlan }) {
+  const options = plan.intercityOptions;
+
+  if (!options || options.length === 0) return null;
+
+  /** 把分钟格式化为「4小时24分」 */
+  const dur = (minutes: number) => {
+    if (!Number.isFinite(minutes) || minutes <= 0) return "—";
+
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+
+    return h > 0 ? `${h}小时${m}分` : `${m}分`;
+  };
+
+  // 最便宜的方案作为「推荐」标记
+  const cheapest = options.reduce((a, b) => (b.perPerson < a.perPerson ? b : a));
+  const fastest = options.reduce((a, b) => (b.durationMinutes < a.durationMinutes ? b : a));
+
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 className="text-sm font-medium text-white">跨城方式</h2>
+        <span className="text-xs text-gray-500">
+          单程对比（火车为实时票价与余票，自驾含油费与过路费）
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-gray-800">
+        {options.map((option, index) => {
+          const isCheapest = option === cheapest;
+          const isFastest = option === fastest;
+
+          return (
+            <div
+              key={`${option.mode}-${option.reference}-${index}`}
+              className={`flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3 ${
+                index > 0 ? "border-t border-gray-800" : ""
+              } ${isCheapest ? "bg-gray-950/60" : "bg-gray-950/30"}`}
+            >
+              <span className="w-14 shrink-0 text-xs text-gray-400">{option.label}</span>
+
+              <span className="w-24 shrink-0 font-mono text-sm text-white">
+                {option.departTime ? `${option.departTime}-${option.arriveTime}` : "—"}
+              </span>
+
+              <span className="w-20 shrink-0 text-xs text-gray-500">
+                {dur(option.durationMinutes)}
+              </span>
+
+              <span className="w-20 shrink-0 text-sm text-white">¥{option.perPerson}/人</span>
+
+              <span className="min-w-0 flex-1 text-xs text-gray-500">
+                {option.breakdown}
+              </span>
+
+              <span className="flex shrink-0 gap-1">
+                {isCheapest && (
+                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                    最低价
+                  </span>
+                )}
+                {isFastest && !isCheapest && (
+                  <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-400">
+                    最快
+                  </span>
+                )}
+                {option.confidence === "estimate" && (
+                  <span className="rounded bg-gray-500/15 px-1.5 py-0.5 text-[10px] text-gray-400">
+                    估算
+                  </span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-2 text-xs text-gray-500">
+        火车票价与余票来自飞常准实时数据；自驾里程、时长与过路费来自高德路径规划，
+        油费按 {VEHICLE_DEFAULTS.fuelPer100Km} 升/百公里、{VEHICLE_DEFAULTS.fuelPricePerLiter} 元/升估算。
+      </p>
+    </section>
   );
 }
 
@@ -403,6 +496,8 @@ export default function PlanView({
       <section>
         <h3 className="mb-3 text-lg font-semibold text-white">交通与住宿</h3>
         <QuoteSection plan={plan} />
+
+        <IntercitySection plan={plan} />
       </section>
 
       <section>
