@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { buildIndustryMap } from "@/lib/industryMap/aggregate";
+import { getTier } from "@/lib/ranking/scoreBreakdown";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -698,7 +699,7 @@ export default async function HomePage() {
 
                       {item.aiScore > 0 && (
                         <span className="text-[10px] font-bold text-gray-400">
-                          AI SCORE {Math.round(item.aiScore)}
+                          AI SCORE {Math.round(item.aiScore)} · {getTier(item.aiScore).label}
                         </span>
                       )}
                     </div>

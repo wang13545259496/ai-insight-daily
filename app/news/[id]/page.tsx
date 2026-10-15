@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { breakdownScore } from "@/lib/ranking/scoreBreakdown";
 import { checkContentQuality } from "@/lib/news/contentQualityScore";
 
 export default async function NewsDetailPage({
@@ -78,6 +79,13 @@ export default async function NewsDetailPage({
     ? extractRisk(news.investmentView, news.insight, news.businessOpportunity)
     : "暂无风险分析";
 
+  // AI SCORE 拆解：把裸分数解释为可理解的维度
+  // 逻辑见 lib/ranking/scoreBreakdown.ts（纯函数，11 项单测）
+  const scoreDetail =
+    news.aiScore !== null && news.aiScore !== undefined
+      ? breakdownScore(news.aiScore, news.title, news.content || "", news.source || "")
+      : null;
+
   return (
     <main className="min-h-screen bg-black text-white px-4 py-8 md:px-8">
       <div className="max-w-6xl mx-auto">
@@ -97,12 +105,48 @@ export default async function NewsDetailPage({
                 </span>
               )}
 
-              {news.aiScore !== null && news.aiScore !== undefined && (
+              {scoreDetail && (
                 <span className="text-xs px-2.5 py-1 rounded-full border border-gray-700 text-gray-300">
-                  AI评分 {news.aiScore}
+                  AI评分 {scoreDetail.score} · {scoreDetail.tier.label}
                 </span>
               )}
             </div>
+
+            {scoreDetail && (
+              <div className="mb-8 border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-5 py-3 border-b border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold text-gray-900">
+                      AI SCORE {scoreDetail.score}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-900 text-white">
+                      {scoreDetail.tier.label}
+                    </span>
+                  </div>
+                  <span className="text-xs text-gray-500">{scoreDetail.tier.meaning}</span>
+                </div>
+
+                <div className="divide-y divide-gray-100">
+                  {scoreDetail.dimensions.map((dim) => (
+                    <div key={dim.name} className="px-5 py-3">
+                      <div className="flex items-center justify-between gap-4 mb-1.5">
+                        <span className="text-sm text-gray-700">{dim.name}</span>
+                        <span className="text-sm font-semibold tabular-nums text-gray-900">
+                          {dim.value}
+                        </span>
+                      </div>
+                      <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-1 bg-gray-900 rounded-full"
+                          style={{ width: `${Math.min(100, dim.value)}%` }}
+                        />
+                      </div>
+                      <p className="mt-1.5 text-xs text-gray-500">{dim.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
 
