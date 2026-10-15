@@ -14,6 +14,7 @@ import {
   AlignmentType,
   Document,
   HeadingLevel,
+  ImageRun,
   Packer,
   Paragraph,
   Table,
@@ -36,6 +37,24 @@ const TITLE_SIZE = 36;
 
 /** 副标题字号 */
 const SUBTITLE_SIZE = 20;
+
+/**
+ * 路线图在文档中的显示宽度（磅）。
+ *
+ * 为什么用磅而非原图像素：docx 的 transformation 单位是磅，
+ * A4 正文区宽度约 425 磅（11906 twips 页宽减去两侧 1134 twips 边距）。
+ * 取 420 磅基本铺满正文区，再按原图 640×300 的比例算出高度。
+ */
+const MAP_DISPLAY_WIDTH = 420;
+const MAP_ASPECT = 300 / 640;
+const MAP_DISPLAY_HEIGHT = Math.round(MAP_DISPLAY_WIDTH * MAP_ASPECT);
+
+/** 一天的路线图（已取回的二进制） */
+export interface DayMapImage {
+  day: number;
+  /** PNG 数据 */
+  data: Buffer;
+}
 
 /** 创建普通段落 */
 function textParagraph(text: string, options: { size?: number; bold?: boolean; color?: string } = {}) {
@@ -113,7 +132,10 @@ function buildTable(headers: string[], rows: string[][]): Table {
 }
 
 /** 渲染一个区块 */
-function renderSection(section: DocSection): Array<Paragraph | Table> {
+function renderSection(
+  section: DocSection,
+  mapImages: DayMapImage[],
+): Array<Paragraph | Table> {
   const out: Array<Paragraph | Table> = [
     new Paragraph({
       heading: HeadingLevel.HEADING_2,
@@ -128,6 +150,27 @@ function renderSection(section: DocSection): Array<Paragraph | Table> {
 
   for (const f of section.facts ?? []) {
     out.push(factParagraph(f.label, f.value));
+  }
+
+  // 路线图放在每日说明之后、活动列表之前：
+  // 先看空间分布再看具体安排，与网页上的顺序一致
+  if (section.day !== undefined) {
+    const image = mapImages.find((m) => m.day === section.day);
+
+    if (image) {
+      out.push(
+        new Paragraph({
+          spacing: { before: 120, after: 120 },
+          children: [
+            new ImageRun({
+              data: image.data,
+              transformation: { width: MAP_DISPLAY_WIDTH, height: MAP_DISPLAY_HEIGHT },
+              type: "png",
+            }),
+          ],
+        }),
+      );
+    }
   }
 
   for (const b of section.bullets ?? []) {
@@ -147,9 +190,14 @@ function renderSection(section: DocSection): Array<Paragraph | Table> {
 /**
  * 生成 .docx 二进制。
  *
+ * @param mapImages 逐日路线图（已取回的 PNG）。为空则不嵌入图片 ——
+ *        地图由外部接口生成，取不到时文档仍应可用。
  * @returns Buffer，可直接作为 HTTP 响应体
  */
-export async function renderPlanDocx(doc: PlanDocument): Promise<Buffer> {
+export async function renderPlanDocx(
+  doc: PlanDocument,
+  mapImages: DayMapImage[] = [],
+): Promise<Buffer> {
   const children: Array<Paragraph | Table> = [];
 
   // ---------- 标题 ----------
@@ -171,7 +219,7 @@ export async function renderPlanDocx(doc: PlanDocument): Promise<Buffer> {
 
   // ---------- 正文区块 ----------
   for (const section of doc.sections) {
-    children.push(...renderSection(section));
+    children.push(...renderSection(section, mapImages));
   }
 
   // ---------- 页脚说明 ----------

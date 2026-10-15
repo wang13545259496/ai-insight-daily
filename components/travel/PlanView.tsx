@@ -532,13 +532,45 @@ function PlanHeader({ plan, planId }: { plan: TravelPlan; planId?: number | null
           且能正确处理 Content-Disposition 里的中文文件名。
         */}
         {planId != null && (
-          <a
-            href={`/api/travel/${planId}/download`}
-            className="inline-flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-sky-200"
-          >
-            <span aria-hidden="true">⬇</span>
-            下载行程单（Word）
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/api/travel/${planId}/download`}
+              className="inline-flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-sky-200"
+            >
+              <span aria-hidden="true">⬇</span>
+              下载行程单（Word）
+            </a>
+
+            <a
+              href={`/api/travel/${planId}/download?mode=compact`}
+              className="inline-flex items-center gap-1.5 rounded border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-xs text-gray-300 transition hover:border-gray-600 hover:text-white"
+            >
+              精简版
+            </a>
+
+            {/*
+              单日版用 details 折叠，避免一次性铺开 N 个按钮把头部撑长。
+              行程天数通常 3-7 天，按钮数可控。
+            */}
+            <details className="relative">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-xs text-gray-300 transition hover:border-gray-600 hover:text-white">
+                单日版
+                <span aria-hidden="true">▾</span>
+              </summary>
+
+              <div className="absolute left-0 z-10 mt-1 flex min-w-max flex-col overflow-hidden rounded border border-gray-700 bg-gray-950 shadow-lg">
+                {plan.itinerary.map((day) => (
+                  <a
+                    key={day.day}
+                    href={`/api/travel/${planId}/download?mode=day&day=${day.day}`}
+                    className="whitespace-nowrap px-3 py-1.5 text-xs text-gray-300 transition hover:bg-gray-900 hover:text-white"
+                  >
+                    第 {day.day} 天（{day.date}）
+                  </a>
+                ))}
+              </div>
+            </details>
+          </div>
         )}
       </div>
     </div>

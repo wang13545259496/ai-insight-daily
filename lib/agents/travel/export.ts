@@ -31,6 +31,65 @@ export interface DocSection {
   bullets?: string[];
   /** 表格：第一行为表头 */
   table?: { headers: string[]; rows: string[][] };
+  /**
+   * 区块所属的行程日（用于在文档里嵌入该日的路线图）。
+   * 只有逐日行程区块会带这个字段。
+   */
+  day?: number;
+}
+
+/**
+ * 导出选项。
+ *
+ * 三种模式对应不同使用场景：
+ *   · full    完整行程单（默认）—— 打印/存档
+ *   · compact 精简版 —— 只要概览、报价与每日要点，适合转发或快速查看
+ *   · day     单日 —— 当天出行时只看那一天
+ */
+export interface ExportOptions {
+  mode?: "full" | "compact" | "day";
+  /** mode 为 day 时指定第几天（从 1 开始） */
+  day?: number;
+  /** 是否嵌入逐日路线图（默认嵌入） */
+  includeMaps?: boolean;
+}
+
+/** 解析后的导出选项（带默认值） */
+interface ResolvedOptions {
+  mode: "full" | "compact" | "day";
+  day: number | null;
+  includeMaps: boolean;
+}
+
+/** 归一化导出选项，非法值退回默认 */
+export function resolveExportOptions(options: ExportOptions = {}): ResolvedOptions {
+  const wantsDay = Number.isInteger(options.day) && (options.day ?? 0) > 0;
+
+  /**
+   * 模式判定顺序：
+   *   1. 显式指定 compact → compact
+   *   2. 指定了合法的 day → day（无论 mode 传没传）
+   *   3. 显式指定 day 但 day 非法 → 退回 full
+   *   4. 其余 → full
+   *
+   * 第 2 条是必要的：调用方常只传 day（如 URL 上只有 ?day=2），
+   * 若要求必须同时传 mode，漏传就会静默返回整份文档。
+   */
+  let mode: ResolvedOptions["mode"];
+
+  if (options.mode === "compact") {
+    mode = "compact";
+  } else if (wantsDay) {
+    mode = "day";
+  } else {
+    mode = "full";
+  }
+
+  return {
+    mode,
+    day: mode === "day" ? (options.day as number) : null,
+    includeMaps: options.includeMaps !== false,
+  };
 }
 
 /** 文档标题信息 */
@@ -45,6 +104,8 @@ export interface PlanDocument {
   sections: DocSection[];
   /** 生成时间说明 */
   footer: string;
+  /** 实际采用的导出选项（供文件名与日志使用） */
+  options: ResolvedOptions;
 }
 
 /** 把分钟格式化为「4小时24分」 */
@@ -69,18 +130,33 @@ function confidenceText(confidence: string): string {
  *   概览 → 交通住宿报价 → 跨城方式 → 预算 → 逐日行程 → 行前准备 → 提示
  * 这样打印出来第一页就能看到关键信息。
  */
-export function buildPlanDocument(plan: TravelPlan): PlanDocument {
+export function buildPlanDocument(plan: TravelPlan, options: ExportOptions = {}): PlanDocument {
   const { query, duration, budget, quotes, itinerary } = plan;
+
+  const opts = resolveExportOptions(options);
 
   const headcount = query.party.adults + query.party.children;
 
+  // 单日模式：只保留指定那天，标题与副标题也相应收窄。
+  // 指定了不存在的天数时 days 为空数组 —— 此时文档只含概览等基础区块，
+  // 是合理的降级；若退回「全部天」会让用户以为导出的是单日版
+  // 却看到整趟行程，反而误导。
+  const targetDay =
+    opts.mode === "day" ? itinerary.find((d) => d.day === opts.day) : undefined;
+
+  const days = opts.mode === "day" ? (targetDay ? [targetDay] : []) : itinerary;
+
   const header: DocHeader = {
-    title: `${query.origin} → ${query.destination} 行程方案`,
-    subtitle:
-      `${query.departDate} 至 ${query.returnDate}｜${duration.days} 天 ${duration.nights} 晚｜` +
-      `成人 ${query.party.adults} 人` +
-      (query.party.children > 0 ? `，儿童 ${query.party.children} 人` : "") +
-      `｜预算 ${query.budget} 元`,
+    title: targetDay
+      ? `${query.origin} → ${query.destination} 行程方案 · 第 ${targetDay.day} 天`
+      : `${query.origin} → ${query.destination} 行程方案`,
+    subtitle: targetDay
+      ? `${targetDay.date}（第 ${targetDay.day} 天 / 共 ${duration.days} 天）` +
+        `${targetDay.theme ? `｜${targetDay.theme}` : ""}｜同行 ${headcount} 人`
+      : `${query.departDate} 至 ${query.returnDate}｜${duration.days} 天 ${duration.nights} 晚｜` +
+        `成人 ${query.party.adults} 人` +
+        (query.party.children > 0 ? `，儿童 ${query.party.children} 人` : "") +
+        `｜预算 ${query.budget} 元`,
   };
 
   const sections: DocSection[] = [];
@@ -150,7 +226,8 @@ export function buildPlanDocument(plan: TravelPlan): PlanDocument {
   sections.push({ title: "交通与住宿", facts: quoteFacts });
 
   // ---------- 可选房型 ----------
-  if (plan.hotelRooms && plan.hotelRooms.length > 0) {
+  // 单日模式跳过：当天再看房型意义不大
+  if (opts.mode !== "day" && plan.hotelRooms && plan.hotelRooms.length > 0) {
     sections.push({
       title: "可选房型",
       bullets: plan.hotelRooms.map(describeRoom),
@@ -158,7 +235,7 @@ export function buildPlanDocument(plan: TravelPlan): PlanDocument {
   }
 
   // ---------- 跨城方式 ----------
-  if (plan.intercityOptions && plan.intercityOptions.length > 0) {
+  if (opts.mode !== "day" && plan.intercityOptions && plan.intercityOptions.length > 0) {
     sections.push({
       title: "跨城方式对比（单程）",
       table: {
@@ -175,27 +252,42 @@ export function buildPlanDocument(plan: TravelPlan): PlanDocument {
   }
 
   // ---------- 预算分配 ----------
-  sections.push({
-    title: "预算分配",
-    table: {
-      headers: ["科目", "金额（元）", "占比", "说明"],
-      rows: budget.categories.map((c) => [
-        c.label,
-        String(c.amount),
-        `${Math.round(c.ratio * 100)}%`,
-        c.detail,
-      ]),
-    },
-    facts: [
-      { label: "合计", value: `${budget.allocated} 元` },
-      { label: "总预算", value: `${budget.total} 元` },
-      { label: "人均", value: `${budget.perPerson} 元` },
-      { label: "人均每日", value: `${budget.perPersonPerDay} 元` },
-    ],
-  });
+  // 单日模式下预算表意义不大（总额是整趟的），因此只给当天花费
+  if (opts.mode === "day") {
+    const dayCost = days.reduce((sum, d) => sum + d.estimatedCost, 0);
+
+    sections.push({
+      title: "当日预算",
+      facts: [
+        { label: "当天花费", value: `${dayCost} 元` },
+        { label: "人均", value: `${Math.round(dayCost / Math.max(1, headcount))} 元` },
+        { label: "整趟总预算", value: `${budget.total} 元` },
+      ],
+      paragraphs: ["各科目金额由确定性算法计算，详见完整版行程单。"],
+    });
+  } else {
+    sections.push({
+      title: "预算分配",
+      table: {
+        headers: ["科目", "金额（元）", "占比", "说明"],
+        rows: budget.categories.map((c) => [
+          c.label,
+          String(c.amount),
+          `${Math.round(c.ratio * 100)}%`,
+          c.detail,
+        ]),
+      },
+      facts: [
+        { label: "合计", value: `${budget.allocated} 元` },
+        { label: "总预算", value: `${budget.total} 元` },
+        { label: "人均", value: `${budget.perPerson} 元` },
+        { label: "人均每日", value: `${budget.perPersonPerDay} 元` },
+      ],
+    });
+  }
 
   // ---------- 逐日行程 ----------
-  for (const day of itinerary) {
+  for (const day of days) {
     const paragraphs: string[] = [];
 
     if (day.theme) paragraphs.push(`主题：${day.theme}`);
@@ -227,22 +319,29 @@ export function buildPlanDocument(plan: TravelPlan): PlanDocument {
       paragraphs.push(`当日通勤：${commuteLines.join("；")}`);
     }
 
-    const bullets = day.activities.map((a) => {
-      const cost = a.estimatedCost > 0 ? `（约 ${a.estimatedCost} 元）` : "";
-      const place = a.address || a.location ? `＠${a.address || a.location}` : "";
+    // 精简版只列活动名与时间：说明文字动辄几十字，会让文档失去「精简」的意义
+    const bullets =
+      opts.mode === "compact"
+        ? day.activities.map((a) => `${a.startTime}-${a.endTime}  ${a.title}`)
+        : day.activities.map((a) => {
+            const cost = a.estimatedCost > 0 ? `（约 ${a.estimatedCost} 元）` : "";
+            const place = a.address || a.location ? `＠${a.address || a.location}` : "";
 
-      return `${a.startTime}-${a.endTime}  ${a.title}${cost}${place}｜${a.description}`;
-    });
+            return `${a.startTime}-${a.endTime}  ${a.title}${cost}${place}｜${a.description}`;
+          });
 
     sections.push({
       title: `第 ${day.day} 天（${day.date}）`,
       paragraphs,
       bullets,
+      // 带上天数，渲染层据此嵌入当天的路线图
+      day: day.day,
     });
   }
 
   // ---------- 行前准备 ----------
-  if (plan.checklist.length > 0) {
+  // 单日模式跳过：行前准备是整趟的事
+  if (opts.mode === "full" && plan.checklist.length > 0) {
     sections.push({ title: "行前准备", bullets: plan.checklist });
   }
 
@@ -254,19 +353,27 @@ export function buildPlanDocument(plan: TravelPlan): PlanDocument {
   // ---------- 数据说明 ----------
   const warns = plan.warnings.filter((w) => w.trim().length > 0);
 
-  if (warns.length > 0) {
+  // 精简版跳过：告警是给核对数据来源用的，转发场景不需要
+  if (opts.mode !== "compact" && warns.length > 0) {
     sections.push({
       title: "数据来源与提示",
       bullets: warns,
     });
   }
 
+  const modeNote =
+    opts.mode === "day"
+      ? `｜单日版（第 ${opts.day} 天）`
+      : opts.mode === "compact"
+        ? "｜精简版"
+        : "";
+
   const footer =
     `生成时间：${new Date(plan.generatedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}｜` +
     `行程编排：${plan.generatedByAI ? `AI（${plan.model ?? "未知模型"}）` : "内置模板"}｜` +
-    `金额由确定性算法计算，标注「估算」的价格以实际支付为准`;
+    `金额由确定性算法计算，标注「估算」的价格以实际支付为准${modeNote}`;
 
-  return { header, sections, footer };
+  return { header, sections, footer, options: opts };
 }
 
 /** 把房型格式化为一句话 */
@@ -296,8 +403,18 @@ function styleLabel(style: string): string {
 }
 
 /** 文件名（去掉不适合做文件名的字符） */
-export function documentFileName(plan: TravelPlan): string {
-  const raw = `${plan.query.origin}-${plan.query.destination}-行程-${plan.query.departDate}`;
+export function documentFileName(plan: TravelPlan, options: ExportOptions = {}): string {
+  const opts = resolveExportOptions(options);
+
+  // 模式后缀让下载多个版本时的文件名可区分
+  const suffix =
+    opts.mode === "day" && opts.day !== null
+      ? `-第${opts.day}天`
+      : opts.mode === "compact"
+        ? "-精简版"
+        : "";
+
+  const raw = `${plan.query.origin}-${plan.query.destination}-行程-${plan.query.departDate}${suffix}`;
 
   return raw.replace(/[\\/:*?"<>|]/g, "").slice(0, 80) + ".docx";
 }
