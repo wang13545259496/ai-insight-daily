@@ -456,8 +456,7 @@ export default async function HomePage() {
       : 0;
 
   return (
-    <main className="min-h-screen bg-white text-black">
-      {/* ============================================================
+    <main className="min-h-screen bg-white text-black">{/* ============================================================
           今日重点
       ============================================================ */}
 
@@ -569,113 +568,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-{/* ---------- 产业链总览 ---------- */}
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
-            <div>
-              <h2 className="text-2xl font-black">产业链总览</h2>
-              <p className="mt-2 text-sm text-gray-500">
-                近 {industryMap.windowDays} 天 AI 产业动态按层级分布，共 {industryMap.total} 条。
-              </p>
-            </div>
-            <div className="text-xs text-gray-400">
-              {new Date(industryMap.rangeStart).toLocaleDateString("zh-CN")} —{" "}
-              {new Date(industryMap.rangeEnd).toLocaleDateString("zh-CN")}
-            </div>
-          </div>
 
-          {industryMap.total === 0 ? (
-            <p className="text-sm text-gray-500">当前时间窗口内暂无产业动态。</p>
-          ) : (
-            <>
-              <div className="space-y-6">
-                {industryMap.layers.map((layer) => (
-                  <div key={layer.name} className="border border-gray-200">
-                    <div className="flex flex-col gap-2 border-b border-gray-100 bg-gray-50 px-5 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-base font-bold">{layer.name}</h3>
-                        <span className="text-xs text-gray-500">{layer.description}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold tabular-nums">{layer.count} 条</span>
-                        <span className="text-xs text-gray-400 tabular-nums">{layer.percent}%</span>
-                      </div>
-                    </div>
-
-                    <div className="px-5 py-4">
-                      <div className="mb-3 h-1.5 w-full bg-gray-100">
-                        <div
-                          className="h-1.5 bg-black"
-                          style={{ width: `${Math.min(100, layer.percent)}%` }}
-                        />
-                      </div>
-
-                      {layer.samples.length === 0 ? (
-                        <p className="text-xs text-gray-400">该层近期暂无动态。</p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {layer.samples.map((s) => (
-                            <li key={s.id} className="flex items-start gap-2 text-sm">
-                              <span className="mt-1.5 h-1 w-1 shrink-0 bg-gray-400" />
-                              <a
-                                href={`/news/${s.id}`}
-                                className="line-clamp-2 min-w-0 hover:underline sm:line-clamp-1"
-                              >
-                                {s.title}
-                              </a>
-                              <span className="ml-auto shrink-0 text-xs text-gray-400">
-                                {s.source}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {layer.topSources.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {layer.topSources.map((tag) => (
-                            <span
-                              key={tag}
-                              className="border border-gray-200 px-2 py-0.5 text-xs text-gray-500"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {industryMap.capital.length > 0 && (
-                <div className="mt-8 border border-gray-200">
-                  <div className="border-b border-gray-100 bg-gray-50 px-5 py-3">
-                    <h3 className="text-base font-bold">资本动态</h3>
-                    <span className="ml-3 text-xs text-gray-500">
-                      融资、并购、估值相关事件
-                    </span>
-                  </div>
-                  <ul className="divide-y divide-gray-100">
-                    {industryMap.capital.map((c) => (
-                      <li key={c.id} className="flex flex-col gap-1 px-5 py-3 text-sm sm:flex-row sm:items-start sm:gap-3">
-                        <span className="shrink-0 text-xs text-gray-400">
-                          {new Date(c.publishedAt).toLocaleDateString("zh-CN")}
-                        </span>
-                        <a href={`/news/${c.id}`} className="line-clamp-2 hover:underline">
-                          {c.title}
-                        </a>
-                        <span className="ml-auto shrink-0 text-xs text-gray-400">{c.source}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </section>
 
       {/* ============================================================
           最新产业情报
@@ -756,6 +649,94 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ---------- 产业链总览 ---------- */}
+      <section className="border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-4">
+            <div>
+              <h2 className="text-2xl font-black">产业链总览</h2>
+              <p className="mt-2 text-sm text-gray-500">
+                上述情报按产业层级的分布，近 {industryMap.windowDays} 天共 {industryMap.total} 条。
+              </p>
+            </div>
+            <div className="text-xs text-gray-400">
+              {new Date(industryMap.rangeStart).toLocaleDateString("zh-CN")} —{" "}
+              {new Date(industryMap.rangeEnd).toLocaleDateString("zh-CN")}
+            </div>
+          </div>
+
+          {industryMap.total === 0 ? (
+            <p className="text-sm text-gray-500">当前时间窗口内暂无产业动态。</p>
+          ) : (
+            <>
+              <div className="border border-gray-200 bg-white">
+                {industryMap.layers.map((layer) => (
+                  <div
+                    key={layer.name}
+                    className="border-b border-gray-100 px-5 py-4 last:border-b-0"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-24 shrink-0">
+                        <div className="text-sm font-bold">{layer.name}</div>
+                        <div className="text-xs text-gray-400 tabular-nums">
+                          {layer.count} 条 · {layer.percent}%
+                        </div>
+                      </div>
+
+                      <div className="h-1.5 min-w-0 flex-1 bg-gray-100">
+                        <div
+                          className="h-1.5 bg-black"
+                          style={{ width: `${Math.min(100, layer.percent)}%` }}
+                        />
+                      </div>
+
+                      <div className="hidden w-56 shrink-0 text-right text-xs text-gray-400 lg:block">
+                        {layer.description}
+                      </div>
+                    </div>
+
+                    {layer.samples.length > 0 && (
+                      <div className="mt-2 flex items-baseline gap-2 text-sm lg:pl-28">
+                        <span className="shrink-0 text-xs text-gray-400">代表</span>
+                        <a
+                          href={`/news/${layer.samples[0].id}`}
+                          className="line-clamp-1 min-w-0 hover:underline"
+                        >
+                          {layer.samples[0].title}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {industryMap.capital.length > 0 && (
+                <div className="mt-6 border border-gray-200 bg-white">
+                  <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3">
+                    <h3 className="text-sm font-bold">资本动态</h3>
+                    <span className="text-xs text-gray-400">融资、并购、估值</span>
+                  </div>
+                  <ul className="divide-y divide-gray-100">
+                    {industryMap.capital.slice(0, 5).map((c) => (
+                      <li key={c.id} className="flex items-baseline gap-3 px-5 py-2.5 text-sm">
+                        <span className="shrink-0 text-xs text-gray-400 tabular-nums">
+                          {new Date(c.publishedAt).toLocaleDateString("zh-CN")}
+                        </span>
+                        <a href={`/news/${c.id}`} className="line-clamp-1 min-w-0 hover:underline">
+                          {c.title}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+
+
 
       {/* ============================================================
           产业链 / 商业机会
@@ -1096,22 +1077,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ============================================================
-          FOOTER
-      ============================================================ */}
-      <footer className="border-t border-black bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-8 text-xs text-gray-500 lg:flex-row lg:items-center lg:justify-between lg:px-10">
-          <div>
-            <span className="font-bold text-black">AI Insight Daily</span>
-            <span className="mx-2">·</span>
-            AI产业情报驾驶舱
-          </div>
-
-          <div>
-            数据持续采集 · AI分析 · 事件聚合 · 商业机会发现
-          </div>
-        </div>
-      </footer>
-    </main>
+      </main>
   );
 }
