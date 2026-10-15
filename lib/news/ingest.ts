@@ -80,10 +80,31 @@ const MIN_CONTENT_LENGTH = 40;
 const RECENT_DAYS = 30;
 
 /**
- * 需要抓取正文的源：RSS 只给标题与导语。
- * 实测确认这些站点正文直接在 HTML 中（无验证码、无登录墙）。
+ * 需要抓取正文的源：RSS 只给导语，不含正文。
+ *
+ * 实测（2026-10，对比「库内 content」与「文章页实际正文」）：
+ *
+ *   MIT Technology Review  262-287 字 → 4422-29343 字（提升 15-112×）
+ *   MIT News AI            165-203 字 → 8656-10728 字（提升 42-58×）
+ *   量子位                  16 字     → 161-4903 字
+ *   InfoQ 中文              7 字      → 347-5098 字
+ *
+ * 为什么必须补全：RSS 导语过短时，下游 AI 分析没有材料，
+ * 只能产出「新闻标题为X，正文仅重复标题并注明来源」这类元描述式摘要
+ * （实测占库内 12.1%）。补全正文后这类摘要自然消失。
+ *
+ * 未纳入的源（RSS 已给足正文，无需额外请求）：
+ *   OpenAI 官方博客、arXiv、Simon Willison、OSChina、量子位以外的中文源等。
+ *
+ * 注意：Microsoft AI Blog 虽属导语型，但实测 RSS 与文章页均返回 403
+ * （服务器拒绝），无法补全，已停用该源。
  */
-const BODY_FETCH_SOURCES = new Set(["量子位", "InfoQ 中文"]);
+const BODY_FETCH_SOURCES = new Set([
+  "量子位",
+  "InfoQ 中文",
+  "MIT News AI",
+  "MIT Technology Review",
+]);
 
 /** 抓取正文时的并发上限，避免对同一站点高频请求 */
 const BODY_FETCH_CONCURRENCY = 3;
