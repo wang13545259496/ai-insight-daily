@@ -4,6 +4,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   COOKIE_MAX_AGE,
   TRAVEL_COOKIE,
+  cookieSecure,
   hasValidAccess,
   isTravelProtected,
   safeEqual,
@@ -166,5 +167,63 @@ describe("travel-access 常量", () => {
   it("Cookie 名与有效期符合预期", () => {
     assert.equal(TRAVEL_COOKIE, "travel_access");
     assert.equal(COOKIE_MAX_AGE, 60 * 60 * 24 * 30, "应为 30 天");
+  });
+});
+
+describe("travel-access Cookie Secure 标志", () => {
+  const ORIGINAL_SECURE = process.env.COOKIE_SECURE;
+
+  afterEach(() => {
+    if (ORIGINAL_SECURE === undefined) delete process.env.COOKIE_SECURE;
+    else process.env.COOKIE_SECURE = ORIGINAL_SECURE;
+  });
+
+  it("★ 只认 COOKIE_SECURE，不依赖 NODE_ENV", () => {
+    /**
+     * 线上经 pm2 启动时 NODE_ENV 未必被显式设置，因此判断不能依赖它。
+     *
+     * 这里不去改动 NODE_ENV（Next.js 把它声明为只读，且它恒有值），
+     * 而是用等价且可验证的方式证明：
+     *   · 未设 COOKIE_SECURE 时结果为 false（此时 NODE_ENV 通常已是 production，
+     *     若实现依赖了它就会误判为 true）
+     *   · 只有设了 COOKIE_SECURE 才为 true
+     */
+    delete process.env.COOKIE_SECURE;
+
+    assert.equal(
+      cookieSecure(),
+      false,
+      "未设 COOKIE_SECURE 时必须为 false —— 若实现读了 NODE_ENV，这里会失败",
+    );
+
+    process.env.COOKIE_SECURE = "1";
+
+    assert.equal(cookieSecure(), true);
+  });
+
+  it("值为 1 时启用", () => {
+    process.env.COOKIE_SECURE = "1";
+
+    assert.equal(cookieSecure(), true);
+  });
+
+  it("未设置、空值或其它值时关闭", () => {
+    delete process.env.COOKIE_SECURE;
+    assert.equal(cookieSecure(), false);
+
+    process.env.COOKIE_SECURE = "";
+    assert.equal(cookieSecure(), false);
+
+    process.env.COOKIE_SECURE = "true";
+    assert.equal(cookieSecure(), false);
+
+    process.env.COOKIE_SECURE = "0";
+    assert.equal(cookieSecure(), false);
+  });
+
+  it("容忍首尾空白", () => {
+    process.env.COOKIE_SECURE = " 1 ";
+
+    assert.equal(cookieSecure(), true);
   });
 });

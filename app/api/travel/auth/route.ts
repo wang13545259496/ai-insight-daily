@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { COOKIE_MAX_AGE, TRAVEL_COOKIE, isTravelProtected, travelToken, verifyPassword } from "@/lib/travel-access";
+import { COOKIE_MAX_AGE, TRAVEL_COOKIE, cookieSecure, isTravelProtected, travelToken, verifyPassword } from "@/lib/travel-access";
 
 /**
  * 旅行模块口令的校验与注销。
@@ -60,14 +60,11 @@ export async function POST(request: Request) {
     next: safeNext(body.next),
   });
 
-  const isProduction = process.env.NODE_ENV === "production";
-
   response.cookies.set(TRAVEL_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    // 当前线上为 HTTP，强制 secure 会导致浏览器不回传 Cookie。
-    // 接入 HTTPS 后把 COOKIE_SECURE 设为 1。
-    secure: isProduction && process.env.COOKIE_SECURE === "1",
+    // 只认 COOKIE_SECURE（站点已启用 Always Use HTTPS，应设为 1）
+    secure: cookieSecure(),
     path: "/",
     maxAge: COOKIE_MAX_AGE,
   });

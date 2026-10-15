@@ -51,6 +51,21 @@ function toHex(buffer: ArrayBuffer): string {
 }
 
 /**
+ * Cookie 是否应带 Secure 标志。
+ *
+ * 为什么不看 NODE_ENV：线上经 pm2 启动时 NODE_ENV 未必被显式设置，
+ * 判断会随启动方式漂移。改为只认一个显式变量 ——
+ * 配了 COOKIE_SECURE=1 就加 Secure，否则不加，行为可预测。
+ *
+ * 当前站点已启用 Always Use HTTPS：http:// 会被 301 到 https://，
+ * 而 301 是服务端响应，浏览器在此之前不会发送 Cookie，
+ * 因此本变量应设为 1。
+ */
+export function cookieSecure(): boolean {
+  return (process.env.COOKIE_SECURE ?? "").trim() === "1";
+}
+
+/**
  * 由口令派生会话令牌。
  *
  * 用 HMAC 而不是直接哈希口令：HMAC 需要一个"密钥"，

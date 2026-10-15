@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { COOKIE_MAX_AGE, TRAVEL_COOKIE, hasValidAccess, isTravelProtected, travelToken } from "./lib/travel-access";
+import { COOKIE_MAX_AGE, TRAVEL_COOKIE, cookieSecure, hasValidAccess, isTravelProtected, travelToken } from "./lib/travel-access";
 
 /**
  * Next.js 16 起 middleware 更名为 proxy，文件名与导出名都必须使用 proxy。
@@ -108,19 +108,11 @@ export async function attachAccessCookie(response: NextResponse): Promise<NextRe
 
   if (!token) return response;
 
-  const isProduction = process.env.NODE_ENV === "production";
-
   response.cookies.set(TRAVEL_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    /**
-     * secure 只在明确要求时启用。
-     *
-     * 原因：当前线上经 nginx 走 HTTP，若强制 secure，
-     * 浏览器不会回传 cookie，用户会陷入「登录后仍被要求登录」。
-     * 等接入 HTTPS 后把 COOKIE_SECURE 设为 1 即可。
-     */
-    secure: isProduction && process.env.COOKIE_SECURE === "1",
+    // 只认 COOKIE_SECURE，不看 NODE_ENV（后者在 pm2 启动时未必设置）
+    secure: cookieSecure(),
     path: "/",
     maxAge: COOKIE_MAX_AGE,
   });
