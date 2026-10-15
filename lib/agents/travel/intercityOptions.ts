@@ -17,6 +17,7 @@
  */
 
 import { estimateDrivingCost, fetchDrivingRoute, isAmapConfigured } from "./amap";
+import { isMajorRoute, trainPriorityScore } from "./stationRank";
 import type { TravelParty, TravelStyle } from "./types";
 import { fetchTrainTickets, isVariflightConfigured, lowestSeatPrice } from "./variflight";
 import type { TrainTicket } from "./variflight";
@@ -69,6 +70,46 @@ const TRAIN_SEAT_PREFERENCE: Record<TravelStyle, string[]> = {
 /** 自驾之外是否还考虑火车：超过此直线距离时火车通常更划算 */
 const DRIVE_MAX_KM = 1500;
 
+/** 最多返回几个方案（火车） */
+const MAX_OPTIONS = 4;
+
+/**
+ * 自驾时间的折算价值（元/分钟）。
+ *
+ * 用途：把自驾的耗时分摊进成本，使它与火车可比。
+ * 取值 0.8 元/分钟 ≈ 48 元/小时，接近国内城市间出行的常见时间价值水平。
+ *
+ * 为什么需要它：自驾的人均费用常与高铁接近，但耗时长得多。
+ * 实测北京→天津：自驾 2 小时 21 分、人均 ¥54；高铁 34 分钟、人均 ¥51。
+ * 只比价格会让自驾排到前面，而实际选择显然相反。
+ * 折算后自驾为 54 + 141×0.8 ≈ 167，高铁为 51，排序正确。
+ */
+const TIME_VALUE_PER_MINUTE = 0.8;
+
+/** 座席名是否卧铺 */
+const isSleeper = (seatName: string) => /卧/.test(seatName);
+
+/**
+ * 是否「夕发朝至」。
+ *
+ * 三个条件缺一不可：
+ *   1. 傍晚之后发车（17 点起）
+ *   2. 次日中午前到达（12 点前）
+ *   3. 历时足够长（6 小时以上）
+ *
+ * 第 3 条是实测补上的：北京→天津的 23:59 发车、01:25 到达的硬卧，
+ * 历时仅 1 小时 26 分，却因「傍晚发车 + 凌晨到达」被判为夕发朝至，
+ * 于是提示「可省一晚住宿」—— 短途夜车显然不省住宿。
+ */
+function isOvernight(train: TrainTicket): boolean {
+  const dep = Number(train.departTime.slice(0, 2));
+  const arr = Number(train.arriveTime.slice(0, 2));
+
+  if (!Number.isFinite(dep) || !Number.isFinite(arr)) return false;
+
+  return dep >= 17 && arr <= 12 && train.durationMinutes >= 360;
+}
+
 /**
  * 查询火车方案。
  *
@@ -112,69 +153,51 @@ export async function fetchTrainOptions(
   }
 
   /**
-   * 为什么不能只按价格排序：
-   * 实测「上海→北京」按价格取前三，结果是 14-22 小时的普速硬卧/无座，
-   * 而 4 小时 24 分的高铁被排到最后 —— 用户看到这种推荐会认为系统坏了。
+   * 排序策略：枢纽度优先，价格与耗时其次。
    *
-   * 但也不能只按速度排序：夜间卧铺（夕发朝至）虽然慢，
-   * 却省下一晚住宿，对预算型用户是实际优势。
+   * 为什么不用「按价格取前三」：实测「上海→杭州」按价取前三得到的是
+   * 上海松江、金山北这类远郊站发车的车次，而用户预期的是虹桥。
+   * 详见 stationRank.ts 的权重校准说明。
    *
-   * 因此分三组各取代表，再合并：
-   *   1. 高铁/动车里最快的（时效优先）
-   *   2. 高铁/动车里最便宜的（性价比）
-   *   3. 夜间卧铺（夕发朝至，省一晚住宿）
-   *   4. 其余里最便宜的（兜底，覆盖无高铁的线路）
+   * 为什么也要看价格与耗时：只按枢纽度排会把最贵的高铁排第一，
+   * 而同一枢纽站往往有多个价位的车次。
    */
-  const isHighSpeed = (t: TrainTicket) => /^[GD]/.test(t.trainNumber);
-
-  const isSleeper = (seatName: string) => /卧/.test(seatName);
+  const scored = priced
+    .map((item) => ({
+      ...item,
+      score: trainPriorityScore({
+        fromStation: item.train.fromStation,
+        toStation: item.train.toStation,
+        trainNumber: item.train.trainNumber,
+        price: item.seat.price,
+        durationMinutes: item.train.durationMinutes,
+        originCity: fromCity,
+        destinationCity: toCity,
+      }),
+    }))
+    .sort((a, b) => b.score - a.score);
 
   /**
-   * 是否「夕发朝至」。
+   * 结果去重：同一对起降车站最多保留 2 趟。
    *
-   * 三个条件缺一不可：
-   *   1. 傍晚之后发车（17 点起）
-   *   2. 次日中午前到达（12 点前）
-   *   3. 历时足够长（6 小时以上）
-   *
-   * 第 3 条是实测补上的：北京→天津的 23:59 发车、01:25 到达的硬卧，
-   * 历时仅 1 小时 26 分，却因「傍晚发车 + 凌晨到达」被判为夕发朝至，
-   * 于是提示「可省一晚住宿」—— 短途夜车显然不省住宿。
+   * 理由：枢纽站的车次得分接近，容易把 4 个名额全占满，
+   * 用户就看不到「便宜但稍远」「夜间卧铺」等替代选项。
+   * 限制每对车站的数量，可以保证推荐的多样性。
    */
-  const isOvernight = (t: TrainTicket) => {
-    const dep = Number(t.departTime.slice(0, 2));
-    const arr = Number(t.arriveTime.slice(0, 2));
+  const MAX_PER_STATION_PAIR = 2;
+  const pairCount = new Map<string, number>();
+  const picked: typeof scored = [];
 
-    if (!Number.isFinite(dep) || !Number.isFinite(arr)) return false;
+  for (const item of scored) {
+    const pair = `${item.train.fromStation}→${item.train.toStation}`;
+    const used = pairCount.get(pair) ?? 0;
 
-    return dep >= 17 && arr <= 12 && t.durationMinutes >= 360;
-  };
+    if (used >= MAX_PER_STATION_PAIR) continue;
 
-  const highSpeed = priced.filter((p) => isHighSpeed(p.train));
-  const sleepers = priced.filter((p) => isSleeper(p.seat.seatName) && isOvernight(p.train));
-
-  const picked: Array<{ train: TrainTicket; seat: { seatName: string; price: number } }> = [];
-  const push = (item?: { train: TrainTicket; seat: { seatName: string; price: number } }) => {
-    if (!item) return;
-    if (picked.some((p) => p.train.trainNumber === item.train.trainNumber)) return;
-
+    pairCount.set(pair, used + 1);
     picked.push(item);
-  };
 
-  // 1. 高铁最快
-  push([...highSpeed].sort((a, b) => a.train.durationMinutes - b.train.durationMinutes)[0]);
-
-  // 2. 高铁最便宜
-  push([...highSpeed].sort((a, b) => a.seat.price - b.seat.price)[0]);
-
-  // 3. 夜间卧铺里最快的
-  push([...sleepers].sort((a, b) => a.train.durationMinutes - b.train.durationMinutes)[0]);
-
-  // 4. 其余里最便宜的
-  push([...priced].sort((a, b) => a.seat.price - b.seat.price)[0]);
-
-  if (picked.length === 0) {
-    return { options: [], error: null };
+    if (picked.length >= MAX_OPTIONS) break;
   }
 
   const options: IntercityOption[] = picked.map(({ train, seat }) => {
@@ -185,6 +208,10 @@ export async function fetchTrainOptions(
 
     const overnightNote =
       isSleeper(seat.seatName) && isOvernight(train) ? "｜夕发朝至，可省一晚住宿" : "";
+
+    const majorNote = isMajorRoute(train.fromStation, train.toStation, fromCity, toCity)
+      ? ""
+      : "｜非枢纽站发车，注意预留接驳时间";
 
     return {
       mode: "train" as const,
@@ -203,7 +230,8 @@ export async function fetchTrainOptions(
       arriveTime: train.arriveTime,
       breakdown:
         `${train.fromStation}→${train.toStation} ${train.departTime}-${train.arriveTime}` +
-        `（${durationText}）｜${seat.seatName} ¥${seat.price}/人 × ${passengerCount} 人${overnightNote}`,
+        `（${durationText}）｜${seat.seatName} ¥${seat.price}/人 × ${passengerCount} 人` +
+        `${overnightNote}${majorNote}`,
       confidence: "live",
     };
   });
@@ -316,9 +344,24 @@ export async function compareIntercityOptions(params: {
     options.push(driveResult.option);
   }
 
-  // 按人均价排序；同价时按耗时短的优先
   options.sort((a, b) => {
-    if (a.perPerson !== b.perPerson) return a.perPerson - b.perPerson;
+    // 自驾与火车用不同的排序键，因为两者的「代价」结构不同：
+    //   火车：票价是主要代价，车上时间可休息，时间权重低
+    //   自驾：开车是净消耗（无法休息），时间本身就是显著代价
+    //
+    // 实测教训：北京→天津的 2 小时 21 分自驾（人均 ¥54）与
+    // 34 分钟高铁（人均 ¥51）人均价几乎相同，若统一按人均价排，
+    // 自驾会排到高铁前面 —— 但没有人会为了省 3 元多开两小时车。
+    const costKey = (o: IntercityOption) =>
+      o.mode === "drive"
+        ? o.perPerson + o.durationMinutes * TIME_VALUE_PER_MINUTE
+        : o.perPerson;
+
+    const ca = costKey(a);
+    const cb = costKey(b);
+
+    if (Math.abs(ca - cb) > 0.5) return ca - cb;
+
     return a.durationMinutes - b.durationMinutes;
   });
 
