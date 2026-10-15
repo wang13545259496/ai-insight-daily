@@ -221,6 +221,8 @@ export async function generateTravelPlan(
     hotel: quotes.hotel,
     rooms,
     peakSeason: quoteContext.peakSeason,
+    // 跨城方式对比结果：交通科目据此计价，而不是一律按机票
+    intercityOptions: intercity.options,
   });
 
   // ---------- 5. 行程编排 ----------
@@ -288,6 +290,8 @@ export async function generateTravelPlan(
       rooms,
       peakSeason: quoteContext.peakSeason,
       taxiCost,
+      // 重算时必须带上，否则交通科目会退回按机票计价
+      intercityOptions: base.intercityOptions,
     });
 
     base.itinerary = repriceItinerary(base.itinerary, base.budget);

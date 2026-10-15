@@ -12,6 +12,7 @@
  * C. 预算比「最低可行成本」还低 → 仍给出分配，但 feasible=false 并说明差距
  */
 
+import type { IntercityOption } from "./intercityOptions";
 import type {
   BudgetCategory,
   BudgetCategoryKey,
@@ -214,6 +215,101 @@ export interface BudgetContext {
    * 计入「交通」科目：否则打车支出会全部落在「备用金」里，不够准确。
    */
   taxiCost?: number;
+  /**
+   * 跨城方式对比结果（火车 / 自驾）。
+   *
+   * 有值时「交通」科目改用其中选定的方式计价 —— 否则会出现
+   * 「用户选了高铁，预算却按机票算」的矛盾：实测上海→北京
+   * 机票 ¥700/人 与高铁 ¥553/人 相差 21%，足以影响整个预算分配。
+   */
+  intercityOptions?: IntercityOption[];
+}
+
+/**
+ * 时间折算价值（元/分钟），用于让跨城方式之间可比。
+ *
+ * 取值差异的原因：车上时间的「痛感」不同。
+ *   火车：可以休息、走动、吃东西，时间成本低
+ *   自驾：全程专注驾驶，是净消耗，时间成本高
+ *
+ * 校准（上海→北京，2 人，实测数据）：
+ *   硬卧 21h45m ¥275.5/人 → 1102 + 1305×0.1 = 1233
+ *   高铁  4h33m ¥553/人   → 2212 +  273×0.1 = 2239
+ * 卧铺仍胜出 —— 因为它的总价确实只有高铁的一半。
+ * 这与「列表按枢纽度排序把高铁放前面」不冲突：
+ * 列表回答「哪趟车最合适」，预算回答「这趟行程至少要花多少交通费」，
+ * 后者用最低可行成本更保守，不会给用户虚高的预算占用。
+ */
+const TRAIN_TIME_VALUE_PER_MINUTE = 0.1;
+const DRIVE_TIME_VALUE_PER_MINUTE = 0.4;
+
+/** 预算中选定的跨城方式 */
+export interface ChosenIntercity {
+  /** 方式名，如「高铁」 */
+  label: string;
+  /** 往返总价（已乘人数） */
+  roundTripTotal: number;
+  /** 说明文字，供预算明细展示 */
+  detail: string;
+  /** 是否夕发朝至（可省一晚住宿） */
+  savesNight: boolean;
+}
+
+/**
+ * 从跨城方案中挑选用于预算计价的方式。
+ *
+ * 判据：把各方式的「往返总价 + 时间折算」与同口径的机票对比，取更省的。
+ * 之所以不无条件采用跨城方案：短途线路机票可能更便宜，
+ * 长途自驾的油费也可能高于机票。
+ *
+ * @returns 选中的方式；机票明显更省（差 5% 以上）时返回 null，表示沿用机票
+ */
+export function chooseIntercityForBudget(
+  options: IntercityOption[] | undefined,
+  headcount: number,
+  taxiCost: number,
+  flight: FlightQuote | null,
+): ChosenIntercity | null {
+  if (!Array.isArray(options) || options.length === 0) return null;
+
+  const people = Math.max(1, headcount);
+  let best: { option: IntercityOption; cost: number } | null = null;
+
+  for (const option of options) {
+    // 对比给的是单程单价，预算口径是往返，因此乘 2 再乘人数
+    const roundTrip = option.perPerson * 2 * people;
+
+    const timeValue =
+      option.mode === "drive" ? DRIVE_TIME_VALUE_PER_MINUTE : TRAIN_TIME_VALUE_PER_MINUTE;
+
+    const cost = roundTrip + option.durationMinutes * timeValue;
+
+    if (!best || cost < best.cost) {
+      best = { option, cost };
+    }
+  }
+
+  if (!best) return null;
+
+  const chosen = best.option;
+  const roundTripTotal = chosen.perPerson * 2 * people;
+
+  // 机票更省且差距明显（>5%）时保留机票
+  if (flight) {
+    const flightCost = flight.totalPrice + Math.max(0, taxiCost);
+
+    if (flightCost < roundTripTotal * 0.95) return null;
+  }
+
+  return {
+    label: chosen.label,
+    roundTripTotal,
+    detail:
+      `${chosen.confidence === "live" ? "真实报价" : "估算"}：` +
+      `${chosen.label}往返，人均 ${chosen.perPerson * 2} 元 × ${people} 人`,
+    // 夕发朝至的卧铺可省一晚住宿，明细里说明
+    savesNight: chosen.breakdown.includes("夕发朝至"),
+  };
 }
 
 /**
@@ -247,7 +343,19 @@ function toCategory(
  * feasible 表示预算是否达到该目的地的最低可行成本。
  */
 export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
-  const { total, party, nights, days, style, flight, hotel, rooms, peakSeason, taxiCost } = context;
+  const {
+    total,
+    party,
+    nights,
+    days,
+    style,
+    flight,
+    hotel,
+    rooms,
+    peakSeason,
+    taxiCost,
+    intercityOptions,
+  } = context;
 
   const preset = PRESETS[style];
   const headcount = Math.max(1, party.adults + party.children);
@@ -257,24 +365,38 @@ export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
 
   const diagnoses: string[] = [];
 
-  // ---------- 1. 锁定项：交通与住宿 ----------
-  // 有真实报价就用真实报价；没有报价但不代表没有成本，用估算值占位。
-  const longHaulAmount = flight
-    ? flight.totalPrice
-    : Math.round(FALLBACK_TRANSPORT_PER_PERSON[style] * headcount * seasonFactor);
-
   // 市内打车费由高德驾车方案给出，计入交通科目。
   // 否则这笔支出会全部落在「备用金」里，让备用金失真。
   const taxiAmount = Math.max(0, Math.round(taxiCost ?? 0));
 
+  // ---------- 1. 锁定项：交通与住宿 ----------
+  // 跨城方式对比存在时优先用它计价：否则会出现「用户选了高铁、
+  // 预算却按机票算」的矛盾（实测上海→北京两者差 21%）。
+  // 若机票反而更省，chooseIntercityForBudget 会返回 null，沿用机票。
+  const chosenIntercity = chooseIntercityForBudget(
+    intercityOptions,
+    headcount,
+    taxiAmount,
+    flight,
+  );
+
+  // 有真实报价就用真实报价；没有报价但不代表没有成本，用估算值占位。
+  const longHaulAmount = chosenIntercity
+    ? chosenIntercity.roundTripTotal
+    : flight
+      ? flight.totalPrice
+      : Math.round(FALLBACK_TRANSPORT_PER_PERSON[style] * headcount * seasonFactor);
+
   const transportAmount = longHaulAmount + taxiAmount;
 
   const transportDetail = [
-    flight
-      ? `${flight.confidence === "live" ? "真实报价" : "估算"}：${
-          flight.outbound[0]?.from ?? ""
-        } → ${flight.outbound[0]?.to ?? ""} 往返，单人 ${flight.pricePerAdult} 元`
-      : `未取得机票报价，按 ${preset.label}长途往返人均 ${FALLBACK_TRANSPORT_PER_PERSON[style]} 元估算`,
+    chosenIntercity
+      ? chosenIntercity.detail
+      : flight
+        ? `${flight.confidence === "live" ? "真实报价" : "估算"}：${
+            flight.outbound[0]?.from ?? ""
+          } → ${flight.outbound[0]?.to ?? ""} 往返，单人 ${flight.pricePerAdult} 元`
+        : `未取得机票报价，按 ${preset.label}长途往返人均 ${FALLBACK_TRANSPORT_PER_PERSON[style]} 元估算`,
     taxiAmount > 0 ? `含市内打车约 ${taxiAmount} 元（按里程估算）` : "",
   ]
     .filter(Boolean)
@@ -282,11 +404,22 @@ export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
 
   const hotelNightlyEstimate = Math.round(preset.hotelFloorPerRoomNight * seasonFactor);
 
+  /**
+   * 夕发朝至的卧铺省下一晚住宿。
+   *
+   * 为什么只调整「无报价」分支：有酒店报价时，报价来自按晚查询的
+   * 实时房价（RollingGo 按 checkInDate + 晚数返回），
+   * 实际入住晚数由行程决定，不应在预算里擅自减一晚。
+   * 而没有报价时用的是「档位基准价 × 晚数」，这时减一晚是合理的。
+   */
+  const effectiveNights =
+    chosenIntercity?.savesNight && nights > 0 && !hotel ? Math.max(0, nights - 1) : nights;
+
   const accommodationAmount =
     hotel && nights > 0
       ? hotel.totalPrice
       : nights > 0
-        ? Math.round(hotelNightlyEstimate * nights * rooms)
+        ? Math.round(hotelNightlyEstimate * effectiveNights * rooms)
         : 0;
 
   const accommodationDetail =
@@ -294,7 +427,10 @@ export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
       ? "一日游，无需住宿"
       : hotel
         ? `${hotel.confidence === "live" ? "真实报价" : "估算"}：${hotel.name}，${rooms} 间 × ${nights} 晚`
-        : `未取得住宿报价，按${preset.hotelGrade}约 ${hotelNightlyEstimate} 元/间/晚估算`;
+        : chosenIntercity?.savesNight && nights > 0
+          ? `${preset.hotelGrade}约 ${hotelNightlyEstimate} 元/间/晚 × ${effectiveNights} 晚（${rooms} 间）` +
+            `｜夜车省下一晚住宿，已按 ${effectiveNights} 晚计`
+          : `未取得住宿报价，按${preset.hotelGrade}约 ${hotelNightlyEstimate} 元/间/晚估算`;
 
   // ---------- 2. 弹性科目 ----------
   const floors: Record<FlexibleKey, number> = {
@@ -372,9 +508,11 @@ export function buildBudgetPlan(context: BudgetContext): BudgetPlan {
   }
 
   // ---------- 5. 可行性 ----------
+  // 住宿项用 effectiveNights：夕发朝至的卧铺省下一晚，
+  // 最低可行预算应随之下降，否则会给用户「预算不够」的错误诊断。
   const minimumViable =
     transportAmount +
-    (nights > 0 ? Math.round(hotelNightlyEstimate * nights * rooms) : 0) +
+    (nights > 0 ? Math.round(hotelNightlyEstimate * effectiveNights * rooms) : 0) +
     floors.food +
     floors.activities;
 
