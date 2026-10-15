@@ -17,6 +17,7 @@ import { getTravelAIModel, isTravelAIEnabled, travelChat } from "./ai";
 import { describeError } from "./amadeus";
 import { createLiveQuoteProvider } from "./liveQuoteProvider";
 import { compareIntercityOptions } from "./intercityOptions";
+import { fetchDestinationPois } from "./poi";
 import { isRollingGoConfigured } from "./rollinggo";
 import { isVariflightConfigured } from "./variflight";
 import { enrichItinerary, haversineMeters, isAmapConfigured, resolveCityPoint } from "./amap";
@@ -72,6 +73,7 @@ export interface GeneratePlanResult {
 export type PlanProgressStage =
   | "validate"
   | "quotes"
+  | "discovery"
   | "itinerary"
   | "map"
   | "layout"
@@ -208,6 +210,22 @@ export async function generateTravelPlan(
 
   warnings.push(...intercity.warnings);
 
+  // 目的地真实地点候选：景点与餐厅。作为「模型从真实地点里挑」的依据，
+  // 取代此前完全依赖训练知识编地名的方式。
+  // 放在行程编排之前，这样布局重排的二次生成也能用上同一批候选。
+  onProgress("discovery", "正在检索目的地景点与餐厅");
+
+  const discovery = await fetchDestinationPois(destination.input);
+
+  warnings.push(...discovery.warnings);
+
+  if (discovery.sights.length > 0) {
+    warnings.push(
+      `已检索到 ${destination.input} 的 ${discovery.sights.length} 个景点、` +
+        `${discovery.restaurants.length} 家餐厅作为候选，行程优先从这些真实地点中选择`,
+    );
+  }
+
   // ---------- 4. 预算分配 ----------
   // 市内打车费要等地图阶段才知道，因此预算先按长途交通算，
   // 地图增强后再用真实打车费修正（见 applyMapEnrichment 之后的修正步骤）。
@@ -234,6 +252,7 @@ export async function generateTravelPlan(
     quotes,
     budget,
     intercityOptions: intercity.options,
+    discovery: { sights: discovery.sights, restaurants: discovery.restaurants },
     overview: "",
     itinerary: [],
     checklist: [],

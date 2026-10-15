@@ -142,14 +142,14 @@ export interface AmapEnrichment {
 // HTTP
 // ============================================================
 
-interface AmapResponse {
+export interface AmapResponse {
   status?: string;
   info?: string;
   infocode?: string;
 }
 
 /** 带超时的 GET，返回解析后的 JSON；失败抛出便于上层统一降级 */
-async function amapGet<T extends AmapResponse>(
+export async function amapGet<T extends AmapResponse>(
   path: string,
   params: Record<string, string>,
 ): Promise<T> {

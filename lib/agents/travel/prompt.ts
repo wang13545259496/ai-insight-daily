@@ -7,6 +7,7 @@
  */
 
 import { getCategoryLabels, getStylePreset } from "./budget";
+import { describePoisForPrompt } from "./poi";
 import type { BudgetPlan, TravelPlan } from "./types";
 
 /** 模型要求的输出结构说明（与解析层的宽校验对应） */
@@ -38,7 +39,6 @@ const OUTPUT_CONTRACT = `{
 
 /** 活动类型枚举，供模型选择 */
 const ACTIVITY_KINDS = "sight（景点）、meal（餐饮）、transport（交通）、experience（体验项目）、rest（休息）";
-
 /**
  * 构建系统提示词。
  * 强调三件事：天数必须精确、金额不要计算、内容要可执行。
@@ -171,6 +171,34 @@ export function buildUserPrompt(plan: TravelPlan, dates: string[]): string {
 
   if (quotes.warnings.length > 0) {
     sections.push(`## 询价提示\n${quotes.warnings.map((item) => `- ${item}`).join("\n")}`);
+  }
+
+  // ---------- 真实景点与餐厅候选 ----------
+  // 这段是「让模型从真实地点里挑」的关键：没有它时模型凭训练知识编地名，
+  // 会出现地点不存在、门票价格不对、没有坐标因而无法算通勤三类问题。
+  if (
+    plan.discovery &&
+    (plan.discovery.sights.length > 0 || plan.discovery.restaurants.length > 0)
+  ) {
+    const { sights, restaurants } = plan.discovery;
+
+    sections.push(
+      [
+        "## 目的地真实地点候选（来自高德检索，必须优先从中选择）",
+        "",
+        describePoisForPrompt({ sights, restaurants, warnings: [] }),
+        "",
+        "### 选择要求",
+        "1. 景点与餐厅**必须从上表中选取**，名称逐字照抄（含括号与分店名），不要改写或自创",
+        "2. 每个地点已标注所在区域；把同一天的活动安排在同一区域，避免跨区奔波",
+        "3. 景点未提供门票价格 —— 高德的景点 POI 不含该字段。",
+        "   请按常识给出合理门票，并在 description 里写明「门票约 X 元（估算）」；",
+        "   公园、街区、步道这类免费场所请明确写「免门票」",
+        "4. 餐厅已标注人均消费，请按预算档位挑选，不要一律选最贵的",
+        `5. 候选共 ${sights.length} 个景点、${restaurants.length} 家餐厅；` +
+          "天数较多时可把同区域地点分散到不同日子",
+      ].join("\n"),
+    );
   }
 
   sections.push(

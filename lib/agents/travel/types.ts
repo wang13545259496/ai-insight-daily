@@ -8,6 +8,7 @@
  */
 
 import type { IntercityOption } from "./intercityOptions";
+import type { PoiItem } from "./poi";
 
 /** 预算档位，决定分配权重与住宿档次 */
 export type TravelStyle = "budget" | "comfort" | "premium" | "luxury";
@@ -277,5 +278,22 @@ export interface TravelPlan {
    * 国内中长途的实际主力是高铁，此前完全没有覆盖。
    */
   intercityOptions?: IntercityOption[];
+  /**
+   * 目的地的真实景点与餐厅候选（高德 POI 检索结果）。
+   *
+   * 存在的意义：逐日行程里的地点原本完全由模型凭训练知识写出，
+   * 会出现三类问题 —— 地点不存在、门票价格不符、没有坐标
+   * 因而无法参与通勤计算与布局校验。检索真实 POI 作为候选后，
+   * 模型从真实地点里挑，名称、区域、评分、坐标都可信。
+   *
+   * 注意门票价的现实限制：高德**不提供景点门票价格**
+   * （实测杭州 20 条景点全部无该字段，而餐厅 20/20 条有人均价）。
+   * 因此景点只给名称/区域/评分/坐标，门票金额仍由模型估算、
+   * 由预算的门票科目兜底。
+   */
+  discovery?: {
+    sights: PoiItem[];
+    restaurants: PoiItem[];
+  };
 }
 
