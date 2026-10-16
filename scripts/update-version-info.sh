@@ -42,12 +42,21 @@ COMMIT=$(git rev-parse --short HEAD)
 COMMIT_DATE=$(git log -1 --format=%cd --date=short)
 NOW=$(date '+%Y-%m-%d %H:%M:%S')
 
-# ---------- 读取文档里记录的版本 ----------
+# ---------- 读取文档里记录的代码状态 ----------
+#
+# 同时接受两种字段标签：
+#   「记录的代码状态」（当前）与「项目 commit」（旧版）。
+#
+# 为什么要兼容旧标签：这个字段名改过一次，而文档与脚本是分开维护的，
+# 改标签时若只改了一边，脚本就会报「未找到版本标记」。
+# 实际发生过一次，排查花了不少时间。兼容两种写法后，
+# 无论文档处于哪个版本都能正常读取。
+#
 # 用 awk 按 | 分列取值。
 # 不用 sed 's/.*| *//' —— .* 是贪婪的，会一路匹配到本行最后一个 |，
-# 导致提取结果为空（这个坑实际踩过一次）。
+# 导致提取结果为空（这个坑也实际踩过）。
 RECORDED=$(sed -n "/$START_MARK/,/$END_MARK/p" "$DOC" \
-  | awk -F'|' '/commit \|/ {gsub(/ /, "", $3); print $3; exit}')
+  | awk -F'|' '/记录的代码状态|commit/ && !/AUTO-UPDATE/ {gsub(/ /, "", $3); print $3; exit}')
 
 if [ -z "$RECORDED" ]; then
   echo "✗ 文档中未找到版本标记，请确认 $START_MARK 与 $END_MARK 成对存在"
