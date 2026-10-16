@@ -65,3 +65,6 @@ _backup/
 
 # 运行日志（由服务与定时任务生成，不入库）
 logs/
+
+# 交接包暂存目录（由 update-ai-handover.sh 每次重建，不入库）
+AI-HANDOVER/
