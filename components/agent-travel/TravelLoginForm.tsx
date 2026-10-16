@@ -45,7 +45,7 @@ export default function TravelLoginForm({ next }: { next: string }) {
 
       // 用整页跳转而非 router.push：需要在携带新 Cookie 的前提下
       // 重新经过 Proxy 校验，整页导航最直接可靠。
-      window.location.href = data.next || "/travel";
+      window.location.href = data.next || "/agent-travel";
     } catch {
       setError("网络异常，请重试");
       setPending(false);

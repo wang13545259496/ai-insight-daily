@@ -1,7 +1,7 @@
 /**
  * 旅行方案展示组件（服务端组件）。
  *
- * 被两处复用：/travel 生成结果区、/travel/[id] 分享页。
+ * 被两处复用：/agent-travel 生成结果区、/agent-travel/[id] 分享页。
  * 纯展示，不含交互状态，因此不需要 "use client"。
  */
 
@@ -520,7 +520,7 @@ function PlanHeader({ plan, planId }: { plan: TravelPlan; planId?: number | null
         {planId != null && (
           <p className="text-xs text-gray-500">
             方案编号 <span className="font-mono text-gray-400">#{planId}</span> · 分享链接{" "}
-            <Link href={`/travel/${planId}`} className="text-sky-400 hover:text-sky-300">
+            <Link href={`/agent-travel/${planId}`} className="text-sky-400 hover:text-sky-300">
               /travel/{planId}
             </Link>
           </p>

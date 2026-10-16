@@ -23,7 +23,7 @@ export default function TravelLogoutButton() {
       // 不会出现「以为退出了其实还在登录态」的情况
     }
 
-    window.location.href = "/travel/login";
+    window.location.href = "/agent-travel/login";
   }
 
   return (

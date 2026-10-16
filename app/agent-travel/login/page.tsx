@@ -1,11 +1,11 @@
 import Link from "next/link";
 
-import TravelLoginForm from "@/components/travel/TravelLoginForm";
+import TravelLoginForm from "@/components/agent-travel/TravelLoginForm";
 import { isTravelProtected } from "@/lib/travel-access";
 
 /**
  * 旅行模块登录页。
- * /travel/login?next=/travel/41
+ * /agent-travel/login?next=/agent-travel/41
  *
  * 由 proxy.ts 在未通过口令校验时重定向到这里。
  * 页面本身必须是公开的，否则会重定向到自己形成死循环 ——
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 function safeNext(value: string | string[] | undefined): string {
   const raw = Array.isArray(value) ? value[0] : value;
 
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/travel";
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/agent-travel";
 
   return raw;
 }
@@ -35,7 +35,7 @@ export default async function TravelLoginPage({
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col items-center justify-center px-6 py-10">
       <div className="w-full max-w-sm rounded-lg border border-gray-800 bg-gray-950/50 p-6">
-        <h1 className="text-lg font-bold text-white">旅行规划</h1>
+        <h1 className="text-lg font-bold text-white">AI 出行管家</h1>
 
         <p className="mt-2 text-xs leading-relaxed text-gray-400">
           {protectedMode

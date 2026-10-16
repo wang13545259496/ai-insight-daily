@@ -50,8 +50,8 @@ const navItems = [
   },
 
   {
-    name: "旅行规划",
-    href: "/travel",
+    name: "AI 出行管家",
+    href: "/agent-travel",
   },
 ];
 

@@ -28,11 +28,11 @@ function isTestOnlyRoute(pathname: string): boolean {
   );
 }
 
-/** 旅行登录页路径 */
-const TRAVEL_LOGIN_PATH = "/travel/login";
+/** 出行管家登录页路径 */
+const TRAVEL_LOGIN_PATH = "/agent-travel/login";
 
 /**
- * 是否属于旅行模块的页面（含登录页）。
+ * 是否属于出行管家的页面（含登录页）。
  *
  * 不再用于拦截，只用于判断「是否需要检查续期」——
  * 登录页本身不必续期（那时还没登录）。
@@ -40,7 +40,7 @@ const TRAVEL_LOGIN_PATH = "/travel/login";
 function isTravelPage(pathname: string): boolean {
   if (pathname === TRAVEL_LOGIN_PATH) return false;
 
-  return pathname === "/travel" || pathname.startsWith("/travel/");
+  return pathname === "/agent-travel" || pathname.startsWith("/agent-travel/");
 }
 
 export async function proxy(request: NextRequest) {
@@ -104,11 +104,11 @@ export const config = {
   matcher: [
     // 接口层：调试接口的生产环境保护
     "/api/:path*",
-    // 旅行页面：访问口令。刻意不匹配 /api/travel ——
+    // 出行管家页面：已登录时续期 Cookie。刻意不匹配 /api/travel ——
     // 那些接口在各自路由内校验，因为生成行程是流式响应，
     // 在 Proxy 里统一返回 401 反而更难处理。
-    "/travel",
-    "/travel/:path*",
+    "/agent-travel",
+    "/agent-travel/:path*",
   ],
 };
 

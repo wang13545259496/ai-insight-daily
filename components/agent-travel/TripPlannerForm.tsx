@@ -86,7 +86,7 @@ function isAuthRequired(payload: StreamResult): boolean {
 
 /** 跳到登录页，并记住回来后要继续的动作 */
 function goToLogin(): void {
-  window.location.href = `/travel/login?next=${encodeURIComponent("/travel")}`;
+  window.location.href = `/agent-travel/login?next=${encodeURIComponent("/agent-travel")}`;
 }
 
 /**

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import type { Metadata } from "next";
 
-import PlanView from "@/components/travel/PlanView";
+import PlanView from "@/components/agent-travel/PlanView";
 import { getPlanById } from "@/lib/agents/travel/data";
 
 /** 依赖数据库，按请求渲染 */
@@ -64,8 +64,8 @@ export default async function TravelPlanDetailPage({
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
       <nav className="mb-6 flex items-center gap-2 text-xs text-gray-500">
-        <Link href="/travel" className="hover:text-sky-400">
-          旅行规划
+        <Link href="/agent-travel" className="hover:text-sky-400">
+          AI 出行管家
         </Link>
         <span>/</span>
         <span className="text-gray-400">方案 #{numericId}</span>
@@ -75,7 +75,7 @@ export default async function TravelPlanDetailPage({
 
       <div className="mt-10 flex flex-wrap gap-3 border-t border-gray-800 pt-6">
         <Link
-          href="/travel"
+          href="/agent-travel"
           className="rounded-lg border border-gray-800 px-4 py-2 text-sm text-gray-300 transition hover:border-sky-500/40 hover:text-white"
         >
           再规划一份

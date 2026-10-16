@@ -43,6 +43,32 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+
+  /**
+   * 旧的旅行模块路径跳到新路径。
+   *
+   * 背景：「旅行规划」改名为「AI 出行管家」，路径由 /travel 改为
+   * /agent-travel（沿用站内 /agent-score、/agent-map 的命名规律）。
+   * 没有这层跳转，之前分享出去的方案链接与用户书签都会失效。
+   *
+   * 用 permanent: true（308）：路径变更是永久的，且 308 会保留请求方法。
+   * 通配符写法用于覆盖 /travel/41、/travel/login 这类子路径，
+   * 文档特别提醒 :path* 前的斜杠不能省，否则会被当作字面量。
+   */
+  async redirects() {
+    return [
+      {
+        source: "/travel",
+        destination: "/agent-travel",
+        permanent: true,
+      },
+      {
+        source: "/travel/:path*",
+        destination: "/agent-travel/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

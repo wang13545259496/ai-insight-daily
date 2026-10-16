@@ -3,21 +3,21 @@ import { Suspense } from "react";
 
 import type { Metadata } from "next";
 
-import TripPlannerForm from "@/components/travel/TripPlannerForm";
+import TripPlannerForm from "@/components/agent-travel/TripPlannerForm";
 
 import { isRollingGoConfigured } from "@/lib/agents/travel/rollinggo";
 import { isVariflightConfigured } from "@/lib/agents/travel/variflight";
 import { summaryOf } from "@/lib/agents/travel/summary";
 import { isTravelProtected } from "@/lib/travel-access";
 import { isRequestAuthed } from "@/lib/travel-access-server";
-import TravelLogoutButton from "@/components/travel/TravelLogoutButton";
+import TravelLogoutButton from "@/components/agent-travel/TravelLogoutButton";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
 import { getTravelAIModel, isTravelAIEnabled } from "@/lib/agents/travel/ai";
 
 export const metadata: Metadata = {
-  title: "旅行规划",
+  title: "AI 出行管家",
   description:
     "输入出发地、目的地、去返程日期、人数与预算，自动生成含交通、住宿、餐饮与逐日行程的完整旅行方案。",
 };
@@ -161,7 +161,7 @@ async function HistoryList() {
         return (
           <Link
             key={plan.id}
-            href={`/travel/${plan.id}`}
+            href={`/agent-travel/${plan.id}`}
             className="group rounded-lg border border-gray-800 bg-gray-950/40 p-4 transition hover:border-sky-500/40"
           >
             <div className="flex items-center justify-between gap-2">
@@ -230,7 +230,7 @@ export default async function TravelPage() {
       <div className="rounded-lg border border-gray-800 bg-gray-950/40 p-4">
         <p className="text-xs text-gray-400">
           历史方案仅登录后可见。
-          <Link href="/travel/login?next=%2Ftravel" className="ml-1 text-sky-400 hover:text-sky-300">
+          <Link href="/agent-travel/login?next=%2Fagent-travel" className="ml-1 text-sky-400 hover:text-sky-300">
             输入口令
           </Link>
         </p>
@@ -242,7 +242,7 @@ export default async function TravelPage() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">旅行规划</h1>
+          <h1 className="text-3xl font-bold text-white">AI 出行管家</h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
             输入出发地、目的地、去返程日期、同行人数与总预算，自动生成一份完整方案：往返交通、住宿、
             餐饮与门票的预算分配，以及逐日可执行的行程安排。金额由确定性算法计算，行程内容由
@@ -260,7 +260,7 @@ export default async function TravelPage() {
             <TravelLogoutButton />
           ) : (
             <Link
-              href="/travel/login?next=%2Ftravel"
+              href="/agent-travel/login?next=%2Fagent-travel"
               className="inline-flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-sky-200"
             >
               登录
