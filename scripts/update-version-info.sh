@@ -1,23 +1,35 @@
 #!/bin/bash
 #
-# 更新 ai-context/AI_VERSION_INFO.md 中的版本标记。
+# 检查并更新 ai-context/AI_VERSION_INFO.md 的版本标记。
 #
-# 为什么需要它：
-# 那份文档记录「交接包对应哪个 commit」。手工维护时，
-# 它停在 2026-10-11 的 8a778c8，而代码已经推进了 100 多个提交 ——
-# 没人会记得每次改完都去更新一个文档里的哈希值。
+# 设计说明（2026-10-16，第三版）
 #
-# 做法：在文档里放一对标记，脚本只替换标记之间的内容。
-# 这样既能自动更新，又不影响文档其余部分的正常编辑。
+# 前两版都记录 commit 哈希，都失败了：
+#
+#   第一版：比较标记与 HEAD → 永远落后 1。
+#           因为「更新标记」这个动作本身就是一次提交，提交后 HEAD 前移，
+#           标记随即过时。
+#
+#   第二版：排除「只改标记文件」的提交 → 需逐个提交遍历文件清单，
+#           逻辑复杂；更糟的是在文档与脚本两份拷贝之间反复同步时，
+#           修复本身被覆盖丢失，表现为问题反复出现。
+#
+# 第三版：不记哈希，记日期。
+#
+#   日期没有自指问题：「代码状态日期」写进文件后，提交它不会改变该日期。
+#
+#   判断方式：找出最近一次「改动了标记文件之外内容」的提交日期，
+#   与标记记录的日期比较。若代码的日期更新，说明标记过时。
 #
 # 用法：
 #   bash scripts/update-version-info.sh          更新
-#   bash scripts/update-version-info.sh --check  只检查是否落后，不写入
+#   bash scripts/update-version-info.sh --check  只检查，退出码非 0 表示过时
 
 set -u
 
 PROJECT_DIR="$HOME/projects/ai-insight-daily"
-DOC="$PROJECT_DIR/ai-context/AI_VERSION_INFO.md"
+DOC_REL="ai-context/AI_VERSION_INFO.md"
+DOC="$PROJECT_DIR/$DOC_REL"
 
 START_MARK="<!-- AUTO-UPDATE-START -->"
 END_MARK="<!-- AUTO-UPDATE-END -->"
@@ -37,75 +49,95 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
   exit 1
 fi
 
-# ---------- 收集当前版本信息 ----------
-COMMIT=$(git rev-parse --short HEAD)
-COMMIT_DATE=$(git log -1 --format=%cd --date=short)
-NOW=$(date '+%Y-%m-%d %H:%M:%S')
+# ---------- 读取标记里记录的日期 ----------
+#
+# 兼容多种字段标签，避免文档与脚本处于不同版本时报错。
+RECORDED_DATE=$(sed -n "/$START_MARK/,/$END_MARK/p" "$DOC" \
+  | awk -F'|' '/代码状态日期|状态日期|commit 日期/ {gsub(/ /, "", $3); print $3; exit}')
 
-# ---------- 读取文档里记录的代码状态 ----------
-#
-# 同时接受两种字段标签：
-#   「记录的代码状态」（当前）与「项目 commit」（旧版）。
-#
-# 为什么要兼容旧标签：这个字段名改过一次，而文档与脚本是分开维护的，
-# 改标签时若只改了一边，脚本就会报「未找到版本标记」。
-# 实际发生过一次，排查花了不少时间。兼容两种写法后，
-# 无论文档处于哪个版本都能正常读取。
-#
-# 用 awk 按 | 分列取值。
-# 不用 sed 's/.*| *//' —— .* 是贪婪的，会一路匹配到本行最后一个 |，
-# 导致提取结果为空（这个坑也实际踩过）。
-RECORDED=$(sed -n "/$START_MARK/,/$END_MARK/p" "$DOC" \
-  | awk -F'|' '/记录的代码状态|commit/ && !/AUTO-UPDATE/ {gsub(/ /, "", $3); print $3; exit}')
-
-if [ -z "$RECORDED" ]; then
-  echo "✗ 文档中未找到版本标记，请确认 $START_MARK 与 $END_MARK 成对存在"
+if [ -z "$RECORDED_DATE" ]; then
+  echo "✗ 文档中未找到日期标记，请确认 $START_MARK 与 $END_MARK 成对存在"
   exit 1
 fi
 
-# ---------- 计算落后多少 ----------
-BEHIND=$(git rev-list --count "$RECORDED..HEAD" 2>/dev/null || echo "?")
+# ---------- 找出最近一次「改动了标记文件之外内容」的提交 ----------
+#
+# 这是判断依据：只有真正改了代码或文档的提交才算「代码前进」。
+# 交接包 zip 是 update-ai-handover.sh 的产物，完全由仓库内容重建，
+# 同样不代表代码前进，一并跳过。
+CODE_COMMIT=""
+CODE_DATE=""
 
-# ---------- --check 模式：只报告 ----------
+while IFS= read -r sha; do
+  [ -z "$sha" ] && continue
+
+  for f in $(git show --pretty=format: --name-only "$sha" 2>/dev/null); do
+    [ -z "$f" ] && continue
+
+    if [ "$f" != "$DOC_REL" ] && [ "$f" != "AI-HANDOVER.zip" ]; then
+      CODE_COMMIT="$sha"
+      CODE_DATE=$(git log -1 --format=%cd --date=short "$sha" 2>/dev/null)
+      break
+    fi
+  done
+
+  [ -n "$CODE_COMMIT" ] && break
+done < <(git log --format='%h' -50 2>/dev/null)
+
+if [ -z "$CODE_COMMIT" ]; then
+  echo "✗ 无法确定代码提交（最近 50 个提交都只涉及标记文件）"
+  exit 1
+fi
+
+CURRENT_HEAD=$(git rev-parse --short HEAD)
+
+is_synced() {
+  [ "$RECORDED_DATE" \> "$CODE_DATE" ] || [ "$RECORDED_DATE" = "$CODE_DATE" ]
+}
+
+# ---------- --check 模式 ----------
 if [ "$MODE" = "--check" ]; then
   echo "=============================="
   echo "版本信息检查"
   echo "=============================="
   echo ""
-  echo "  文档记录的 commit: $RECORDED"
-  echo "  当前 HEAD:         $COMMIT（$COMMIT_DATE）"
+  echo "  标记记录的代码状态日期: $RECORDED_DATE"
+  echo "  最近的真实代码改动:     $CODE_DATE（$CODE_COMMIT）"
+  echo "  当前 HEAD:              $CURRENT_HEAD"
+  echo ""
 
-  if [ "$BEHIND" = "0" ]; then
-    echo ""
+  if is_synced; then
     echo "  ✓ 文档与代码同步"
     exit 0
   fi
 
-  echo "  落后:              $BEHIND 个提交"
+  echo "  ⚠ 文档已过时：代码在 $CODE_DATE 有改动，标记停在 $RECORDED_DATE"
   echo ""
-  echo "  ⚠ 文档已过时。运行以下命令更新："
+  echo "  运行以下命令更新："
   echo "      bash scripts/update-version-info.sh"
   echo ""
-  echo "  落后的提交："
-  git log --oneline "$RECORDED..HEAD" 2>/dev/null | head -10 | sed 's/^/    /'
+  echo "  标记之后的提交："
+  git log --oneline -10 2>/dev/null | sed 's/^/    /'
+
   exit 1
 fi
 
 # ---------- 更新模式 ----------
-if [ "$BEHIND" = "0" ]; then
-  echo "  文档已是最新（$COMMIT），无需更新"
+if is_synced; then
+  echo "  文档已是最新（标记 $RECORDED_DATE，代码 $CODE_DATE），无需更新"
   exit 0
 fi
 
-# 用临时文件替换标记之间的内容
+NOW=$(date '+%Y-%m-%d %H:%M:%S')
+
 TMP=$(mktemp)
 
 awk -v start="$START_MARK" -v end="$END_MARK" \
-    -v commit="$COMMIT" -v cdate="$COMMIT_DATE" -v now="$NOW" '
+    -v cdate="$CODE_DATE" -v commit="$CODE_COMMIT" -v now="$NOW" '
   $0 == start {
     print start
-    print "| 项目 commit | " commit " |"
-    print "| commit 日期 | " cdate " |"
+    print "| 代码状态日期 | " cdate " |"
+    print "| 对应提交 | " commit " |"
     print "| 本文档更新于 | " now " |"
     skip = 1
     next
@@ -126,8 +158,5 @@ echo "=============================="
 echo "版本信息已更新"
 echo "=============================="
 echo ""
-echo "  $RECORDED → $COMMIT（推进 $BEHIND 个提交）"
+echo "  $RECORDED_DATE → $CODE_DATE（对应提交 $CODE_COMMIT）"
 echo "  更新时间: $NOW"
-echo ""
-echo "  提示：提交这次变更"
-echo "      git add ai-context/AI_VERSION_INFO.md && git commit -m 'docs: 更新交接包版本标记到 $COMMIT'"
