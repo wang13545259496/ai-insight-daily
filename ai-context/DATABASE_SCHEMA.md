@@ -709,3 +709,122 @@ prisma/migrations/20261015120000_add_tripplan_fingerprint
 
 fingerprint 允许为 NULL。SQLite 唯一索引允许多个 NULL，
 因此升级前写入的历史记录不会与新记录冲突。
+
+
+================================
+# 旅行模块：不入库的部分（2026-10-16 补充）
+
+为什么单列一节：
+
+旅行模块有两块设计与数据库无关，但维护时容易误以为「找不到表就是没实现」——
+访问控制与行程单导出都不持久化任何数据，特此说明。
+
+## 访问控制：无状态，不建表
+
+实现：
+
+lib/travel-access.ts、lib/travel-access-server.ts、proxy.ts
+
+设计：
+
+不引入会话表。访问令牌由 HMAC 派生 ——
+以 TRAVEL_PASSWORD 为密钥、固定消息为内容做 SHA-256，取十六进制结果。
+存于 Cookie travel_access。
+
+为什么这样设计：
+
+1. 个人项目不值得引入会话存储与其清理逻辑。
+2. 服务端不存 session，重启后登录态不失效。
+3. Cookie 里放的是派生值而非口令，泄露也无法反推口令。
+
+有效期：
+
+30 天，且每次访问自动续期（空闲 30 天才需重新登录）。
+续期在 proxy.ts 里完成，不改令牌值、只刷新过期时间。
+
+口令来源：
+
+环境变量 TRAVEL_PASSWORD。未设置时该模块完全公开 ——
+这样本地开发与首次部署不会因为漏配变量而把自己锁在门外。
+
+访问模型（三层，各有分工）：
+
+页面公开 —— 任何人都能看表单与页面。
+生成与读取接口需登录 —— 返回 401 加 code: TRAVEL_AUTH_REQUIRED。
+历史方案列表仅登录可见 —— 服务端按登录态决定是否查库。
+
+第三条尤其要注意：
+
+若照常查询再用 CSS 隐藏，用户的行程记录已经随 HTML 下发，等于没有保护。
+
+## 行程单导出：即时生成，不落盘
+
+实现：
+
+lib/agents/travel/export.ts —— 组装内容
+lib/agents/travel/exportDocx.ts —— 生成 Word
+lib/agents/travel/exportImages.ts —— 取逐日路线图
+
+路由：
+
+app/api/travel/[id]/download/route.ts
+
+不建表的原因：
+
+文档由 planJson 即时渲染，没有需要独立保存的状态。
+每次请求都从 TripPlan 读取后重新生成。
+
+三种导出模式（由查询参数控制）：
+
+mode=full —— 默认，完整版
+mode=compact —— 精简版，去掉行前准备与数据说明
+mode=day 加 day=N —— 单日版
+maps=0 —— 关闭路线图嵌入
+
+为什么导出 Word 而不是 PDF：
+
+PDF 方案必须嵌入中文字体（中文子集通常 10MB 以上），
+而 Word 文档由阅读端提供字体，成品仅十几 KB 且可编辑。
+
+## 路线图为什么不在数据库里
+
+逐日路线图（真实道路折线）存于 TripPlan.planJson 的 dayRoutePolylines 字段，
+不单独建表。取图时由服务端向高德实时请求后嵌入文档，
+URL 与高德 Key 都不写入文档 —— 文档会被转发，写进去等于泄露 Key。
+
+## 关于 /api/travel 路径未改名的说明
+
+出行管家模块的页面路径已由 /travel 改为 /agent-travel，
+但接口路径 /api/travel 有意保留未改：
+
+它是内部实现细节，改动会牵动多处 fetch 且无外部收益。
+旧页面路径通过 next.config.ts 的 308 跳转保留可用。
+
+
+================================
+# 数据量快照（2026-10-16 实测）
+
+用途：
+
+判断数据是否正常增长的基线。若某表数量长期不增，说明对应流水线可能中断。
+
+表名与记录数：
+
+Source 35
+News 1668
+NewsEvent 31
+IndustryHotspot 5
+IndustryTrend 40
+DailyReport 10
+Investment 3
+TripPlan 24
+PageView 474
+
+数据库文件大小：
+
+prisma/dev.db 约 8.7 MB
+
+说明：
+
+PageView 记录访问统计，增长最快。
+Investment 只有 3 条属于正常 —— 该模块要求证据完整度达标才收录，宁少不滥。

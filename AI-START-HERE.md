@@ -2,75 +2,56 @@
 
 > **新会话请先读完这份文件**，再动手改任何东西。
 >
-> 这份文档记录的是「怎么在这个项目上安全工作」——
-> 命令、约定、以及过去踩过并付出代价的坑。
-> 架构与业务设计见 `ai-context/` 目录；故障重建见 `RECOVERY.md`。
+> 本文档只写**别处没有的内容**：在这个项目上工作的方式、当前真实状态、
+> 以及过去付出过代价的错误。项目是什么、怎么部署、架构如何，
+> 请看下面的指引表，本文不重复。
 
 ---
 
-## 一、项目是什么
+## 零、该读哪些文档
 
-**AI Insight Daily** —— AI 资讯与 Agent 生态平台。
+**按这个顺序读，不要跳。** 前四份是理解项目，第五份是本文档。
 
-自托管在**一台 Windows 电脑上的 WSL2 Ubuntu** 里，通过 Cloudflare 隧道对外提供服务。
+| # | 文档 | 读它是为了知道 |
+| --- | --- | --- |
+| 1 | [`ai-context/AI_MASTER_INDEX.md`](./ai-context/AI_MASTER_INDEX.md) | 交接文档体系的全貌与索引 |
+| 2 | [`ai-context/ARCHITECTURE.md`](./ai-context/ARCHITECTURE.md) | 技术栈、部署拓扑、数据流、外部依赖 |
+| 3 | [`ai-context/DEPLOYMENT.md`](./ai-context/DEPLOYMENT.md) | 运维操作、构建流程、开机自启、定时任务 |
+| 4 | [`ai-context/DATABASE_SCHEMA.md`](./ai-context/DATABASE_SCHEMA.md) | 15 张表的结构与数据量基线 |
+| 5 | **本文档** | 工作方式、当前状态、历史教训 |
 
-```
-浏览器 ──HTTPS──▶ Cloudflare ──加密隧道──▶ cloudflared
-                                              ↓
-                                          nginx :80
-                                              ↓
-                                       Next.js :3000（PM2 管理）
-                                              ↓
-                                      Prisma ──▶ SQLite
-```
+**遇到故障时**另读 [`ai-context/AI_TROUBLESHOOTING_GUIDE.md`](./ai-context/AI_TROUBLESHOOTING_GUIDE.md)
+—— 那份手册包含实测案例（高德 QPS 限流的复现数据、地理编码越界、
+天气接口改版等），是排查问题的第一手材料。
 
-| 项 | 值 |
-| --- | --- |
-| 域名 | aibiliai.com |
-| 项目路径 | `~/projects/ai-insight-daily` |
-| 代码仓库 | `git@github.com:wang13545259496/ai-insight-daily.git`（私有） |
-| 技术栈 | Next.js 16.3.5（App Router）· React 19 · Prisma 6 · SQLite · TypeScript 5.9 |
-| Node | v22.x（`next.config.ts` 与依赖按此版本） |
-| 进程管理 | PM2，进程名 `ai-insight-daily` |
-| 数据库 | `prisma/dev.db`（SQLite，约 8.5 MB） |
-
-### 关键路径
-
-| 用途 | 位置 |
-| --- | --- |
-| 环境变量 | `~/projects/ai-insight-daily/.env.local`（gitignored，**没有备份**，见 `RECOVERY.md`） |
-| nginx 站点配置 | `/etc/nginx/sites-available/ai-insight-daily` |
-| 隧道凭据 | `/etc/cloudflared/token`（root 权限） |
-| 应用日志 | `pm2 logs ai-insight-daily` |
-| 备份日志 | `logs/db-backup.log` |
-| 数据库异地备份 | GitHub 的 `db-backup` 分支（孤儿分支） |
+**电脑损坏需要重建时**读 [`RECOVERY.md`](./RECOVERY.md)。
 
 ---
 
-## 二、改动的工作流程
+## 一、改动的标准流程
 
-**这个项目有一套必须遵守的验证流程。** 跳过它曾多次导致「代码改了但线上没生效」或「线上被打挂」。
-
-### 标准循环
+**这个项目有一套必须遵守的验证流程。** 跳过它曾多次导致
+「代码改了但线上没生效」或「线上被打挂」。
 
 ```bash
 cd ~/projects/ai-insight-daily
 
 # 1. 改代码
+
 # 2. 类型检查（最快暴露问题）
 npx tsc --noEmit
 
-# 3. 跑相关测试
-npx tsx --test lib/agents/travel/*.test.ts     # 只跑改动相关的
-npx tsx --test lib/agents/travel/*.test.ts lib/ranking/*.test.ts lib/*.test.ts   # 跑全部（460 项）
+# 3. 跑测试
+npx tsx --test lib/agents/travel/*.test.ts lib/ranking/*.test.ts lib/*.test.ts
+# 当前 460 项全通过
 
 # 4. 构建（约 48 秒）
 npm run build
 
-# 5. 重启
+# 5. 重启（改了环境变量必须加 --update-env）
 pm2 restart ai-insight-daily --update-env
 
-# 6. 实测验证（★ 最容易跳过，也最重要）
+# 6. ★ 实测验证
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 ```
 
@@ -78,19 +59,20 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 
 **「代码正确」不等于「线上生效」。** 本项目实际发生过：
 
-- 源码和构建产物都有新代码，但服务跑的是旧版本 → 需要重建 + 重启
-- 构建失败但服务仍在跑旧版本 → 用户看到的是旧行为，而 `tsc` 已通过
-- 改了文案但被反向同步覆盖 → 线上显示旧文案
+- 源码与构建产物都有新代码，但服务跑的是旧版本
+- 构建失败而服务仍在跑旧版本 —— 用户看到旧行为，而 `tsc` 已通过
+- 改了文案但被反向同步覆盖，线上显示旧文案
 
-**验证方式**：改完必须用 `curl` 实际请求页面/接口，检查响应内容里有没有新东西。不要只看构建日志。
+**验证方法**：用 `curl` 实际请求页面或接口，检查响应内容里有没有新东西。
+不要只看构建日志。
 
-### 构建时不要删 `.next`
+### 构建时不要删除 `.next`
 
 ```bash
-# ✗ 错误做法：删除构建目录时服务还在跑，会造成全站 502
+# ✗ 服务运行中删除构建目录 → 全站 502，直到构建完成
 rm -rf .next && npm run build
 
-# ✓ 正确做法：直接构建（Next 会增量更新），成功后再重启
+# ✓ 直接构建（Next 会增量更新），成功后再重启
 npm run build && pm2 restart ai-insight-daily --update-env
 ```
 
@@ -104,78 +86,93 @@ git push origin main
 
 ---
 
-## 三、这个项目上验证过的坑
+## 二、这个项目上验证过的坑
 
 **以下每一条都实际发生过，不是理论风险。**
+运行时故障（如接口报错、数据异常）见 `AI_TROUBLESHOOTING_GUIDE.md`；
+这里只列**与「怎么改代码」有关**的坑。
 
-### 1. 同步方向（代价最大）
+### 1. 同步方向（代价最大，发生过三次）
 
-本项目的编辑器工作区与项目目录**是两份拷贝**。同步方向反了会**静默覆盖对方的改动**——这个错误在本项目上发生过三次。
+编辑器工作区与项目目录**是两份拷贝**。同步方向反了会**静默覆盖对方的改动**。
 
 ```
 规则：改文件前先确认改的是哪一份
-     同步后必须验证目标文件内容（行数/grep 关键字），不能只看 cp 成功
+     同步后必须验证目标文件内容（行数或 grep 关键字），不能只看 cp 成功
 ```
 
-### 2. Windows 路径含 `[` `]` 时不能用 PowerShell 文件命令
+> 若新机器上只有一份拷贝，此问题自动消失。
 
-Next.js 的动态路由目录（`app/api/travel/[id]/`）会被 PowerShell 当成**通配符**，`Copy-Item` 会静默创建目录但不复制文件。症状是接口 404。
+### 2. 路径含 `[` `]` 时不能用 PowerShell 文件命令
+
+Next.js 动态路由目录（如 `app/api/travel/[id]/`）会被 PowerShell 当成**通配符**，
+`Copy-Item` 会静默创建目录但不复制文件，症状是接口 404。
 
 ```
-解决：用 WSL 的 cp，或对路径做转义
+解决：用 WSL 的 cp
 ```
 
-### 3. 不要在命令行里内联复杂引号
+### 3. 不要在命令行内联复杂引号
 
-含中文、正则、嵌套引号的一行命令会反复失败（`unexpected EOF`、`syntax error near unexpected token`）。**写成 `.sh` 文件再执行**，稳定得多。
+含中文、正则、嵌套引号的一行命令会反复失败
+（`unexpected EOF`、`syntax error near unexpected token`）。
+**写成 `.sh` 文件再执行**，稳定得多。
 
 ### 4. Shell heredoc 同样不可靠
 
-`cat > file <<EOF` 在多层引号包裹下会被外壳提前吃掉。**用文件写入工具，不要用 heredoc。**
+`cat > file <<EOF` 在多层引号包裹下会被外壳提前吃掉。
+**用文件写入工具，不要用 heredoc。**
 
-### 5. 高德静态图接口有 QPS 限流
+### 5. 改路径后要检查模板字符串
 
-并发请求会返回 `CUQPS_HAS_EXCEEDED_THE_LIMIT`，**且返回体是 JSON 而非图片**。生成多天路线图必须**串行 + 间隔**。
+把 `/travel` 改为 `/agent-travel` 时，第一轮搜索用的是 `"/travel`（带引号），
+**漏掉了反引号模板字符串** `` href={`/travel/${id}`} ``。
 
-### 6. 改动要真正测出来，不能只看代码
+后果：链接能用，但每次访问多走一次 308 跳转。
 
-- 取图逻辑要检查「实际嵌进去几张图」，而不是「代码写了要取图」
-- 鉴权要分别测「未登录 / 无效 Cookie / 有效 Cookie」三种状态
-- 改路径要确认**旧路径仍可用**（重定向）且**站内链接指向新路径**（否则每次访问都多一次跳转）
+```
+教训：搜索路径引用时，要同时覆盖 "/xxx、'/xxx、`/xxx 三种形式
+```
+
+### 6. 改完要测「异常路径」，不能只测正常路径
+
+- 鉴权要分别测**未登录 / 无效 Cookie / 有效 Cookie** 三种状态
+- 取图逻辑要检查**实际嵌进去几张图**，而不是「代码写了要取图」
+- 改路径要确认**旧路径仍可用**（重定向）**且站内链接指向新路径**
+- 涉及数据隐藏时，要 grep 响应内容确认**没有泄漏**，而不是只看页面显示
 
 ---
 
-## 四、当前状态与已知问题
+## 三、当前状态与已知问题
+
+> 以下状态实测于 2026-10-16。数据量基线见 `DATABASE_SCHEMA.md`。
 
 ### 测试
 
 ```bash
 npx tsx --test lib/agents/travel/*.test.ts lib/ranking/*.test.ts lib/*.test.ts
-# 460 项通过
+# 460 项通过，约 1-2 秒
 ```
 
-测试用 Node 内置的 `node:test` + `tsx`，**没有 `npm test` 脚本**（这是可以改进的地方）。
+测试用 Node 内置的 `node:test` 加 `tsx`。
+**项目没有 `npm test` 脚本** —— 这是可以改进的地方。
 
-### lint 目前不干净
+### lint 不干净（长期存在）
 
 ```bash
 npm run lint
 # 88 个问题（61 errors, 27 warnings）
 ```
 
-**这些是长期存在的问题，不是新引入的。** 改动时不要把 lint 通过当作门槛，但**不要增加新的 lint 错误**。
+**这些是历史遗留，不是新引入的。** 改动时不要把 lint 通过当作门槛，
+但**不要增加新的 lint 错误**。
 
-### PM2 重启次数偏高
+### 数据库迁移记录有一处不同步
 
-```bash
-pm2 list    # 查看 ↺ 列
-```
+`npx prisma migrate status` 会提示 `20261014120000_add_event_industry_score` 未应用，
+但**字段实际已存在**，功能正常。
 
-重启次数多通常意味着某个改动导致进程反复崩溃。若发现次数在短时间内快速增长，先看 `pm2 logs ai-insight-daily --err`。
-
-### 数据库与迁移记录有一处不同步
-
-`npx prisma migrate status` 会提示 `20261014120000_add_event_industry_score` 未应用，但**字段实际已存在**，功能正常。执行 `migrate deploy` 时若因字段已存在而报错，跳过即可。
+执行 `migrate deploy` 时若因字段已存在而报错，跳过即可。
 
 ### `package.json` 的 postinstall 有无效命令
 
@@ -183,63 +180,81 @@ pm2 list    # 查看 ↺ 列
 "postinstall": "prisma skills sync || exit 0"
 ```
 
-Prisma 没有 `skills` 子命令，安装时会打印 `! Unknown command "skills"`，被 `|| exit 0` 掩盖。**可以忽略**，但值得清理。
+Prisma 没有 `skills` 子命令，安装时会打印 `! Unknown command "skills"`，
+被末尾的 `|| exit 0` 掩盖。**可以忽略**，但值得清理。
 
-### 数据库结构变更必须用 Migrate
+### 判断服务是否稳定：看 unstable restarts，不是 restarts
 
 ```bash
-# ✓ 正确：生成迁移文件并应用
-npx prisma migrate dev --name 描述
-
-# ✗ 危险：db push 在检测到结构漂移时可能删列
-npx prisma db push
+pm2 describe ai-insight-daily | grep -E 'restarts|uptime'
 ```
+
+| 字段 | 含义 |
+| --- | --- |
+| `restarts` | 累计重启。**部署与手动重启也会计入**，数值高不代表有问题 |
+| `unstable restarts` | **异常重启，这才是崩溃信号**，应保持 0 |
+| `uptime` | 本次运行时长，只有几十秒说明刚重启过 |
+
+> 我曾把 `restarts` 数值偏高误判为崩溃循环，实际那些是正常部署累加的。
+
+### 机器不是 24 小时开机
+
+**cron 不补跑错过的任务。** 凌晨时段机器常处于关机状态。
+
+实际后果：原定 `0 3 * * *` 的数据库备份在 10 天里只成功执行过 1 次。
+
+**新增定时任务前，先确认目标时间点机器是否在运行。**
+需要「必定执行」的任务，改用「定时触发 + 判断上次执行时间」的模式
+（参考 `scripts/db-backup-scheduler.sh`）。
 
 ---
 
-## 五、模块地图
+## 四、数据库变更规则
 
-顶层路由（`app/` 下）：
+**本项目用 Prisma Migrate，不是 `db push`。**
 
-| 模块 | 路径 | 说明 |
-| --- | --- | --- |
-| 首页 | `/` | 今日重点、产业情报、产业链总览 |
-| AI 资讯 | `/news` | 资讯列表与详情 |
-| 事件中心 | `/events` | 事件聚类与追踪 |
-| 产业趋势 | `/industry` | 产业链、热点、趋势 |
-| Agent 生态 | `/agent`、`/agent-score`、`/agent-map`、`/agent-graph` 等 | Agent 相关的一系列页面 |
-| 机会地图 | `/opportunity-map` | 商业机会 |
-| 投资观察 | `/investment` | 投资标的与评分 |
-| **AI 出行管家** | `/agent-travel` | 行程规划（需口令，见下） |
-| 后台 | `/admin` | 数据与系统状态 |
+```bash
+npx prisma migrate dev --name 描述      # 开发：生成并应用迁移
+npx prisma migrate deploy               # 部署：应用待执行迁移
+npx prisma migrate status               # 查看状态
 
-### AI 出行管家（原「旅行规划」）的访问控制
-
-这个模块**页面公开、生成需登录**，是刻意的设计：
-
-```
-/travel 或 /agent-travel        页面公开，任何人可看表单
-历史方案列表                     仅登录者可见（服务端按登录态决定是否查库）
-/api/travel/plan（生成）         需登录，返回 401 + code: TRAVEL_AUTH_REQUIRED
-/api/travel/plan/:id（读取）     需登录
-/api/travel/:id/download         需登录
+# ✗ 危险：检测到结构漂移时可能删除列
+npx prisma db push
 ```
 
-| 项 | 说明 |
-| --- | --- |
-| 口令 | 环境变量 `TRAVEL_PASSWORD`（未设置则该模块完全公开） |
-| 会话 | HMAC 派生令牌存 Cookie，**服务端无 session**，重启不失效 |
-| 有效期 | 30 天，**每次访问自动续期**（闲置 30 天才需要重新登录） |
-| 拦截位置 | 页面不拦；接口在各自路由内校验（生成是流式响应，Proxy 层难处理） |
-| 相关文件 | `proxy.ts`、`lib/travel-access.ts`、`lib/travel-access-server.ts`、`app/agent-travel/`、`components/agent-travel/` |
+数据库里有 `_prisma_migrations` 表记录已应用项，
+迁移文件在 `prisma/migrations/`（当前 9 个），且都写成可重复执行的形式
+（例如 `CREATE INDEX IF NOT EXISTS`）。
 
-**注意**：旧路径 `/travel` 通过 `next.config.ts` 的 308 跳转指向 `/agent-travel`。接口路径 `/api/travel/*` **有意未改**（内部实现，无外部收益）。
+---
 
-### 关键约定
+## 五、几条设计约定
 
-- **Next.js 16 把 `middleware` 改名为 `proxy`** —— 文件名与导出名都必须用 `proxy`。写这类代码前先读 `node_modules/next/dist/docs/` 里的文档，**不要凭记忆写**。
-- **金额由确定性算法计算，AI 只负责编排内容。** 不要把价格计算交给模型。
-- 新增接口若会消耗模型或外部 API 配额，**在动手前先校验权限**，不要等开始输出后才发现未授权。
+### 金额由确定性算法计算，AI 只编排内容
+
+出行管家的预算、票价、里程都来自代码计算或接口查询，
+**模型不参与数值计算** —— 避免幻觉产生不可信的价格。
+
+### 新增接口若消耗模型或外部配额，先校验权限
+
+不要在开始输出后才检查授权。生成行程要消耗模型与地图配额，
+必须在做任何工作之前拦截。
+
+### Next.js 16 的约定与旧版不同
+
+`middleware` 已更名为 `proxy`（文件名与导出名都要改）。
+**写这类代码前先读 `node_modules/next/dist/docs/` 里的文档，不要凭记忆写。**
+
+### 出行管家的访问控制是三层结构
+
+```
+页面公开                  任何人都能看表单
+生成与读取接口需登录       401 + code: TRAVEL_AUTH_REQUIRED
+历史方案列表仅登录可见     服务端按登录态决定是否查库
+```
+
+第三条最容易被做错：**若照常查询再用 CSS 隐藏，行程记录已随 HTML 下发，
+等于没有保护。** 详见 `DATABASE_SCHEMA.md` 的「旅行模块：不入库的部分」。
 
 ---
 
@@ -248,6 +263,7 @@ npx prisma db push
 ```bash
 # 服务状态
 pm2 list && pm2 logs ai-insight-daily --lines 30
+pm2 describe ai-insight-daily | grep -E 'restarts|uptime'
 
 # 重启（改了环境变量必须加 --update-env）
 pm2 restart ai-insight-daily --update-env
@@ -257,56 +273,60 @@ npx prisma studio                    # 可视化查看
 npx prisma migrate status            # 迁移状态
 sqlite3 prisma/dev.db ".tables"      # 表清单
 
-# 手动备份数据库到 GitHub
-bash scripts/backup-db-to-github.sh
+# 备份
+bash scripts/backup-db-to-github.sh  # 手动备份到 GitHub
+tail -20 logs/db-backup.log          # 备份日志
 
-# 检查备份新鲜度
-cat ~/.last-db-backup                # 时间戳
-tail -20 logs/db-backup.log
-
-# 隧道状态
+# 隧道（网站打不开时必查）
 systemctl status cloudflared
 journalctl -u cloudflared -n 30 --no-pager
-```
 
-### 定时任务
-
-```bash
+# 定时任务
 crontab -l
 ```
-
-- `0 23 * * *` —— 数据库异地备份（调度脚本会判断是否真的需要跑）
-- `@reboot` —— 开机补跑备份
-- `0 2 * * *` —— 每日资讯抓取
-
-> 注意机器不是 24 小时开机，**凌晨的定时任务经常不会执行**（cron 不补跑）。
-> 新增定时任务前先确认目标时间点机器是否在运行。
 
 ---
 
 ## 七、沟通约定
 
-这个项目的维护者有明确的偏好，请遵守：
+维护者有明确的偏好，请遵守。
 
 **不要输出：**
+
 - 文件变更摘要（`已编辑 N 个文件`、`+N -M` 这类统计）
 - 文件路径清单
 - 中间思考过程
 - 冗长的验证脚本命令原文
 
 **要输出：**
+
 - 做了什么、为什么这么做
 - 实测结果与数据
 - 下一步该做什么
-- **犯的错误要如实说明**，不要掩盖或轻描淡写
+- **犯的错误如实说明**，不要掩盖或轻描淡写
 
 **验证要求：**
+
 - 说「已完成」之前，必须实际测过
 - 涉及安全或数据的改动，要分别测正常与异常路径
 - 发现自己判断错了，要主动更正之前的结论
 
 ---
 
-## 八、如果需要重建整个站点
+## 八、这个项目的文档体系说明
 
-见 [`RECOVERY.md`](./RECOVERY.md) —— 电脑损坏后在新机器上从零恢复的完整步骤（含数据库恢复、隧道重建、nginx 配置原文）。
+`ai-context/` 下约二十份文档写于 2026-10-11 前后，覆盖项目理解、
+治理规范与故障排查。它们**大部分仍然准确且价值很高**，
+尤其是故障排查手册里的实测案例。
+
+但其中**部分内容会因为项目演进而过时**。已知已修正的：
+
+| 文档 | 原问题 | 状态 |
+| --- | --- | --- |
+| `DEPLOYMENT.md` | 写「nginx 作用：域名解析、HTTPS」，实际 HTTPS 与 DNS 都在 Cloudflare 侧；部署链路漏了隧道 | V2.0 已更正 |
+| `ARCHITECTURE.md` | 全文约 360 字符，是个骨架；部署拓扑缺隧道层 | V2.0 已重写 |
+| `DATABASE_SCHEMA.md` | 未记录出行管家的访问控制与导出设计 | 已补充 |
+
+**维护这些文档时的建议**：改动若涉及部署方式、外部依赖或模块新增，
+顺手更新对应文档，并在标题下标注核实日期。
+文档的价值取决于它是否与代码同步 —— 过时的文档比没有文档更危险。
