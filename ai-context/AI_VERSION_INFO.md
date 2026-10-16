@@ -16,9 +16,9 @@
 | 状态 | Ready |
 
 <!-- AUTO-UPDATE-START -->
-| 项目 commit | 07c0a93 |
+| 项目 commit | 1e4ad82 |
 | commit 日期 | 2026-10-16 |
-| 本文档更新于 | 2026-10-16 19:12:14 |
+| 本文档更新于 | 2026-10-16 19:13:12 |
 <!-- AUTO-UPDATE-END -->
 
 > 上面这个区块由 `scripts/update-version-info.sh` 自动写入，**请勿手动编辑**。
