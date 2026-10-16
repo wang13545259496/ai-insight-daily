@@ -71,3 +71,4 @@ AI-HANDOVER/
 
 # 重新分析的旧值备份（临时，不入库）
 backup/reanalysis/
+backup/entity-extract-progress.json

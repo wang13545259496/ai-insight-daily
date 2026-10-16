@@ -157,6 +157,9 @@ model News {
   event NewsEvent? @relation(fields: [eventId], references: [id])
 
   investmentSources Investment[] @relation("InvestmentSourceNews")
+
+  /** 该新闻提及的实体 */
+  entities NewsEntity[]
 }
 
 model DailyReport {
@@ -307,6 +310,9 @@ model NewsEvent {
   news News[]
 
   investmentSources Investment[] @relation("InvestmentSourceEvent")
+
+  /** 该事件涉及的实体 */
+  entities EventEntity[]
 }
 
 model IndustryHotspot {
@@ -430,4 +436,109 @@ model TripPlan {
   // 同一需求只保留一条方案
   @@unique([fingerprint])
 
+}
+
+// ==============================================================
+// 实体关联（2026-10-16 新增）
+//
+// 用途：把「公司 / 模型 / 产品 / 人物」从新闻与事件里抽出来，
+// 建立可反向查询的关联，支撑两个此前缺失的能力：
+//   · 企业关联 —— 某个公司/模型的全部相关动态
+//   · 趋势判断 —— 同一实体在时间轴上的变化
+//
+// 为什么不复用 IndustryHotspot：
+//   那是**主题**级分类（AI大模型 / AI芯片 / AI智能体，共 5 条），
+//   属于话题标签；这里需要的是**具体实体**（OpenAI、GPT-6、Claude），
+//   两者粒度不同，合并会导致话题与实体混淆。
+//
+// 为什么不复用 NewsEvent.keywords：
+//   实测该字段的中文抽取是逐字滑窗（「新晋,晋顶,顶流,流当,当大,大模」），
+//   是噪声而非词，不可用。
+// ==============================================================
+
+model Entity {
+  id Int @id @default(autoincrement())
+
+  /** 规范名，如 OpenAI、GPT-6、Claude */
+  name String
+
+  /** company | model | product | person */
+  type String
+
+  /**
+   * 别名，用 | 分隔，且首尾也带分隔符。
+   *
+   * 首尾加分隔符是为了让匹配用「包含 |别名| 」而非简单子串 ——
+   * 否则别名 Apple 会命中正文里的 Appleby。
+   */
+  aliases String @default("|")
+
+  /** 一句话说明这个实体是什么，用于页面展示 */
+  description String?
+
+  /** active | candidate | merged —— 抽取结果先进 candidate 待核 */
+  status String @default("candidate")
+
+  /** 被合并到哪个实体（合并同义实体时保留指向，便于追溯） */
+  mergedIntoId Int?
+
+  /** 统计字段，由刷新任务维护，便于列表页排序而无需实时聚合 */
+  newsCount  Int @default(0)
+  eventCount Int @default(0)
+
+  lastSeenAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  /** 同一类型下名称唯一；不同类型允许重名（如 Apple 公司 vs Apple 产品线） */
+  /** 该实体关联的新闻（反向） */
+  newsEntities NewsEntity[]
+
+  /** 该实体关联的事件（反向） */
+  eventEntities EventEntity[]
+
+  @@unique([name, type])
+  @@index([status])
+  @@index([type])
+  @@index([newsCount])
+}
+
+model NewsEntity {
+  id Int @id @default(autoincrement())
+
+  newsId   Int
+  entityId Int
+
+  /** 该实体在这篇新闻里出现的次数，用于判断关联强度 */
+  mentions Int @default(1)
+
+  /** subject | object | background —— 实体在叙述中的角色 */
+  role String @default("background")
+
+  createdAt DateTime @default(now())
+
+  news   News   @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, entityId])
+  @@index([entityId])
+}
+
+model EventEntity {
+  id Int @id @default(autoincrement())
+
+  eventId  Int
+  entityId Int
+
+  /** 是否为该事件的主体实体（用于事件卡片的「涉及公司」展示） */
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  event  NewsEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  entity Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, entityId])
+  @@index([entityId])
 }
