@@ -16,9 +16,9 @@
 | 状态 | Ready |
 
 <!-- AUTO-UPDATE-START -->
-| 项目 commit | 313ea54 |
+| 项目 commit | e0c500d |
 | commit 日期 | 2026-10-16 |
-| 本文档更新于 | 2026-10-16 19:09:19 |
+| 本文档更新于 | 2026-10-16 19:10:58 |
 <!-- AUTO-UPDATE-END -->
 
 > 上面这个区块由 `scripts/update-version-info.sh` 自动写入，**请勿手动编辑**。
