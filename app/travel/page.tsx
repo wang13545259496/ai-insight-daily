@@ -9,6 +9,7 @@ import { isRollingGoConfigured } from "@/lib/agents/travel/rollinggo";
 import { isVariflightConfigured } from "@/lib/agents/travel/variflight";
 import { summaryOf } from "@/lib/agents/travel/summary";
 import { isTravelProtected } from "@/lib/travel-access";
+import { isRequestAuthed } from "@/lib/travel-access-server";
 import TravelLogoutButton from "@/components/travel/TravelLogoutButton";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
@@ -193,9 +194,49 @@ async function HistoryList() {
   );
 }
 
-export default function TravelPage() {
-  // 只在启用口令保护时显示退出按钮：未启用时没有"登录态"可退
+export default async function TravelPage() {
+  /**
+   * 页面本身公开（不再一进来就要求口令），但历史方案列表仅登录者可见。
+   *
+   * 为什么列表在服务端判断而不是客户端隐藏：若照常查询再在浏览器里
+   * 用 CSS 隐藏，用户的行程记录已经随 HTML 下发，等于没有保护。
+   * 因此这里先判断登录态，未登录时根本不查数据库。
+   */
   const protectedMode = isTravelProtected();
+  const authed = await isRequestAuthed();
+
+  const historySlot = authed ? (
+    <section>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold text-white">历史方案</h2>
+        <span className="text-xs text-gray-500">
+          已收录 {supportedCityCount()} 个常用城市，其它城市可直接填机场三字码
+        </span>
+      </div>
+
+      {/* HistoryList 是异步组件，用 Suspense 包住让表单先渲染出来 */}
+      <Suspense
+        fallback={
+          <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+            正在读取历史方案…
+          </p>
+        }
+      >
+        <HistoryList />
+      </Suspense>
+    </section>
+  ) : protectedMode ? (
+    <section>
+      <div className="rounded-lg border border-gray-800 bg-gray-950/40 p-4">
+        <p className="text-xs text-gray-400">
+          历史方案仅登录后可见。
+          <Link href="/travel/login?next=%2Ftravel" className="ml-1 text-sky-400 hover:text-sky-300">
+            输入口令
+          </Link>
+        </p>
+      </div>
+    </section>
+  ) : null;
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -209,33 +250,13 @@ export default function TravelPage() {
           </p>
         </div>
 
-        {protectedMode && <TravelLogoutButton />}
+        {protectedMode && authed && <TravelLogoutButton />}
       </header>
 
       <div className="mt-8 space-y-8">
         <StatusBanner />
 
-        <TripPlannerForm />
-
-        <section>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-lg font-semibold text-white">历史方案</h2>
-            <span className="text-xs text-gray-500">
-              已收录 {supportedCityCount()} 个常用城市，其它城市可直接填机场三字码
-            </span>
-          </div>
-
-          {/* HistoryList 是异步组件，用 Suspense 包住让表单先渲染出来 */}
-          <Suspense
-            fallback={
-              <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
-                正在读取历史方案…
-              </p>
-            }
-          >
-            <HistoryList />
-          </Suspense>
-        </section>
+        <TripPlannerForm historySlot={historySlot} />
       </div>
     </main>
   );

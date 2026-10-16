@@ -168,3 +168,22 @@ export async function hasValidAccess(cookieValue: string | undefined): Promise<b
 
   return safeEqual(cookieValue, expected);
 }
+
+/**
+ * 是否为「已登录」状态。
+ *
+ * 与 hasValidAccess 的区别：后者把「未启用保护」也算作通过，
+ * 而调用方有时需要区分这两种情况 —— 例如同一页面上
+ * 「表单对所有人公开」但「历史方案仅登录者可见」。
+ *
+ * 未启用保护时视为已登录（不存在登录这回事，所有人都能看）。
+ */
+export async function isTravelAuthed(cookieValue: string | undefined): Promise<boolean> {
+  if (!isTravelProtected()) return true;
+
+  const expected = await travelToken();
+
+  if (!expected || !cookieValue) return false;
+
+  return safeEqual(cookieValue, expected);
+}

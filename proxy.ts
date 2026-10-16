@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { TRAVEL_COOKIE, accessCookieOptions, hasValidAccess, isTravelProtected } from "./lib/travel-access";
+import { TRAVEL_COOKIE, accessCookieOptions, isTravelAuthed, isTravelProtected } from "./lib/travel-access";
 
 /**
  * Next.js 16 起 middleware 更名为 proxy，文件名与导出名都必须使用 proxy。
@@ -28,11 +28,16 @@ function isTestOnlyRoute(pathname: string): boolean {
   );
 }
 
-/** 旅行登录页路径：必须放行，否则会重定向到自己导致死循环 */
+/** 旅行登录页路径 */
 const TRAVEL_LOGIN_PATH = "/travel/login";
 
-/** 是否是受口令保护的旅行页面（不含登录页本身） */
-function isProtectedTravelPage(pathname: string): boolean {
+/**
+ * 是否属于旅行模块的页面（含登录页）。
+ *
+ * 不再用于拦截，只用于判断「是否需要检查续期」——
+ * 登录页本身不必续期（那时还没登录）。
+ */
+function isTravelPage(pathname: string): boolean {
   if (pathname === TRAVEL_LOGIN_PATH) return false;
 
   return pathname === "/travel" || pathname.startsWith("/travel/");
@@ -60,40 +65,33 @@ export async function proxy(request: NextRequest) {
   }
 
   // ---------- 2. 旅行模块访问口令 ----------
-  if (isProtectedTravelPage(pathname)) {
-    // 未配置口令时完全放行（本地开发与首次部署不会被锁在门外）
-    if (isTravelProtected()) {
-      const cookie = request.cookies.get(TRAVEL_COOKIE)?.value;
+  /**
+   * 页面不再拦截，改为「页面公开、生成需登录」。
+   *
+   * 为什么改：原先一进 /travel 就要求输口令，用户在还没看到模块内容时
+   * 就撞上登录墙。现在可以浏览页面、填写表单，点「生成」时才要求登录 ——
+   * 此时用户已经投入了填写成本，转化更自然。
+   *
+   * 实际的门禁在两处：
+   *   · /api/travel/plan 的生成接口（各自路由内校验，返回 401）
+   *   · 历史方案列表（服务端按登录态决定是否渲染）
+   *
+   * Proxy 这里只保留一件事：**已登录时顺带续期 Cookie**。
+   */
+  if (isTravelPage(pathname) && isTravelProtected()) {
+    const cookie = request.cookies.get(TRAVEL_COOKIE)?.value;
 
-      if (!(await hasValidAccess(cookie))) {
-        const url = request.nextUrl.clone();
-
-        url.pathname = TRAVEL_LOGIN_PATH;
-        url.search = "";
-
-        // 记住原目标以便登录后跳回。只接受站内相对路径
-        // （以单个 / 开头），避免被构造成外部跳转。
-        if (pathname.startsWith("/") && !pathname.startsWith("//")) {
-          url.searchParams.set("next", pathname + request.nextUrl.search);
-        }
-
-        return NextResponse.redirect(url);
-      }
-
+    if (cookie && (await isTravelAuthed(cookie))) {
       /**
-       * 已通过校验：顺带续期。
-       *
-       * 为什么需要显式续期：Cookie 的过期时间只在**设置它的那一刻**确定，
-       * 浏览器不会因为"一直在用"而自动延后。因此若不重设，
+       * 为什么需要显式续期：Cookie 的过期时间只在设置它的那一刻确定，
+       * 浏览器不会因为"一直在用"而自动延后。若不重设，
        * 无论用得多频繁，满 30 天都会被要求重新输口令。
-       * 这里每次通过校验都重下一次，效果是「只要 30 天内有访问就不用重输」，
+       * 这里每次访问都重下一次，效果是「只要 30 天内有访问就不用重输」，
        * 同时保留「闲置 30 天自动失效」的安全边界。
-       *
-       * 只重设值、不改属性，属性由 renewAccessCookie 统一处理。
        */
       const response = NextResponse.next();
 
-      renewAccessCookie(response, cookie as string);
+      renewAccessCookie(response, cookie);
 
       return response;
     }

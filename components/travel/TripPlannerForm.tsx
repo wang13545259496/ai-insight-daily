@@ -7,7 +7,7 @@
  * 服务端仍会再校验一次（不可信输入），两边规则保持一致。
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { TravelPlan } from "@/lib/agents/travel/types";
 
@@ -69,6 +69,24 @@ interface StreamResult {
   warnings?: string[];
   message?: string;
   errors?: string[];
+  /** 服务端在需要访问口令时返回 TRAVEL_AUTH_REQUIRED */
+  code?: string;
+}
+
+/**
+ * 判断结果是否表示「需要先登录」。
+ *
+ * 双重判断：服务端返回的 code 是主依据，message 作为兜底 ——
+ * 若以后有人改了响应文案或漏传 code，仍能正确跳登录页而不是
+ * 把「需要访问口令」当成普通错误显示。
+ */
+function isAuthRequired(payload: StreamResult): boolean {
+  return payload.code === "TRAVEL_AUTH_REQUIRED" || /访问口令/.test(payload.message ?? "");
+}
+
+/** 跳到登录页，并记住回来后要继续的动作 */
+function goToLogin(): void {
+  window.location.href = `/travel/login?next=${encodeURIComponent("/travel")}`;
 }
 
 /**
@@ -191,13 +209,74 @@ function initialState(): FormState {
   };
 }
 
+/**
+ * 草稿存储键。
+ *
+ * 为什么需要：未登录用户在填完表单、点「生成」后会被引导到登录页，
+ * 登录成功再回到本页时客户端组件会重新挂载，表单内容随之清空 ——
+ * 用户得重填一遍，体验很差。
+ *
+ * 用 sessionStorage 而非 localStorage：草稿只在本次会话内有效，
+ * 关掉标签页即失效，避免下次打开时看到一份来路不明的旧表单。
+ */
+const DRAFT_KEY = "travel-form-draft";
+
+/** 保存草稿（失败时静默忽略，隐私模式下 sessionStorage 可能不可用） */
+function saveDraft(form: FormState): void {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+  } catch {
+    // 忽略：草稿只是体验优化，存不下也不该影响主流程
+  }
+}
+
+/** 读取草稿；没有或解析失败时返回 null */
+function loadDraft(): FormState | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<FormState>;
+
+    // 逐字段校验：草稿可能来自旧版本，缺字段会让表单渲染出 undefined
+    const base = initialState();
+
+    return {
+      origin: typeof parsed.origin === "string" ? parsed.origin : base.origin,
+      destination: typeof parsed.destination === "string" ? parsed.destination : base.destination,
+      departDate: typeof parsed.departDate === "string" ? parsed.departDate : base.departDate,
+      returnDate: typeof parsed.returnDate === "string" ? parsed.returnDate : base.returnDate,
+      adults: Number.isFinite(parsed.adults) ? Number(parsed.adults) : base.adults,
+      children: Number.isFinite(parsed.children) ? Number(parsed.children) : base.children,
+      budget: Number.isFinite(parsed.budget) ? Number(parsed.budget) : base.budget,
+      style: typeof parsed.style === "string" ? parsed.style : base.style,
+      interests: Array.isArray(parsed.interests)
+        ? parsed.interests.filter((i): i is string => typeof i === "string")
+        : base.interests,
+      notes: typeof parsed.notes === "string" ? parsed.notes : base.notes,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** 清除草稿（生成成功后不必再保留） */
+function clearDraft(): void {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // 忽略
+  }
+}
+
 /** 输入框统一样式，避免重复类名 */
 const INPUT_CLASS =
   "w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-white placeholder-gray-600 outline-none transition focus:border-sky-500/60 focus:ring-1 focus:ring-sky-500/30";
 
 const LABEL_CLASS = "mb-1.5 block text-xs text-gray-400";
 
-export default function TripPlannerForm() {
+export default function TripPlannerForm({ historySlot }: { historySlot?: React.ReactNode }) {
   const [form, setForm] = useState<FormState>(initialState);
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState<TravelPlan | null>(null);
@@ -205,6 +284,19 @@ export default function TripPlannerForm() {
   const [errors, setErrors] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [progress, setProgress] = useState("");
+
+  /**
+   * 挂载后恢复草稿。
+   *
+   * 放在 useEffect 而不是 useState 的惰性初始化里：服务端渲染时
+   * sessionStorage 不存在，惰性初始化会因两端结果不同导致 hydration 警告。
+   * 挂载后再填，渲染结果始终一致。
+   */
+  useEffect(() => {
+    const draft = loadDraft();
+
+    if (draft) setForm(draft);
+  }, []);
 
   /** 更新单个字段 */
   function update<K extends keyof FormState>(key: K, value: FormState[K]): void {
@@ -286,10 +378,27 @@ export default function TripPlannerForm() {
         setProgress,
       );
 
+      /**
+       * 未登录时跳登录页，而不是把「需要访问口令」当成普通错误显示 ——
+       * 用户看到一行红字不知道该做什么，直接给登录入口更明确。
+       *
+       * 跳转前保存草稿：登录后回到本页时表单会重新挂载，
+       * 不保存的话用户得把刚填的内容重填一遍。
+       */
+      if (isAuthRequired(payload)) {
+        saveDraft(form);
+        setProgress("需要登录，正在跳转…");
+        goToLogin();
+        return;
+      }
+
       if (!payload.success || !payload.data) {
         setErrors(payload.errors ?? [payload.message ?? "生成失败，请稍后重试"]);
         return;
       }
+
+      // 生成成功，草稿使命结束
+      clearDraft();
 
       setPlan(payload.data);
       setPlanId(payload.id ?? null);
@@ -565,6 +674,14 @@ export default function TripPlannerForm() {
           <PlanView plan={plan} planId={planId} warnings={warnings} />
         </div>
       )}
+
+      {/*
+        历史方案列表由页面（服务端组件）渲染后作为插槽传入。
+        这样做的原因：列表需要在服务端按登录态决定是否查询数据库 ——
+        未登录时不该把用户的行程记录发到浏览器，
+        因此不能在客户端组件里用 isAuthed 去「隐藏」已经下发的数据。
+      */}
+      {historySlot}
     </div>
   );
 }

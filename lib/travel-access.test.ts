@@ -9,6 +9,7 @@ import {
   clearCookieOptions,
   cookieSecure,
   hasValidAccess,
+  isTravelAuthed,
   isTravelProtected,
   safeEqual,
   travelPassword,
@@ -163,6 +164,48 @@ describe("travel-access 访问判定", () => {
 
     assert.equal(await hasValidAccess("deadbeef"), false);
     assert.equal(await hasValidAccess("a".repeat(64)), false);
+  });
+});
+
+describe("travel-access 登录态判定（isTravelAuthed）", () => {
+  /**
+   * 与 hasValidAccess 的关键区别：未启用保护时两者都为 true，
+   * 但调用方有时需要区分「未启用保护」与「确实已登录」——
+   * 例如同一页面上「表单对所有人公开」而「历史列表仅登录者可见」。
+   */
+
+  it("★ 未启用保护时视为已登录（不存在登录这回事）", async () => {
+    delete process.env.TRAVEL_PASSWORD;
+
+    assert.equal(await isTravelAuthed(undefined), true);
+    assert.equal(await isTravelAuthed("任意值"), true);
+  });
+
+  it("启用保护且令牌匹配时为已登录", async () => {
+    process.env.TRAVEL_PASSWORD = "secret123";
+
+    const token = await travelToken();
+
+    assert.equal(await isTravelAuthed(token ?? undefined), true);
+  });
+
+  it("★ 启用保护且无 Cookie 时为未登录", async () => {
+    process.env.TRAVEL_PASSWORD = "secret123";
+
+    assert.equal(await isTravelAuthed(undefined), false);
+    assert.equal(await isTravelAuthed(""), false);
+  });
+
+  it("★ 令牌错误时视为未登录（而非抛错）", async () => {
+    process.env.TRAVEL_PASSWORD = "secret123";
+
+    assert.equal(await isTravelAuthed("wrong"), false);
+  });
+
+  it("未启用保护时两种判定结果一致", async () => {
+    delete process.env.TRAVEL_PASSWORD;
+
+    assert.equal(await hasValidAccess(undefined), await isTravelAuthed(undefined));
   });
 });
 
