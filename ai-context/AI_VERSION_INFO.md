@@ -16,9 +16,9 @@
 | 状态 | Ready |
 
 <!-- AUTO-UPDATE-START -->
-| 项目 commit | ef53feb |
+| 项目 commit | 5ea0578 |
 | commit 日期 | 2026-10-16 |
-| 本文档更新于 | 2026-10-16 19:15:23 |
+| 本文档更新于 | 2026-10-16 19:15:39 |
 <!-- AUTO-UPDATE-END -->
 
 > 上面这个区块由 `scripts/update-version-info.sh` 自动写入，**请勿手动编辑**。
