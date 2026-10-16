@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 import { prisma } from "@/lib/prisma";
 import { buildIndustryMap } from "@/lib/industryMap/aggregate";
 import { getTier } from "@/lib/ranking/scoreBreakdown";
@@ -211,6 +212,8 @@ export default async function HomePage() {
           select: {
             id: true,
             title: true,
+            // 中文标题：英文来源由回填脚本生成，页面优先显示它
+            titleZh: true,
             summary: true,
             source: true,
             sourceUrl: true,
@@ -507,9 +510,15 @@ export default async function HomePage() {
                         最新动态
                       </div>
 
-                      <div className="mt-2 line-clamp-3 text-sm font-bold leading-6">
-                        {latestNews?.title ||
-                          safeText(event.summary, "暂无最新动态")}
+                      <div className="mt-2 text-sm font-bold leading-6">
+                        {latestNews ? (
+                          <NewsTitle
+                            title={latestNews.title}
+                            titleZh={latestNews.titleZh}
+                          />
+                        ) : (
+                          safeText(event.summary, "暂无最新动态")
+                        )}
                       </div>
 
                       <div className="mt-2 text-xs text-gray-500">
@@ -604,10 +613,12 @@ export default async function HomePage() {
                     </div>
 
                     <h3 className="text-base font-bold leading-7 group-hover:underline">
-                      {safeText(
-                        (item as any).titleCn,
-                        item.title
-                      )}
+                      {/*
+                        原代码写的是 (item as any).titleCn —— 但 schema 里
+                        没有 titleCn 字段（实际是 titleZh），因此 safeText 一直
+                        回退到英文 title。这里改为正确的字段名。
+                      */}
+                      <NewsTitle title={item.title} titleZh={item.titleZh} />
                     </h3>
 
                     <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-500">

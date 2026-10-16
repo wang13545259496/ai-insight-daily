@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -107,6 +108,8 @@ export default async function EventsPage() {
         select: {
           id: true,
           title: true,
+          // 中文标题：英文来源由回填脚本生成，页面优先显示它
+          titleZh: true,
           source: true,
           createdAt: true,
           publishedAt: true,
@@ -339,7 +342,12 @@ export default async function EventsPage() {
                     </div>
 
                     {/* Title */}
-                    <h3 className="mt-6 line-clamp-3 text-xl font-black leading-8 tracking-tight">
+                    {/*
+                      NewsEvent 表没有 titleZh 字段（与 News 表不同）。
+                      事件标题由聚类时取首条新闻的标题，因此可能是英文。
+                      这里先用原标题；事件标题的翻译是独立事项，见下条注释说明。
+                    */}
+                    <h3 className="mt-6 text-xl font-black leading-8 tracking-tight">
                       {event.title}
                     </h3>
 
@@ -349,8 +357,15 @@ export default async function EventsPage() {
                         最新动态
                       </div>
 
-                      <div className="mt-2 line-clamp-3 text-sm font-bold leading-6">
-                        {latestNews?.title || event.summary}
+                      <div className="mt-2 text-sm font-bold leading-6">
+                        {latestNews ? (
+                          <NewsTitle
+                            title={latestNews.title}
+                            titleZh={latestNews.titleZh}
+                          />
+                        ) : (
+                          event.summary
+                        )}
                       </div>
 
                       {latestNews && (

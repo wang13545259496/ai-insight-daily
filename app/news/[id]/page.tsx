@@ -1,3 +1,4 @@
+import NewsTitle from "@/components/NewsTitle";
 import { prisma } from "@/lib/prisma";
 import { breakdownScore } from "@/lib/ranking/scoreBreakdown";
 import { checkContentQuality } from "@/lib/news/contentQualityScore";
@@ -152,7 +153,16 @@ export default async function NewsDetailPage({
 
               <div className="min-w-0 flex-1">
                 <h1 className="text-3xl md:text-5xl font-semibold leading-tight tracking-tight">
-                  {news.title}
+                  {/*
+                    详情页只显示中文标题，不附英文小字 ——
+                    正文与逐字分析就在下方，此处再放一行英文会稀释视觉重心。
+                    需要原文的读者可从页面底部的来源链接进入。
+                  */}
+                  <NewsTitle
+                    title={news.title}
+                    titleZh={news.titleZh}
+                    showOriginal={false}
+                  />
                 </h1>
               </div>
 

@@ -35,6 +35,8 @@ const client = apiKey
   : null;
 
 export interface AIAnalysisResult {
+  /** 中文标题。中文来源沿用原标题；英文来源由模型翻译 */
+  titleZh: string;
   background: string;
   summary: string;
   content: string;
@@ -49,6 +51,9 @@ function fallbackAnalysis(title: string, content: string): AIAnalysisResult {
   const text = String(content || "").replace(/\s+/g, " ").trim();
 
   return {
+    // 回退路径不做翻译。宁可显示英文原标题，
+    // 也不要凭空造一个可能失真的中文标题。
+    titleZh: title,
     background: `该新闻围绕“${title}”展开，属于人工智能产业近期动态。`,
     summary: text
       ? text.slice(0, 280)
@@ -95,6 +100,10 @@ function parseAIResponse(text: string, title: string, content: string) {
   }
 
   return {
+    // titleZh 缺失时回退到原标题。这保证了两种情况都不会出现空标题：
+    //   · 模型未按新提示词返回该字段（旧调用方、模型偶发遗漏）
+    //   · 标题本就是中文，模型可能原样返回也可能不返回
+    titleZh: String(parsed.titleZh || title),
     background: String(parsed.background || ""),
     summary: String(parsed.summary || ""),
     content: String(parsed.content || content || title),
@@ -112,6 +121,7 @@ const SYSTEM_PROMPT = `你是 AI Insight Daily 的专业AI产业研究分析师�
 你的任务不是简单改写新闻，而是基于新闻标题和正文进行事实导向的产业分析。
 
 必须输出严格JSON，字段：
+titleZh：中文标题，20-40字
 background：事件背景，80-180字
 summary：新闻核心摘要，100-250字
 content：整理后的可读新闻正文，150-500字
@@ -120,6 +130,14 @@ impact：对AI产业、企业或技术生态的影响，80-200字
 businessOpportunity：可能形成的商业机会，80-200字
 investmentView：投资观察，80-200字
 aiScore：0-100整数
+
+titleZh 的规则：
+1. 原标题已是中文时，原样返回原标题，不要改写。
+2. 原标题为英文时，翻译为准确、通顺的中文标题，符合中文科技媒体习惯。
+3. 公司名、产品名、模型名保留英文原文，不要音译或意译。
+   例如 OpenAI、GPT-6、Claude、Gemini、Llama、Kubernetes 保持原样。
+4. 不要添加原标题没有的信息，不要用「震惊」「重磅」等夸张词。
+5. 不要输出「标题：」之类前缀，直接给标题本身。
 
 重要要求：
 1. 不得虚构新闻中不存在的事实、公司、数字、时间或人物。

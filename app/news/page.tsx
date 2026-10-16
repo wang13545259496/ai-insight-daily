@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -490,8 +491,8 @@ export default async function NewsPage() {
                     </span>
                   </div>
 
-                  <h3 className="mt-5 line-clamp-3 text-base font-bold leading-6">
-                    {item.title}
+                  <h3 className="mt-5 text-base font-bold leading-6">
+                    <NewsTitle title={item.title} titleZh={item.titleZh} />
                   </h3>
 
                   <div className="mt-5 text-xs text-gray-400">
@@ -587,7 +588,7 @@ export default async function NewsPage() {
                         className="mt-4 block"
                       >
                         <h3 className="text-xl font-black leading-8 transition group-hover:underline">
-                          {item.title}
+                          <NewsTitle title={item.title} titleZh={item.titleZh} />
                         </h3>
                       </Link>
 

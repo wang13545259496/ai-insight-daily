@@ -48,6 +48,10 @@ model News {
 
   title String
 
+  // 中文标题：英文来源（OpenAI 博客、TechCrunch 等）由模型生成中文标题后写入
+  // 页面优先显示本字段，为空时回退到 title。arXiv 论文不生成。
+  titleZh String?
+
   category String
 
   // 新闻背景

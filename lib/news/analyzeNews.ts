@@ -32,6 +32,10 @@ export async function analyzeNews({ newsId }: AnalyzeInput) {
 
     data:{
 
+      // 中文标题由模型生成（英文来源翻译，中文来源原样返回）。
+      // 页面优先显示它，为空时回退到 title。
+      titleZh: result.titleZh,
+
       background: result.background,
 
       summary: result.summary,
