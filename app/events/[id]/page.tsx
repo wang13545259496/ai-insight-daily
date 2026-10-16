@@ -36,6 +36,22 @@ export default async function EventDetailPage({
           sourceRef: true,
         },
       },
+
+      /**
+       * 关联实体（公司 / 模型 / 产品 / 人物）。
+       * 由 scripts/linkEventEntities.ts 分级加权匹配写入，
+       * isPrimary 表示该实体是事件主体（出现在事件标题里）。
+       */
+      entities: {
+        where: {
+          entity: { status: { not: "merged" } },
+        },
+        include: {
+          entity: {
+            select: { id: true, name: true, type: true },
+          },
+        },
+      },
     },
   });
 
@@ -103,6 +119,17 @@ export default async function EventDetailPage({
 
   const riskText = buildRiskText(event.category);
 
+  /**
+   * 实体排序：主体优先，其次按名称。
+   *
+   * 顺序在服务端算好，避免在 JSX 里做排序（可读性差且每次渲染重算）。
+   */
+  const sortedEntities = [...(event.entities ?? [])].sort((a, b) => {
+    if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+
+    return a.entity.name.localeCompare(b.entity.name, "zh");
+  });
+
   return (
     <main className="min-h-screen bg-white text-black">
       {/* =========================
@@ -163,6 +190,52 @@ export default async function EventDetailPage({
                   条
                 </span>
               </div>
+
+              {/*
+                涉及实体。
+
+                排序刻意是「主体优先、其次按名称」——
+                主体是事件的核心对象（如某公司发布产品），
+                非主体只是被提及。
+
+                标签限制展示数量：关联实体多的事件（如「大模型竞争」）
+                可达 40 个，全列出会淹没页面；此处最多 14 个。
+              */}
+              {sortedEntities.length > 0 && (
+                <div className="mt-8 border-t border-white/10 pt-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">
+                      涉及实体
+                    </div>
+
+                    <span className="text-xs text-gray-500">
+                      共 {sortedEntities.length} 个
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {sortedEntities.slice(0, 14).map((link) => (
+                      <Link
+                        key={link.entity.id}
+                        href={`/entities/${link.entity.id}`}
+                        className={
+                          link.isPrimary
+                            ? "border border-white bg-white px-3 py-1.5 text-xs font-bold text-black transition hover:bg-gray-200"
+                            : "border border-white/25 px-3 py-1.5 text-xs font-medium text-gray-300 transition hover:border-white hover:text-white"
+                        }
+                      >
+                        {link.entity.name}
+                      </Link>
+                    ))}
+
+                    {sortedEntities.length > 14 && (
+                      <span className="px-3 py-1.5 text-xs text-gray-500">
+                        ⋯
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="border border-white/15 bg-white/[0.04] p-6">

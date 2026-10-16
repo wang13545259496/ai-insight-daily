@@ -502,6 +502,8 @@ model Entity {
   @@index([status])
   @@index([type])
   @@index([newsCount])
+  // 列表页按「状态过滤 + 事件数排序」，复合索引避免额外扫描
+  @@index([status, eventCount])
 }
 
 model NewsEntity {

@@ -20,6 +20,11 @@ const navItems = [
   },
 
   {
+    name: "实体库",
+    href: "/entities",
+  },
+
+  {
     name: "产业趋势",
     href: "/industry",
   },
