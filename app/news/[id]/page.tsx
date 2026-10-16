@@ -22,10 +22,10 @@ export default async function NewsDetailPage({
 
   if (!news) {
     return (
-      <main className="min-h-screen bg-black text-white px-4 py-12">
-        <div className="max-w-4xl mx-auto">
-          <div className="border border-gray-800 bg-gray-950 rounded-2xl p-8">
-            <p className="text-gray-500">未找到这条新闻。</p>
+      <main className="min-h-screen bg-white px-4 py-12 text-black">
+        <div className="mx-auto max-w-4xl">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-8">
+            <p className="text-gray-700">未找到这条新闻。</p>
           </div>
         </div>
       </main>
@@ -118,254 +118,273 @@ export default async function NewsDetailPage({
       ? breakdownScore(news.aiScore, news.title, news.content || "", news.source || "")
       : null;
 
+  /** 发布时间的可读形式；无有效日期时不显示，避免出现 Invalid Date */
+  const publishedLabel = (() => {
+    const raw = news.publishedAt ?? news.createdAt;
+
+    if (!raw) return null;
+
+    const d = new Date(raw);
+
+    if (Number.isNaN(d.getTime())) return null;
+
+    return d.toLocaleDateString("zh-CN", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  })();
+
+  const paragraphs = splitArticleText(articleContent);
+
   return (
-    <main className="min-h-screen bg-black text-white px-4 py-8 md:px-8">
-      <div className="max-w-6xl mx-auto">
+    <main className="min-h-screen bg-white text-black px-4 py-8 md:px-8">
+      <div className="mx-auto max-w-7xl">
+        {/* 顶部信息条 */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-200 pb-5 text-sm">
+          <span className="font-bold tracking-[0.2em] text-gray-900 uppercase">
+            AI资讯
+          </span>
 
-        {/* 01 新闻头部 */}
-        <section className="border border-gray-800 bg-gray-950 rounded-3xl overflow-hidden">
-          <div className="p-6 md:p-8">
+          {news.source && (
+            <>
+              <span className="text-gray-300">·</span>
+              <span className="font-medium text-gray-700">{news.source}</span>
+            </>
+          )}
 
-            <div className="flex flex-wrap items-center gap-3 mb-5">
-              <span className="text-xs tracking-[0.25em] text-gray-500 uppercase">
-                AI资讯
-              </span>
+          {publishedLabel && (
+            <>
+              <span className="text-gray-300">·</span>
+              <span className="text-gray-600">{publishedLabel}</span>
+            </>
+          )}
 
-              {news.source && (
-                <span className="text-xs text-gray-500">
-                  {news.source}
-                </span>
-              )}
+          {scoreDetail && (
+            <span className="ml-auto rounded-full bg-gray-900 px-3 py-1 text-xs font-bold text-white">
+              AI评分 {scoreDetail.score} · {scoreDetail.tier.label}
+            </span>
+          )}
+        </div>
 
-              {scoreDetail && (
-                <span className="text-xs px-2.5 py-1 rounded-full border border-gray-700 text-gray-300">
-                  AI评分 {scoreDetail.score} · {scoreDetail.tier.label}
-                </span>
-              )}
-            </div>
+        {/* 标题区 */}
+        <header className="mt-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <h1 className="min-w-0 flex-1 text-3xl leading-tight font-bold tracking-tight text-black md:text-4xl lg:text-[2.75rem]">
+              {/*
+                详情页只显示中文标题，不附英文小字 ——
+                正文与逐条分析就在下方，此处再放一行英文会稀释视觉重心。
+                需要原文的读者可从右侧来源按钮进入。
+              */}
+              <NewsTitle
+                title={news.title}
+                titleZh={news.titleZh}
+                showOriginal={false}
+              />
+            </h1>
 
-            {scoreDetail && (
-              <div className="mb-8 border border-gray-200 rounded-xl overflow-hidden">
-                <div className="flex flex-wrap items-center justify-between gap-2 bg-gray-50 px-5 py-3 border-b border-gray-200">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold text-gray-900">
-                      AI SCORE {scoreDetail.score}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-900 text-white">
-                      {scoreDetail.tier.label}
-                    </span>
+            {news.sourceUrl && (
+              <div className="shrink-0 lg:pt-2">
+                <a
+                  href={news.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
+                >
+                  查看原始来源
+                  <span aria-hidden>↗</span>
+                </a>
+
+                <p className="mt-2 text-xs text-gray-500">
+                  原始来源可能需要国际网络访问
+                </p>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* 主体：大屏两栏 */}
+        <div className="mt-12 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
+
+          {/* 左栏：正文与分析 */}
+          <div className="lg:col-span-8">
+
+            {/* 02 发生了什么 */}
+            <section>
+              <SectionHeading en="WHAT HAPPENED" zh="发生了什么" />
+
+              <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-6 md:p-8">
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="h-6 w-1 rounded-full bg-black" />
+
+                  <div>
+                    <h3 className="text-lg font-bold text-black">
+                      {isAnalyzed ? "新闻正文" : "原始摘要"}
+                    </h3>
+
+                    <p className="mt-0.5 text-xs text-gray-500">
+                      {articleSourceLabel}
+                    </p>
                   </div>
-                  <span className="text-xs text-gray-500">{scoreDetail.tier.meaning}</span>
                 </div>
 
-                <div className="divide-y divide-gray-100">
-                  {scoreDetail.dimensions.map((dim) => (
-                    <div key={dim.name} className="px-5 py-3">
-                      <div className="flex items-center justify-between gap-4 mb-1.5">
-                        <span className="text-sm text-gray-700">{dim.name}</span>
-                        <span className="text-sm font-semibold tabular-nums text-gray-900">
-                          {dim.value}
-                        </span>
-                      </div>
-                      <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-1 bg-gray-900 rounded-full"
-                          style={{ width: `${Math.min(100, dim.value)}%` }}
-                        />
-                      </div>
-                      <p className="mt-1.5 text-xs text-gray-500">{dim.note}</p>
-                    </div>
+                <div className="max-w-[68ch] space-y-4">
+                  {paragraphs.map((paragraph, index) => (
+                    <p
+                      key={index}
+                      className="text-base leading-8 text-gray-800"
+                    >
+                      {paragraph}
+                    </p>
                   ))}
                 </div>
               </div>
-            )}
+            </section>
 
-            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-8">
+            {/* 核心判断 */}
+            <section className="mt-10">
+              <SectionHeading en="CORE JUDGMENT" zh="核心判断" note="AI产业视角" />
 
-              <div className="min-w-0 flex-1">
-                <h1 className="text-3xl md:text-5xl font-semibold leading-tight tracking-tight">
-                  {/*
-                    详情页只显示中文标题，不附英文小字 ——
-                    正文与逐字分析就在下方，此处再放一行英文会稀释视觉重心。
-                    需要原文的读者可从页面底部的来源链接进入。
-                  */}
-                  <NewsTitle
-                    title={news.title}
-                    titleZh={news.titleZh}
-                    showOriginal={false}
-                  />
-                </h1>
+              <div className="mt-6 border-l-4 border-black pl-6">
+                <p className="text-lg leading-9 font-medium text-gray-900">
+                  {judgmentContent || PENDING_ANALYSIS_TEXT}
+                </p>
               </div>
+            </section>
 
-              {news.sourceUrl && (
-                <div className="shrink-0 md:pt-1">
-                  <div className="flex flex-col items-start md:items-end gap-2">
-                    <a
-                      href={news.sourceUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-700 bg-white text-black text-sm font-medium hover:bg-gray-200 transition whitespace-nowrap"
-                    >
-                      查看原始来源
-                      <span>↗</span>
-                    </a>
+            {/* 03 为什么重要 */}
+            <section className="mt-14">
+              <SectionHeading
+                en="WHY IT MATTERS"
+                zh="为什么重要"
+                note="从产业、商业与投资三个角度理解这条新闻的价值"
+              />
 
-                    <span className="text-[11px] text-gray-600">
-                      原始来源可能需要国际网络访问
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <InsightCard title="产业影响" label="INDUSTRY" content={impactContent} />
+                <InsightCard title="商业机会" label="BUSINESS" content={businessContent} />
+                <InsightCard title="投资判断" label="INVESTMENT" content={investmentContent} />
+              </div>
+            </section>
+
+            {/* 04 AI研判 */}
+            <section className="mt-14">
+              <SectionHeading en="AI INSIGHT" zh="AI智能分析" />
+
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <ResearchCard title="产业价值" content={industryValueContent} />
+                <ResearchCard
+                  title="商业方向"
+                  content={
+                    isAnalyzed
+                      ? news.businessOpportunity?.trim() || PENDING_ANALYSIS_TEXT
+                      : PENDING_ANALYSIS_TEXT
+                  }
+                />
+                <ResearchCard title="关注风险" content={riskContent} />
+              </div>
+            </section>
+          </div>
+
+          {/* 右栏：评分与风险（大屏粘性跟随） */}
+          <aside className="lg:col-span-4">
+            <div className="space-y-6 lg:sticky lg:top-8">
+
+              {scoreDetail ? (
+                <div className="overflow-hidden rounded-2xl border border-gray-200">
+                  <div className="flex items-center justify-between gap-2 border-b border-gray-200 bg-gray-900 px-5 py-3">
+                    <span className="text-sm font-bold text-white">
+                      AI SCORE {scoreDetail.score}
+                    </span>
+
+                    <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-bold text-gray-900">
+                      {scoreDetail.tier.label}
                     </span>
                   </div>
+
+                  <p className="border-b border-gray-100 bg-gray-50 px-5 py-2.5 text-xs text-gray-600">
+                    {scoreDetail.tier.meaning}
+                  </p>
+
+                  <div className="divide-y divide-gray-100">
+                    {scoreDetail.dimensions.map((dim) => (
+                      <div key={dim.name} className="px-5 py-3.5">
+                        <div className="mb-2 flex items-center justify-between gap-4">
+                          <span className="text-sm text-gray-700">{dim.name}</span>
+
+                          <span className="text-sm font-bold tabular-nums text-black">
+                            {dim.value}
+                          </span>
+                        </div>
+
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+                          <div
+                            className="h-1.5 rounded-full bg-black"
+                            style={{ width: `${Math.min(100, dim.value)}%` }}
+                          />
+                        </div>
+
+                        <p className="mt-2 text-xs leading-5 text-gray-500">
+                          {dim.note}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                  <p className="text-sm text-gray-600">{PENDING_ANALYSIS_TEXT}</p>
                 </div>
               )}
-            </div>
 
-            {!news.sourceUrl && (
-              <div className="mt-5">
-                <span className="text-xs text-gray-600">
-                  暂无原始来源链接
-                </span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* 02 发生了什么 */}
-        <section className="mt-8">
-          <div className="mb-4">
-            <div className="text-[11px] tracking-[0.3em] text-gray-600 uppercase">
-              WHAT HAPPENED
-            </div>
-
-            <h2 className="mt-2 text-2xl md:text-3xl font-semibold">
-              发生了什么
-            </h2>
-          </div>
-
-          <div className="border border-gray-800 bg-gray-950 rounded-2xl p-6 md:p-8">
-            <div className="flex items-center gap-3 mb-6">
-              <span className="w-1 h-6 bg-white rounded-full" />
-
-              <div>
-                <h3 className="text-lg font-semibold">
-                  {isAnalyzed ? "新闻正文" : "原始摘要"}
-                </h3>
-
-                <p className="text-xs text-gray-600 mt-1">
-                  {articleSourceLabel}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {splitArticleText(articleContent).map((paragraph, index) => (
-                <p
-                  key={index}
-                  className="text-[15px] md:text-base leading-8 text-gray-300"
-                >
-                  {paragraph}
-                </p>
-              ))}
-            </div>
-          </div>
-
-          {/* 核心判断 */}
-          <div className="mt-4 border border-gray-900 bg-gray-950/70 rounded-2xl p-6 md:p-7">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <div>
-                <div className="text-[10px] tracking-[0.25em] text-gray-600 uppercase">
-                  CORE JUDGMENT
+              {/* 关注风险固定放侧栏：它是读者决策前最需要先看到的一条 */}
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+                <div className="text-[10px] font-bold tracking-[0.25em] text-gray-500 uppercase">
+                  RISK
                 </div>
 
-                <h3 className="mt-2 text-lg font-semibold">
-                  核心判断
-                </h3>
+                <h3 className="mt-2 text-base font-bold text-black">关注风险</h3>
+
+                <p className="mt-3 text-sm leading-7 text-gray-700">
+                  {riskContent}
+                </p>
               </div>
 
-              <span className="text-[11px] text-gray-600">
-                AI产业视角
-              </span>
             </div>
+          </aside>
+        </div>
 
-            <p className="text-base md:text-lg leading-8 text-gray-200">
-              {judgmentContent || PENDING_ANALYSIS_TEXT}
-            </p>
-          </div>
-        </section>
-
-        {/* 03 为什么重要 */}
-        <section className="mt-12">
-          <div className="mb-5">
-            <div className="text-[11px] tracking-[0.3em] text-gray-600 uppercase">
-              WHY IT MATTERS
-            </div>
-
-            <h2 className="mt-2 text-2xl md:text-3xl font-semibold">
-              为什么重要
-            </h2>
-
-            <p className="mt-2 text-sm text-gray-600">
-              从产业、商业与投资三个角度理解这条新闻的价值。
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <InsightCard
-              title="产业影响"
-              label="INDUSTRY"
-              content={impactContent}
-            />
-
-            <InsightCard
-              title="商业机会"
-              label="BUSINESS"
-              content={businessContent}
-            />
-
-            <InsightCard
-              title="投资判断"
-              label="INVESTMENT"
-              content={investmentContent}
-            />
-          </div>
-        </section>
-
-        {/* 04 AI研判 */}
-        <section className="mt-12">
-          <div className="mb-5">
-            <div className="text-[11px] tracking-[0.3em] text-gray-600 uppercase">
-              AI INSIGHT
-            </div>
-
-            <h2 className="mt-2 text-2xl md:text-3xl font-semibold">
-              AI智能分析
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-            <ResearchCard
-              title="产业价值"
-              content={industryValueContent}
-            />
-
-            <ResearchCard
-              title="商业方向"
-              content={
-                isAnalyzed
-                  ? news.businessOpportunity?.trim() || PENDING_ANALYSIS_TEXT
-                  : PENDING_ANALYSIS_TEXT
-              }
-            />
-
-            <ResearchCard
-              title="关注风险"
-              content={riskContent}
-            />
-
-          </div>
-        </section>
 
       </div>
     </main>
+  );
+}
+
+/**
+ * 区块标题：英文小标 + 中文主标题 + 可选说明。
+ *
+ * 原先四处区块各自手写这三段，样式不完全一致；
+ * 抽成组件后统一对比度 —— 原 text-gray-600 在白底上偏淡，改为 gray-500/900。
+ */
+function SectionHeading({
+  en,
+  zh,
+  note,
+}: {
+  en: string;
+  zh: string;
+  note?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+        {en}
+      </div>
+
+      <h2 className="mt-2 text-2xl font-bold text-black md:text-3xl">{zh}</h2>
+
+      {note && <p className="mt-2 text-sm text-gray-600">{note}</p>}
+    </div>
   );
 }
 
@@ -379,28 +398,23 @@ function InsightCard({
   content: string[];
 }) {
   return (
-    <div className="border border-gray-800 bg-gray-950 rounded-2xl p-6 min-h-[220px]">
-      <div className="text-[10px] tracking-[0.25em] text-gray-600">
+    <div className="flex min-h-[220px] flex-col rounded-2xl border border-gray-200 bg-gray-50 p-6">
+      <div className="text-[10px] font-bold tracking-[0.25em] text-gray-500">
         {label}
       </div>
 
-      <h3 className="mt-3 text-lg font-semibold">
-        {title}
-      </h3>
+      <h3 className="mt-2.5 text-lg font-bold text-black">{title}</h3>
 
       {content.length > 0 ? (
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 space-y-3">
           {content.map((item, index) => (
-            <p
-              key={index}
-              className="text-sm leading-7 text-gray-400"
-            >
+            <p key={index} className="text-sm leading-7 text-gray-700">
               {item}
             </p>
           ))}
         </div>
       ) : (
-        <p className="mt-5 text-sm leading-7 text-gray-600">
+        <p className="mt-4 text-sm leading-7 text-gray-500">
           {PENDING_ANALYSIS_TEXT}
         </p>
       )}
@@ -416,16 +430,14 @@ function ResearchCard({
   content: string;
 }) {
   return (
-    <div className="border border-gray-800 bg-gray-950 rounded-2xl p-6 min-h-[220px]">
-      <div className="text-[10px] tracking-[0.25em] text-gray-600 uppercase">
+    <div className="flex min-h-[220px] flex-col rounded-2xl border border-gray-200 bg-gray-50 p-6">
+      <div className="text-[10px] font-bold tracking-[0.25em] text-gray-500 uppercase">
         AI ANALYSIS
       </div>
 
-      <h3 className="mt-3 text-lg font-semibold">
-        {title}
-      </h3>
+      <h3 className="mt-2.5 text-lg font-bold text-black">{title}</h3>
 
-      <p className="mt-5 text-sm leading-7 text-gray-400">
+      <p className="mt-4 text-sm leading-7 text-gray-700">
         {content || PENDING_ANALYSIS_TEXT}
       </p>
     </div>
