@@ -68,3 +68,6 @@ logs/
 
 # 交接包暂存目录（由 update-ai-handover.sh 每次重建，不入库）
 AI-HANDOVER/
+
+# 重新分析的旧值备份（临时，不入库）
+backup/reanalysis/
