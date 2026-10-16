@@ -39,6 +39,16 @@ export default async function NewsDetailPage({
       news.content || ""
     );
 
+  /**
+   * 正文区块的来源说明。
+   *
+   * 未分析的记录只能显示抓取到的原文（arXiv 摘要等），
+   * 若仍标「本站整理」就是虚假声明 —— 读者会以为内容经过编辑加工。
+   */
+  const articleSourceLabel = isAnalyzed
+    ? "本站整理"
+    : "原始抓取内容，未经整理";
+
 
   const articleContent =
     contentQuality.level === "polluted"
@@ -52,11 +62,25 @@ export default async function NewsDetailPage({
           "暂无新闻正文"
         );
 
-  const judgmentContent = buildCoreJudgment(
-    news.insight,
-    news.summary,
-    news.content
-  );
+  /**
+   * 核心判断与产业价值也必须判 isAnalyzed。
+   *
+   * 这两个函数内部都有「insight 为空时退到 summary/content」的兜底。
+   * 对已分析的记录这是合理的（summary 是模型整理的）；
+   * 但对未分析的记录（analysisStatus = pending），会把**原始正文**
+   * 拼进「这条消息的核心价值在于：…」这种句式 ——
+   * 读者会以为那是 AI 分析，实际是没处理过的论文摘要。
+   *
+   * 实测 69 条 pending 记录的 summary 就是 arXiv 原始摘要
+   *（含「arXiv:2610.19210v1 Announce Type: new Abstract:」元信息），
+   * 在页面上被当作分析结论展示。
+   *
+   * 因此这里与下方 impact / businessOpportunity / investmentView
+   * 的处理保持一致：未分析就不生成，由渲染层显示占位文案。
+   */
+  const judgmentContent = isAnalyzed
+    ? buildCoreJudgment(news.insight, news.summary, news.content)
+    : "";
 
   const impactContent = isAnalyzed
     ? splitAnalysisText(news.impact)
@@ -70,20 +94,27 @@ export default async function NewsDetailPage({
     ? splitAnalysisText(news.investmentView)
     : [];
 
-  const industryValueContent = buildIndustryValue(
-    news.insight,
-    news.content,
-    news.summary
-  );
+  const industryValueContent = isAnalyzed
+    ? buildIndustryValue(news.insight, news.content, news.summary)
+    : "";
 
+  // extractRisk 在三个字段全空时仍会返回一句通用风险提示（见该函数末尾），
+  // 对未分析的记录同样属于无中生有，故保持原有守卫。
   const riskContent = isAnalyzed
     ? extractRisk(news.investmentView, news.insight, news.businessOpportunity)
     : "暂无风险分析";
 
   // AI SCORE 拆解：把裸分数解释为可理解的维度
   // 逻辑见 lib/ranking/scoreBreakdown.ts（纯函数，11 项单测）
+  /**
+   * AI 评分只在分析完成后展示。
+   *
+   * 判据必须包含 isAnalyzed：pending 记录的 aiScore 是 0 而非 null，
+   * 仅判断非空会让未分析的记录也渲染出「AI评分 0 · 低」，
+   * 0 分会被误读为「这条新闻价值极低」，实际是「还没评」。
+   */
   const scoreDetail =
-    news.aiScore !== null && news.aiScore !== undefined
+    isAnalyzed && news.aiScore !== null && news.aiScore !== undefined
       ? breakdownScore(news.aiScore, news.title, news.content || "", news.source || "")
       : null;
 
@@ -215,11 +246,11 @@ export default async function NewsDetailPage({
 
               <div>
                 <h3 className="text-lg font-semibold">
-                  新闻正文
+                  {isAnalyzed ? "新闻正文" : "原始摘要"}
                 </h3>
 
                 <p className="text-xs text-gray-600 mt-1">
-                  本站整理
+                  {articleSourceLabel}
                 </p>
               </div>
             </div>
@@ -255,7 +286,7 @@ export default async function NewsDetailPage({
             </div>
 
             <p className="text-base md:text-lg leading-8 text-gray-200">
-              {judgmentContent}
+              {judgmentContent || PENDING_ANALYSIS_TEXT}
             </p>
           </div>
         </section>
@@ -319,8 +350,9 @@ export default async function NewsDetailPage({
             <ResearchCard
               title="商业方向"
               content={
-                news.businessOpportunity?.trim() ||
-                "暂无商业方向分析"
+                isAnalyzed
+                  ? news.businessOpportunity?.trim() || PENDING_ANALYSIS_TEXT
+                  : PENDING_ANALYSIS_TEXT
               }
             />
 
@@ -369,7 +401,7 @@ function InsightCard({
         </div>
       ) : (
         <p className="mt-5 text-sm leading-7 text-gray-600">
-          暂无相关分析
+          {PENDING_ANALYSIS_TEXT}
         </p>
       )}
     </div>
@@ -394,7 +426,7 @@ function ResearchCard({
       </h3>
 
       <p className="mt-5 text-sm leading-7 text-gray-400">
-        {content}
+        {content || PENDING_ANALYSIS_TEXT}
       </p>
     </div>
   );
@@ -575,6 +607,14 @@ function extractRisk(
 
   return "需要关注模型技术快速迭代、价格竞争加剧以及优势持续性的变化。";
 }
+
+/**
+ * 未生成 AI 分析时的占位文案。
+ *
+ * 刻意不用「暂无相关分析」这类模糊说法 —— 读者需要知道
+ * 是**还没分析**，而不是分析了但没有相关内容。两者的可信度不同。
+ */
+const PENDING_ANALYSIS_TEXT = "该条尚未生成 AI 分析，稍后会自动补全。";
 
 function simplifyJudgment(text: string) {
   let result = text
