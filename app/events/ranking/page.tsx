@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 
 import { prisma } from "@/lib/prisma";
 
@@ -132,7 +133,7 @@ TOP {index+1}
 
 <h2 className="text-xl font-bold mt-2">
 
-{event.title}
+<NewsTitle title={event.title} titleZh={event.titleZh} />
 
 </h2>
 

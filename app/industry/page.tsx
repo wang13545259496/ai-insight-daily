@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +121,8 @@ export default async function IndustryPage() {
       select: {
         id: true,
         title: true,
+        // 中文标题：英文来源由回填脚本生成，页面优先显示它
+        titleZh: true,
         category: true,
         summary: true,
         aiScore: true,
@@ -147,6 +150,8 @@ export default async function IndustryPage() {
       select: {
         id: true,
         title: true,
+        // 中文标题：事件标题可能取自英文新闻，由回填脚本生成中文
+        titleZh: true,
         category: true,
         summary: true,
         heatScore: true,
@@ -467,7 +472,7 @@ export default async function IndustryPage() {
                   </div>
 
                   <h3 className="mt-4 text-xl font-bold leading-7 group-hover:underline">
-                    {event.title}
+                    <NewsTitle title={event.title} titleZh={event.titleZh} />
                   </h3>
 
                   <p className="mt-3 line-clamp-2 text-sm leading-6 text-zinc-500">

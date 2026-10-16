@@ -262,6 +262,10 @@ model NewsEvent {
 
   title String
 
+  // 中文标题：事件标题取首条新闻的标题，可能是英文。
+  // 由模型生成中文后写入，页面优先显示本字段，为空时回退到 title。
+  titleZh String?
+
   keywords String
 
   summary String

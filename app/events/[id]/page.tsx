@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -131,7 +132,7 @@ export default async function EventDetailPage({
               </div>
 
               <h1 className="max-w-5xl text-4xl font-black leading-tight tracking-tight md:text-5xl">
-                {event.title}
+                <NewsTitle title={event.title} titleZh={event.titleZh} />
               </h1>
 
               <p className="mt-6 max-w-4xl text-base leading-8 text-gray-300">

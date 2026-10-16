@@ -1,4 +1,5 @@
 import Link from "next/link";
+import NewsTitle from "@/components/NewsTitle";
 
 import { prisma } from "@/lib/prisma";
 
@@ -135,7 +136,7 @@ export default async function DailyPage() {
                 font-bold
                 "
                 >
-                  {event.title}
+                  <NewsTitle title={event.title} titleZh={event.titleZh} />
                 </h3>
 
                 <div

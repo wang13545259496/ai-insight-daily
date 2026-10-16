@@ -192,6 +192,8 @@ export default async function HomePage() {
         // 而下方 filter 与渲染逻辑会读取它们。
         id: true,
         title: true,
+        // 中文标题：事件标题可能取自英文新闻，由回填脚本生成中文
+        titleZh: true,
         summary: true,
         keywords: true,
         category: true,
@@ -501,8 +503,15 @@ export default async function HomePage() {
                       </span>
                     </div>
 
-                    <h3 className="mt-6 line-clamp-3 text-xl font-black leading-8 tracking-tight">
-                      {cleanEventTitle(event.title)}
+                    <h3 className="mt-6 text-xl font-black leading-8 tracking-tight">
+                      {/*
+                        优先显示中文标题。cleanEventTitle 用于清理原标题里的
+                        「News - 」之类前缀，对中文标题同样适用（无前缀时原样返回）。
+                      */}
+                      <NewsTitle
+                        title={cleanEventTitle(event.title)}
+                        titleZh={event.titleZh ? cleanEventTitle(event.titleZh) : null}
+                      />
                     </h3>
 
                     <div className="mt-6 border-l-2 border-black pl-4">
