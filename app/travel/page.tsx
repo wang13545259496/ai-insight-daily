@@ -250,7 +250,22 @@ export default async function TravelPage() {
           </p>
         </div>
 
-        {protectedMode && authed && <TravelLogoutButton />}
+        {/*
+          登录/退出共用一个位置，互不共存。
+          未登录时必须有这个入口 —— 否则想登录的人只能先填完整个表单
+          再点「生成」，而「只是想看历史方案」的用户根本没有门可进。
+        */}
+        {protectedMode &&
+          (authed ? (
+            <TravelLogoutButton />
+          ) : (
+            <Link
+              href="/travel/login?next=%2Ftravel"
+              className="inline-flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-300 transition hover:border-sky-400 hover:bg-sky-500/20 hover:text-sky-200"
+            >
+              登录
+            </Link>
+          ))}
       </header>
 
       <div className="mt-8 space-y-8">
