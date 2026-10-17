@@ -27,8 +27,9 @@ LOCK="/tmp/news-pipeline.lock"
 LOG="$PROJECT_DIR/logs/news-pipeline.log"
 ALERT="$PROJECT_DIR/scripts/alert.sh"
 
-# 管线最长允许跑多久（实测约 90 秒，留足余量）
-TIMEOUT_SEC=300
+# 管线最长允许跑多久。
+# 并发 6，实测约 3 秒/条；单轮最多分析 120 条 ≈ 370 秒，留足余量。
+TIMEOUT_SEC=900
 
 mkdir -p "$(dirname "$LOG")"
 
