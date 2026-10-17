@@ -592,6 +592,58 @@ text-[11px] → text-[12px] sm:text-[11px]
 **不是路由**（文件名不是 page.tsx），全项目 0 处引用。
 未删除，留给维护者决定。
 
+### 死文件清理第二轮：30 个文件 / 8878 行
+
+上一轮清理删了 32 个死组件，但只扫了 `components/`，
+漏掉了备份文件和 `app/` 下的非路由文件。
+
+维护者明确要求：「这种没用的文件留着也没用，直接处理，不用问我。」
+已写入 `AGENTS.md` 规则 8。
+
+## 删了什么
+
+**4 个无引用的 `.tsx`（1418 行）**
+
+```
+app/page.v7-final-backup.tsx                  787  旧版首页快照，非路由
+app/opportunity-map/OpportunityMapClient.tsx  389
+app/industry/IndustryCharts.tsx               182
+app/components/CategoryFilter.tsx              60
+```
+
+**26 个版本备份（7460 行）**
+
+`*.bak` / `*.backup.v748xxx.ts` / `page.tsx.backup_2026xxxx` /
+`prisma/schema.backup.v748121`。
+
+其中 `collectNews.backup.*` 有 9 个版本、`webFetcher.backup.*` 4 个、
+`eventCluster.backup.*` 3 个 —— 都是过去某轮调试留下的临时快照，
+内容在 git 历史里，删除不丢任何东西。
+
+## 判断方法上的一个坑
+
+第一遍用 `grep "CategoryFilter.tsx"` 搜引用，命中 0，
+差点把在用的组件当死文件删掉。
+
+**import 里写的是 `@/app/components/CategoryFilter`，不带 `.tsx`。**
+正确搜法是搜模块名本身。
+
+改用模块名重查后，从 7 个「疑似死文件」里救回 3 个：
+
+```
+app/components/IndustryLayerList.tsx   ← 被 app/page.tsx 引用
+app/startup/StartupClient.tsx          ← 被 app/startup/page.tsx 引用
+app/startup-discovery/StartupSearch.tsx ← 被同目录 page.tsx 引用
+```
+
+## 另一个认知纠正
+
+**`app/` 下不是 `page.tsx` 的文件不等于死文件。**
+Next 只把 page/layout/route/loading/error/not-found/template/default/
+global-error 当作路由约定，但普通组件可以放在 `app/` 里被路由引用。
+
+判断依据必须是「有没有被 import」，不是「名字符不符合约定」。
+
 ### 已知无解问题
 
 **访客侧 IPv6 到 Cloudflare 边缘不可达**，失败率约 5%、平均慢 0.47 秒。

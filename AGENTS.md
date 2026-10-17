@@ -99,6 +99,52 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
    **注意：`noindex` 不是保密。** 它只请求搜索引擎不收录，
    不阻止任何人直接访问。要真正私密需要鉴权。
 
+8. **发现死文件直接删，不用问。**
+
+   维护者的原话：「这种没用的文件留着也没用，直接处理，不用问我。」
+
+   上一次清理删了 32 个死组件，但漏了 30 个（8878 行）——
+   因为只扫了 `components/`，没扫备份文件和 `app/` 下的非路由文件。
+   所以这条规则要和「怎么判断」一起执行。
+
+   ## 算死文件的
+
+   - **版本备份**：`*.bak`、`*.backup.*`、`*-backup.*`、`*.orig`、`*.old`
+     （内容是过去某轮的临时快照，git 历史里都有）
+   - **无引用的组件**：全项目搜不到 import
+
+   ## 判断方法（必须做，别靠文件名猜）
+
+   ```bash
+   # 用不带扩展名的模块名搜，因为 import 写的是 @/components/Foo
+   grep -rIl --include='*.tsx' --include='*.ts' "Foo" app components lib
+   ```
+
+   **踩过**：第一遍用 `grep "CategoryFilter.tsx"` 搜，结果 0 命中，
+   差点把在用的组件当成死文件。正确的搜法是搜模块名 `CategoryFilter`，
+   不带 `.tsx`。
+
+   ## 注意：`app/` 下不是 `page.tsx` 的文件 ≠ 死文件
+
+   Next 只把 `page` / `layout` / `route` / `loading` / `error` /
+   `not-found` / `template` / `default` / `global-error` 当路由约定，
+   但普通组件可以放在 `app/` 里被 `page.tsx` 引用。例如：
+
+   ```
+   app/components/IndustryLayerList.tsx   ← 被 app/page.tsx 引用，不能删
+   app/startup/StartupClient.tsx          ← 被 app/startup/page.tsx 引用
+   ```
+
+   ## 删之前必须确认
+
+   - `git ls-files --error-unmatch <file>` 通过（在 git 里，删了能恢复）
+   - 不是被 `dynamic import()` 或字符串拼出来的模块
+
+   ## 删之后必须验证
+
+   `npx tsc --noEmit` + `npm run build` + 全站抽查页面 200 + 跑测试。
+   少一个步骤都可能把「删对了文件但改坏了引用」放过去。
+
 ## 遇到问题时
 
 读 `ai-context/AI_TROUBLESHOOTING_GUIDE.md`（含实测案例）。
