@@ -315,18 +315,31 @@ bash scripts/install-cron.sh
 
 **`db-backup-scheduler.sh`** —— 数据库备份，阈值 20 小时。
 
-### 告警渠道（可选）
+### 告警渠道
 
-`scripts/alert.sh` 支持三种渠道，**不配置也能运行**（只写本地日志）。
-配置写在 `.env.local` 或 `~/.alert-config`：
+**当前已配置：Server 酱**（微信推送）。密钥在 `.env.local` 的
+`SERVERCHAN_KEY`，该文件未被 git 跟踪。
 
-```ini
-# 三选一
-SERVERCHAN_KEY=SCTxxxxx                      # Server 酱，微信推送
-TELEGRAM_BOT_TOKEN=123:ABC                   # Telegram
-TELEGRAM_CHAT_ID=xxx
-ALERT_WEBHOOK_URL=https://...                # 通用 webhook，POST JSON
+配置与管理用脚本，不要手工编辑 `.env.local`：
+
+```bash
+bash scripts/set-alert-channel.sh status                          # 查看（密钥打码）
+bash scripts/set-alert-channel.sh serverchan SCTxxxxx             # Server 酱
+bash scripts/set-alert-channel.sh telegram 123:ABC chatid         # Telegram
+bash scripts/set-alert-channel.sh webhook https://example.com/h   # 通用 webhook
+bash scripts/set-alert-channel.sh test                            # 发一条测试
+bash scripts/set-alert-channel.sh clear                           # 清空
 ```
+
+脚本幂等：同一渠道重复设置会覆盖而非追加；`clear` 会连被注释掉的
+同名行一起清掉，避免「注释里的旧密钥」与「生效的新密钥」并存。
+
+**全链路已验证**（2026-10-17）：模拟域名不可达后，
+`health-monitor.sh` 判定故障并推送「站点异常」，
+恢复后推送「站点已恢复」，两次均收到。
+
+> 三种渠道都**不配也能运行** —— 只写 `logs/alert.log`。
+> 这是刻意设计：不把「没配告警」变成「监控脚本报错」的二次噪音。
 
 ### 日志位置
 
