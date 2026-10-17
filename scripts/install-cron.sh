@@ -91,6 +91,10 @@ echo "=== 3. 写入新 crontab ==="
 # 数据库备份：陈旧 >20 小时才真跑
 0 23 * * * $PROJECT_DIR/scripts/db-backup-scheduler.sh
 @reboot sleep 120 && $PROJECT_DIR/scripts/db-backup-scheduler.sh
+
+# AI 用量日报：22:30 推送当天报告；开机补发昨天漏掉的
+30 22 * * * $PROJECT_DIR/scripts/daily-report.sh
+@reboot sleep 300 && $PROJECT_DIR/scripts/daily-report.sh catchup
 EOF
   printf '%s\n' "$END_MARK"
 
