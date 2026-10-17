@@ -119,6 +119,104 @@ HTTPS。
 
 ================================
 
+# 一之二、网站间歇性打不开（2026-10-17 排查记录）
+
+## 现象
+
+- 有时能开、有时打不开，无明显规律
+- `http://127.0.0.1:3000` 一直正常
+- 换设备、换网络表现不同
+
+## 结论：两个独立问题叠加，都已定位
+
+### 问题 A：隧道协议导致反复断连（已修复）
+
+**症状**：隧道日志里 `Connection terminated` 频率极高
+（修复前实测 10 分钟内 14 次，约每 40 秒一次）。
+
+**根因**：cloudflared 默认走 IPv6 + QUIC/UDP。
+
+```
+--edge-ip-version 4          边缘地址解析为 IPv4
+--edge-bind-address 0.0.0.0  套接字绑 IPv4（否则源地址是 [::]）
+--protocol http2             用 TCP 替代 UDP/QUIC
+```
+
+三个都要加。缺第一个会报 `network is unreachable`；
+缺第二个会出现 `write udp [::]:43260->198.41.x.x:7844` 这类错；
+缺第三个在国内网络下 UDP 常被 QoS。
+
+**修复后**：连续 27 分钟零错误，4 条连接未重连。
+
+服务定义见 `/etc/systemd/system/cloudflared-ipv4.service`，
+管理脚本 `scripts/manage-cloudflared.sh`（status / install / rollback）。
+
+### 问题 B：访客侧 IPv6 到 Cloudflare 边缘不可达（**无法修复**）
+
+**症状**：`dig AAAA aibiliai.com` 有记录，但 IPv6 连不上。
+
+```
+2606:4700:3031::6815:23f   TCP 443 不通
+2606:4700:3033::ac43:80d6   TCP 443 不通
+```
+
+**影响实测**（Node 内置 https，含 RFC 8305 Happy Eyeballs，与浏览器一致）：
+
+```
+浏览器行为（双栈并行）   19/20 成功  1 次超时   平均 2.36s
+强制 IPv4（基线）        20/20 成功  0 次失败   平均 1.89s
+```
+
+即：**约 5% 请求失败，平均慢 0.47 秒。**
+
+> ⚠️ 用 curl 测会得到"20% 失败"的结论，那是错的 ——
+> curl 不做 Happy Eyeballs，先等 IPv6 满超时才试 IPv4。
+> 判断真实访客体验必须用 Node/浏览器，不能用 curl。
+
+**为什么修不了**：Cloudflare 免费版不给关闭 IPv6。三条路都试过：
+
+| 路径 | 结果 |
+| --- | --- |
+| 后台「IPv6 兼容性」开关 | 存在但禁用（Enterprise 专属） |
+| API `PATCH /zones/{id}/settings/ipv6` | Enterprise 专属 |
+| API 记录级 `settings.ipv4_only` | 报错 9227：`The IPv4 Only and IPv6 Only settings are not available to this zone` |
+
+官方文档明确标注该功能仅 Enterprise 可自定义。
+
+**决定：接受现状。** 理由：影响仅 5% 失败 + 慢 0.5 秒，
+浏览器失败后会自动重试；为这个升级 Enterprise 不划算。
+
+## 排查顺序（下次照这个走）
+
+```bash
+# 1. 应用本身是否正常
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
+# 200 = 应用没问题，问题在隧道或 DNS
+
+# 2. 隧道是否在断连（关键指标）
+journalctl -u cloudflared-ipv4 --since '10 min ago' --no-pager | grep -c 'Connection terminated'
+# 接近 0 正常；每秒几次说明协议参数丢了
+
+# 3. 隧道协议与 IP 版本
+journalctl -u cloudflared-ipv4 -n 50 --no-pager | grep 'Registered tunnel'
+# 要看到 protocol=http2 且 ip=198.41.x / 104.x（IPv4）
+
+# 4. 是否 IPv6 问题
+curl -4 -s -o /dev/null -w 'v4: %{http_code}\n' https://aibiliai.com/
+curl -6 -s -o /dev/null -m 8 -w 'v6: %{http_code}\n' https://aibiliai.com/
+# v4=200 且 v6=000 → 就是问题 B，无解，属已知现象
+```
+
+## 二次排查时不要做的事
+
+- **不要用 curl 的失败率推断访客体验**（它没有 Happy Eyeballs）
+- **不要去看 nginx**（已于 2026-10-17 停用，不在链路上）
+- **不要以为「服务 active」就代表参数生效** ——
+  `systemctl start` 对运行中的服务是空操作，
+  必须核对 `ps aux | grep cloudflared` 的实际命令行
+
+---
+
 # 二、PM2服务异常
 
 
