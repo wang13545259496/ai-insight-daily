@@ -123,16 +123,16 @@ export default function AboutPage() {
             <p className="mt-4 text-base leading-8 text-gray-700">
               <span className="font-bold text-black">邮箱：</span>
               <a
-                href="mailto:contact@aibiliai.com"
+                href="mailto:w13545259496@qq.com"
                 className="underline decoration-gray-300 underline-offset-4 hover:decoration-black"
               >
-                contact@aibiliai.com
+                w13545259496@qq.com
               </a>
             </p>
 
             <p className="mt-3 text-sm leading-7 text-gray-500">
-              说明：该邮箱为本项目对外联系地址。若尚未启用，
-              请联系域名注册信息中的管理员邮箱。
+              邮件通常会在数日内回复。涉及权利主张时，请注明具体页面地址与理由，
+              以便快速核实处理。
             </p>
           </div>
         </section>
