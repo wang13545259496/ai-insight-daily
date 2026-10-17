@@ -111,7 +111,7 @@ export default function RecommendNews({
 
 
 
-                        <div className="flex justify-between text-sm text-gray-500">
+                        <div className="flex justify-between text-sm text-gray-400">
 
 
                             <span>

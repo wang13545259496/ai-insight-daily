@@ -78,12 +78,12 @@ export default function TravelLoginForm({ next }: { next: string }) {
       <button
         type="submit"
         disabled={pending || password.length === 0}
-        className="mt-4 w-full rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500"
+        className="mt-4 w-full rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-400"
       >
         {pending ? "校验中…" : "进入"}
       </button>
 
-      <p className="mt-3 text-center text-xs text-gray-600">
+      <p className="mt-3 text-center text-xs text-gray-400">
         口令由站点管理员设置，登录状态保持 30 天。
       </p>
     </form>

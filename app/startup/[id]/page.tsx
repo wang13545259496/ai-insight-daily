@@ -95,7 +95,7 @@ hover:border-gray-500
               >
                 <p
                   className="
-text-gray-500
+text-gray-400
 text-sm
 "
                 >
@@ -342,7 +342,7 @@ gap-5
           ) : (
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               暂无投资分析数据
@@ -477,7 +477,7 @@ bg-gray-950
     >
       <p
         className="
-text-gray-500
+text-gray-400
 text-sm
 "
       >
@@ -518,7 +518,7 @@ text-center
     >
       <p
         className="
-text-gray-500
+text-gray-400
 "
       >
         {title}

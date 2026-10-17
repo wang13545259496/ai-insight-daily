@@ -216,7 +216,7 @@ export default async function EntityDetailPage({
                           产业价值 {Math.round(ev.industryScore)}
                         </span>
 
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-gray-600">
                           {ev.newsCount} 篇新闻
                         </span>
                       </div>
@@ -266,13 +266,13 @@ export default async function EntityDetailPage({
                               )}
 
                               {n.publishedAt && (
-                                <span className="text-xs text-gray-400">
+                                <span className="text-xs text-gray-600">
                                   {formatDate(n.publishedAt)}
                                 </span>
                               )}
 
                               {n.aiScore > 0 && (
-                                <span className="ml-auto text-xs font-bold tabular-nums text-gray-400">
+                                <span className="ml-auto text-xs font-bold tabular-nums text-gray-600">
                                   {Math.round(n.aiScore)}
                                 </span>
                               )}
@@ -325,7 +325,7 @@ export default async function EntityDetailPage({
                             </span>
                           </span>
 
-                          <span className="shrink-0 text-sm font-bold tabular-nums text-gray-400">
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-gray-600">
                             {c.shared}
                           </span>
                         </Link>

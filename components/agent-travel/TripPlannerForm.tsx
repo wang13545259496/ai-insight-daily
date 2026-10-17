@@ -536,7 +536,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
               onChange={(event) => update("budget", Number(event.target.value))}
             />
             {days > 0 && headcount > 0 && form.budget > 0 && (
-              <p className="mt-1.5 text-xs text-gray-500">
+              <p className="mt-1.5 text-xs text-gray-400">
                 {days} 天 {nights} 晚 · {headcount} 人 · 人均{" "}
                 {Math.round(form.budget / headcount)} 元 · 人均每日{" "}
                 <span
@@ -571,7 +571,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
                   <span className={`block text-sm ${active ? "text-sky-300" : "text-white"}`}>
                     {option.label}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-gray-500">{option.hint}</span>
+                  <span className="mt-0.5 block text-[11px] text-gray-400">{option.hint}</span>
                 </button>
               );
             })}
@@ -629,7 +629,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
         <button
           type="submit"
           disabled={loading}
-          className="mt-6 w-full rounded-lg bg-sky-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-500 sm:w-auto sm:px-8"
+          className="mt-6 w-full rounded-lg bg-sky-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-400 sm:w-auto sm:px-8"
         >
           {loading ? "正在生成…" : "生成旅行方案"}
         </button>
@@ -642,7 +642,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
               <span className="text-sm text-sky-300">{progress || "正在处理"}</span>
             </div>
 
-            <ul className="mt-3 space-y-0.5 text-xs text-gray-500">
+            <ul className="mt-3 space-y-0.5 text-xs text-gray-400">
               {PROGRESS_STEPS.map((step) => {
                 const activeIndex = PROGRESS_STEPS.findIndex((s) => progress.includes(s));
                 const thisIndex = PROGRESS_STEPS.indexOf(step);
@@ -653,7 +653,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
                   <li
                     key={step}
                     className={
-                      done ? "text-emerald-400/70" : current ? "text-sky-300" : "text-gray-600"
+                      done ? "text-emerald-400/70" : current ? "text-sky-300" : "text-gray-400"
                     }
                   >
                     {done ? "✓" : current ? "▸" : "·"} {step}
@@ -662,7 +662,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
               })}
             </ul>
 
-            <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-500">
+            <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-400">
               完整生成含询价、模型编排、地图通勤计算与质量校验，通常需要 30-60 秒
             </p>
           </div>

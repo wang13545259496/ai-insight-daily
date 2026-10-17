@@ -59,9 +59,14 @@ export default function NewsTitle({
       {showOriginal && en.length > 0 && (
         <span
           className={
-            // 小一号、灰色、不换行截断 —— 英文只是辅助，不占视觉重心。
+            // 小一号、降透明度、不换行截断 —— 英文只是辅助，不占视觉重心。
             // 用 block 让它独占一行，避免与中文标题挤在同一行。
-            "mt-1 block text-[11px] font-normal leading-4 text-gray-500 " + subClassName
+            //
+            // 用 opacity-70 而非固定的 text-gray-500：
+            // 本组件在浅色页与深色页都会用到，固定颜色总有一边不达标
+            // （gray-500 在黑底仅 4.34:1）。继承父级颜色再降透明度，
+            // 黑底白字与白底黑字分别得到 9.90:1 与 8.45:1，两边都达 AAA。
+            "mt-1 block text-[11px] font-normal leading-4 opacity-70 " + subClassName
           }
           // 原文是英文时标注语言，便于浏览器与读屏软件正确处理
           lang={/[\u4e00-\u9fa5]/.test(en) ? undefined : "en"}

@@ -138,7 +138,7 @@ export default async function InvestmentDetailPage({
     <main className="min-h-screen bg-black text-white p-10">
       <div className="mx-auto max-w-6xl">
         <div className="mb-10">
-          <div className="text-xs font-bold uppercase tracking-[0.25em] text-gray-500">
+          <div className="text-xs font-bold uppercase tracking-[0.25em] text-gray-400">
             INVESTMENT INTELLIGENCE
           </div>
 
@@ -170,7 +170,7 @@ export default async function InvestmentDetailPage({
                 {score.score}
               </p>
 
-              <p className="mt-2 text-sm text-gray-500">
+              <p className="mt-2 text-sm text-gray-400">
                 / 100
               </p>
             </div>
@@ -316,7 +316,7 @@ export default async function InvestmentDetailPage({
           </div>
         </section>
 
-        <div className="mt-10 border-t border-gray-800 pt-6 text-sm text-gray-500">
+        <div className="mt-10 border-t border-gray-800 pt-6 text-sm text-gray-400">
           数据来源：AI Insight Daily Investment 数据库
         </div>
       </div>
@@ -343,7 +343,7 @@ function ScoreCard({
         {score}
       </p>
 
-      <p className="mt-2 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-gray-400">
         / 100
       </p>
 

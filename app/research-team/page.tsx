@@ -74,7 +74,7 @@ transition
 
 
 
-<p className="text-gray-500 mb-5">
+<p className="text-gray-400 mb-5">
 
 {member.role}
 

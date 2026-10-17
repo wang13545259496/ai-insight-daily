@@ -170,7 +170,7 @@ export default function AgentRecommendPage() {
                     className="
                   mt-5
                   text-sm
-                  text-gray-500
+                  text-gray-400
                   "
                   >
                     查看Agent详情 →
@@ -181,7 +181,7 @@ export default function AgentRecommendPage() {
           ) : (
             <p
               className="
-            text-gray-500
+            text-gray-400
             text-xl
             "
             >

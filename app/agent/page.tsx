@@ -153,7 +153,7 @@ export default async function AgentPage() {
                   className="block border-b border-gray-800 pb-3 hover:text-gray-300"
                 >
                   {item.title}
-                  <span className="ml-3 text-gray-500">
+                  <span className="ml-3 text-gray-400">
                     {Math.round(item.heatScore)}
                   </span>
                 </Link>

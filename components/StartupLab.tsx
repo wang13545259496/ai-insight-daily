@@ -49,7 +49,7 @@ AI创业智能实验室
 
 
 <p className="
-text-gray-400
+text-gray-600
 mt-5
 text-lg
 leading-8

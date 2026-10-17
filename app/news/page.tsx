@@ -164,7 +164,7 @@ function StatCard({
 }) {
   return (
     <div className="border border-gray-200 bg-white p-6">
-      <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+      <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
         {label}
       </div>
 
@@ -342,7 +342,7 @@ export default async function NewsPage() {
         <section className="border-b border-gray-200 pb-10">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div>
-              <div className="mb-4 text-xs font-bold tracking-[0.3em] text-gray-400">
+              <div className="mb-4 text-xs font-bold tracking-[0.3em] text-gray-600">
                 AI NEWS INTELLIGENCE CENTER
               </div>
 
@@ -400,7 +400,7 @@ export default async function NewsPage() {
 
         <section className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-2">
           <div>
-            <div className="text-xs font-bold tracking-[0.25em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.25em] text-gray-600">
               CATEGORIES
             </div>
 
@@ -419,7 +419,7 @@ export default async function NewsPage() {
                   </span>
                 ))
               ) : (
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-gray-600">
                   暂无分类数据
                 </span>
               )}
@@ -427,7 +427,7 @@ export default async function NewsPage() {
           </div>
 
           <div>
-            <div className="text-xs font-bold tracking-[0.25em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.25em] text-gray-600">
               SOURCES
             </div>
 
@@ -446,7 +446,7 @@ export default async function NewsPage() {
                   </span>
                 ))
               ) : (
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-gray-600">
                   暂无来源数据
                 </span>
               )}
@@ -460,7 +460,7 @@ export default async function NewsPage() {
           <section className="mt-16">
             <div className="flex items-end justify-between border-b border-gray-200 pb-5">
               <div>
-                <div className="text-xs font-bold tracking-[0.25em] text-gray-400">
+                <div className="text-xs font-bold tracking-[0.25em] text-gray-600">
                   INTELLIGENCE SIGNAL
                 </div>
 
@@ -469,7 +469,7 @@ export default async function NewsPage() {
                 </h2>
               </div>
 
-              <div className="hidden text-sm text-gray-400 md:block">
+              <div className="hidden text-sm text-gray-600 md:block">
                 AI Score / VERIFIED / EVENT
               </div>
             </div>
@@ -495,7 +495,7 @@ export default async function NewsPage() {
                     <NewsTitle title={item.title} titleZh={item.titleZh} />
                   </h3>
 
-                  <div className="mt-5 text-xs text-gray-400">
+                  <div className="mt-5 text-xs text-gray-600">
                     {item.category}
                   </div>
 
@@ -513,7 +513,7 @@ export default async function NewsPage() {
         <section className="mt-16">
           <div className="flex flex-col justify-between gap-4 border-b border-black pb-5 md:flex-row md:items-end">
             <div>
-              <div className="text-xs font-bold tracking-[0.25em] text-gray-400">
+              <div className="text-xs font-bold tracking-[0.25em] text-gray-600">
                 NEWS STREAM
               </div>
 
@@ -556,7 +556,7 @@ export default async function NewsPage() {
 
                     <div className="flex items-start border-b border-gray-100 bg-gray-50 p-5 lg:border-b-0 lg:border-r">
                       <div>
-                        <div className="text-xs font-black tracking-[0.15em] text-gray-400">
+                        <div className="text-xs font-black tracking-[0.15em] text-gray-600">
                           {String(index + 1).padStart(2, "0")}
                         </div>
 
@@ -596,7 +596,7 @@ export default async function NewsPage() {
                         {summary}
                       </p>
 
-                      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-400">
+                      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-600">
                         <span>
                           {item.sourceRef?.name ||
                             item.source ||
@@ -623,7 +623,7 @@ export default async function NewsPage() {
                     {/* RIGHT INTELLIGENCE */}
 
                     <div className="border-t border-gray-100 bg-gray-50 p-6 lg:border-l lg:border-t-0">
-                      <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+                      <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
                         EVENT
                       </div>
 
@@ -637,7 +637,7 @@ export default async function NewsPage() {
                           </Link>
 
                           <div className="mt-4 flex items-center justify-between text-xs">
-                            <span className="text-gray-400">
+                            <span className="text-gray-600">
                               {event.trendStatus ||
                                 "rising"}
                             </span>
@@ -651,7 +651,7 @@ export default async function NewsPage() {
                           </div>
                         </>
                       ) : (
-                        <div className="mt-3 text-sm text-gray-400">
+                        <div className="mt-3 text-sm text-gray-600">
                           暂未关联事件
                         </div>
                       )}
@@ -687,7 +687,7 @@ export default async function NewsPage() {
 
         <section className="mt-16 grid grid-cols-1 gap-px border border-gray-200 bg-gray-200 md:grid-cols-3">
           <div className="bg-black p-7 text-white">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-500">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
               DATA STATUS
             </div>
 
@@ -701,7 +701,7 @@ export default async function NewsPage() {
           </div>
 
           <div className="bg-white p-7">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               VERIFICATION
             </div>
 
@@ -715,7 +715,7 @@ export default async function NewsPage() {
           </div>
 
           <div className="bg-white p-7">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               TRACEABILITY
             </div>
 
@@ -731,7 +731,7 @@ export default async function NewsPage() {
 
         {/* FOOTER */}
 
-        <footer className="mt-16 border-t border-gray-200 py-8 text-xs text-gray-400">
+        <footer className="mt-16 border-t border-gray-200 py-8 text-xs text-gray-600">
           AI Insight Daily · News Intelligence Center
         </footer>
       </div>

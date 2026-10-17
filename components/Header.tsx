@@ -120,7 +120,7 @@ AI Insight Daily
 <p
 
 className="
-text-gray-500
+text-gray-400
 hidden
 md:block
 "

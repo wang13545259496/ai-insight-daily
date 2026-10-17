@@ -127,7 +127,7 @@ export default async function InvestmentPage() {
               AI INDUSTRY INTELLIGENCE
             </span>
 
-            <span className="rounded-full border border-gray-800 px-3 py-1 text-[11px] tracking-[0.18em] text-gray-600">
+            <span className="rounded-full border border-gray-800 px-3 py-1 text-[11px] tracking-[0.18em] text-gray-400">
               INVESTMENT OBSERVATION
             </span>
           </div>
@@ -149,7 +149,7 @@ export default async function InvestmentPage() {
                   数据口径
                 </div>
 
-                <p className="mt-2 max-w-4xl text-sm leading-7 text-gray-500">
+                <p className="mt-2 max-w-4xl text-sm leading-7 text-gray-400">
                   本页面展示的是
                   <span className="text-gray-300">
                     AI产业投资观察主体
@@ -159,12 +159,12 @@ export default async function InvestmentPage() {
                 </p>
               </div>
 
-              <div className="shrink-0 rounded-xl border border-gray-800 px-4 py-3 text-xs text-gray-600">
+              <div className="shrink-0 rounded-xl border border-gray-800 px-4 py-3 text-xs text-gray-400">
                 {items.length} 个真实观察主体
               </div>
             </div>
 
-            <div className="mt-5 border-t border-gray-900 pt-4 text-xs leading-6 text-gray-600">
+            <div className="mt-5 border-t border-gray-900 pt-4 text-xs leading-6 text-gray-400">
               评分用于辅助 AI 产业研究、信息筛选和趋势判断，
               不构成投资建议、买卖建议、估值结论或收益承诺。
             </div>
@@ -245,7 +245,7 @@ export default async function InvestmentPage() {
               />
 
               <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-950">
-                <div className="grid grid-cols-6 border-b border-gray-800 px-5 py-4 text-xs text-gray-600">
+                <div className="grid grid-cols-6 border-b border-gray-800 px-5 py-4 text-xs text-gray-400">
                   <div>主体</div>
                   <div>商业</div>
                   <div>技术</div>
@@ -265,7 +265,7 @@ export default async function InvestmentPage() {
                         {item.name}
                       </div>
 
-                      <div className="mt-1 truncate text-xs text-gray-600">
+                      <div className="mt-1 truncate text-xs text-gray-400">
                         {item.industry}
                       </div>
                     </div>
@@ -305,7 +305,7 @@ export default async function InvestmentPage() {
                   >
                     <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                       <div className="flex min-w-0 gap-5">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-800 text-sm font-semibold text-gray-500">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-800 text-sm font-semibold text-gray-400">
                           {index + 1}
                         </div>
 
@@ -320,11 +320,11 @@ export default async function InvestmentPage() {
                             />
                           </div>
 
-                          <div className="mt-2 text-sm text-gray-500">
+                          <div className="mt-2 text-sm text-gray-400">
                             {item.industry}
                           </div>
 
-                          <p className="mt-4 max-w-4xl text-sm leading-7 text-gray-500">
+                          <p className="mt-4 max-w-4xl text-sm leading-7 text-gray-400">
                             {item.description}
                           </p>
 
@@ -359,7 +359,7 @@ export default async function InvestmentPage() {
                       </div>
 
                       <div className="shrink-0 border-t border-gray-900 pt-5 lg:border-t-0 lg:pt-0 lg:text-right">
-                        <div className="text-xs text-gray-600">
+                        <div className="text-xs text-gray-400">
                           综合投资评分
                         </div>
 
@@ -367,7 +367,7 @@ export default async function InvestmentPage() {
                           {item.calculatedScore}
                         </div>
 
-                        <div className="mt-2 max-w-xs text-xs leading-5 text-gray-600 lg:ml-auto">
+                        <div className="mt-2 max-w-xs text-xs leading-5 text-gray-400 lg:ml-auto">
                           {item.calculatedReason}
                         </div>
                       </div>
@@ -430,7 +430,7 @@ export default async function InvestmentPage() {
                     key={industry}
                     className="rounded-2xl border border-gray-800 bg-gray-950 p-6"
                   >
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-400">
                       {industry}
                     </div>
 
@@ -438,7 +438,7 @@ export default async function InvestmentPage() {
                       {count}
                     </div>
 
-                    <div className="mt-2 text-xs text-gray-600">
+                    <div className="mt-2 text-xs text-gray-400">
                       个观察主体
                     </div>
 
@@ -463,7 +463,7 @@ export default async function InvestmentPage() {
             <section className="mb-12 grid gap-6 lg:grid-cols-2">
               <div className="rounded-3xl border border-gray-800 bg-gray-950 p-6">
                 <div className="mb-7">
-                  <div className="text-xs tracking-[0.2em] text-gray-600">
+                  <div className="text-xs tracking-[0.2em] text-gray-400">
                     LOWER RISK
                   </div>
 
@@ -471,7 +471,7 @@ export default async function InvestmentPage() {
                     相对低风险观察
                   </h2>
 
-                  <p className="mt-2 text-sm leading-6 text-gray-500">
+                  <p className="mt-2 text-sm leading-6 text-gray-400">
                     风险评分越低，当前评分模型中的风险控制得分越高。
                   </p>
                 </div>
@@ -489,7 +489,7 @@ export default async function InvestmentPage() {
 
               <div className="rounded-3xl border border-gray-800 bg-gray-950 p-6">
                 <div className="mb-7">
-                  <div className="text-xs tracking-[0.2em] text-gray-600">
+                  <div className="text-xs tracking-[0.2em] text-gray-400">
                     RISK WATCH
                   </div>
 
@@ -497,7 +497,7 @@ export default async function InvestmentPage() {
                     风险重点观察
                   </h2>
 
-                  <p className="mt-2 text-sm leading-6 text-gray-500">
+                  <p className="mt-2 text-sm leading-6 text-gray-400">
                     风险评分较高的主体，需要更多公开证据和后续商业验证。
                   </p>
                 </div>
@@ -533,7 +533,7 @@ export default async function InvestmentPage() {
                           {item.name}
                         </div>
 
-                        <div className="mt-1 text-xs text-gray-600">
+                        <div className="mt-1 text-xs text-gray-400">
                           {item.sourceType || "unknown"}
                         </div>
                       </div>
@@ -543,14 +543,14 @@ export default async function InvestmentPage() {
                           {item.calculatedScore}
                         </div>
 
-                        <div className="text-[10px] text-gray-600">
+                        <div className="text-[10px] text-gray-400">
                           SCORE
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-5 border-t border-gray-900 pt-4">
-                      <div className="text-[11px] text-gray-600">
+                      <div className="text-[11px] text-gray-400">
                         SOURCE NEWS #{item.sourceNewsId}
                       </div>
 
@@ -559,11 +559,11 @@ export default async function InvestmentPage() {
                           "暂无来源新闻"}
                       </div>
 
-                      <div className="mt-4 text-[11px] text-gray-600">
+                      <div className="mt-4 text-[11px] text-gray-400">
                         SOURCE EVENT #{item.sourceEventId}
                       </div>
 
-                      <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-600">
+                      <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-400">
                         {item.sourceEvent?.title ||
                           "暂无来源事件"}
                       </div>
@@ -578,7 +578,7 @@ export default async function InvestmentPage() {
                           查看原始来源
                         </a>
                       ) : (
-                        <div className="mt-5 text-xs text-gray-700">
+                        <div className="mt-5 text-xs text-gray-400">
                           暂无原始来源链接
                         </div>
                       )}
@@ -590,7 +590,7 @@ export default async function InvestmentPage() {
 
             <section className="mb-12 rounded-3xl border border-gray-800 bg-gray-950 p-6 md:p-8">
               <div className="max-w-4xl">
-                <div className="text-xs tracking-[0.2em] text-gray-600">
+                <div className="text-xs tracking-[0.2em] text-gray-400">
                   METHODOLOGY
                 </div>
 
@@ -635,7 +635,7 @@ export default async function InvestmentPage() {
         )}
 
         <section className="border-t border-gray-900 pt-8">
-          <div className="flex flex-col gap-3 text-xs leading-6 text-gray-600 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 text-xs leading-6 text-gray-400 md:flex-row md:items-center md:justify-between">
             <div>
               {items.length > 0
                 ? `当前基于 ${items.length} 个真实 AI 产业投资观察主体`
@@ -680,7 +680,7 @@ function EmptyState() {
   return (
     <section className="rounded-3xl border border-gray-800 bg-gray-950 p-10 md:p-16">
       <div className="mx-auto max-w-2xl text-center">
-        <div className="text-xs tracking-[0.2em] text-gray-600">
+        <div className="text-xs tracking-[0.2em] text-gray-400">
           INVESTMENT OBSERVATION
         </div>
 
@@ -688,7 +688,7 @@ function EmptyState() {
           当前没有真实投资观察主体
         </h2>
 
-        <p className="mt-5 text-sm leading-7 text-gray-500">
+        <p className="mt-5 text-sm leading-7 text-gray-400">
           当前 Investment 数据库没有真实项目。
           系统不会自动生成演示项目、虚构公司或模拟投资标的。
           只有真实新闻经过主体识别、证据判断和投资价值分析后，
@@ -705,7 +705,7 @@ function EmptyState() {
 
           <Link
             href="/events"
-            className="rounded-xl border border-gray-800 px-5 py-3 text-sm text-gray-500 transition hover:border-gray-600 hover:text-gray-300"
+            className="rounded-xl border border-gray-800 px-5 py-3 text-sm text-gray-400 transition hover:border-gray-600 hover:text-gray-300"
           >
             查看产业事件
           </Link>
@@ -726,7 +726,7 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl border border-gray-800 bg-gray-950 p-5">
-      <div className="text-xs tracking-wide text-gray-600">
+      <div className="text-xs tracking-wide text-gray-400">
         {label}
       </div>
 
@@ -734,7 +734,7 @@ function StatCard({
         {value}
       </div>
 
-      <div className="mt-2 text-xs text-gray-600">
+      <div className="mt-2 text-xs text-gray-400">
         {description}
       </div>
     </div>
@@ -752,7 +752,7 @@ function SectionHeader({
 }) {
   return (
     <div className="mb-6">
-      <div className="text-xs tracking-[0.2em] text-gray-600">
+      <div className="text-xs tracking-[0.2em] text-gray-400">
         {eyebrow}
       </div>
 
@@ -760,7 +760,7 @@ function SectionHeader({
         {title}
       </h2>
 
-      <p className="mt-2 max-w-4xl text-sm leading-6 text-gray-500">
+      <p className="mt-2 max-w-4xl text-sm leading-6 text-gray-400">
         {description}
       </p>
     </div>
@@ -781,7 +781,7 @@ function InvestmentCard({
     >
       <div className="flex items-start justify-between gap-5">
         <div className="min-w-0">
-          <div className="text-xs tracking-[0.16em] text-gray-600">
+          <div className="text-xs tracking-[0.16em] text-gray-400">
             TOP {rank}
           </div>
 
@@ -789,7 +789,7 @@ function InvestmentCard({
             {item.name}
           </h3>
 
-          <div className="mt-2 text-sm text-gray-500">
+          <div className="mt-2 text-sm text-gray-400">
             {item.industry}
           </div>
         </div>
@@ -803,7 +803,7 @@ function InvestmentCard({
         </div>
       </div>
 
-      <p className="mt-6 line-clamp-4 text-sm leading-7 text-gray-500">
+      <p className="mt-6 line-clamp-4 text-sm leading-7 text-gray-400">
         {item.description}
       </p>
 
@@ -830,11 +830,11 @@ function InvestmentCard({
       </div>
 
       <div className="mt-5 flex items-center justify-between border-t border-gray-900 pt-4">
-        <span className="text-xs text-gray-600">
+        <span className="text-xs text-gray-400">
           来源新闻 #{item.sourceNewsId}
         </span>
 
-        <span className="text-xs text-gray-600 transition group-hover:text-gray-300">
+        <span className="text-xs text-gray-400 transition group-hover:text-gray-300">
           查看观察 →
         </span>
       </div>
@@ -853,7 +853,7 @@ function DimensionCard({
 }) {
   return (
     <div className="rounded-2xl border border-gray-800 bg-gray-950 p-5">
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-gray-400">
         {label}
       </div>
 
@@ -861,7 +861,7 @@ function DimensionCard({
         {value}
       </div>
 
-      <div className="mt-2 text-xs leading-5 text-gray-600">
+      <div className="mt-2 text-xs leading-5 text-gray-400">
         {description}
       </div>
 
@@ -898,7 +898,7 @@ function MiniMetric({
 }) {
   return (
     <div className="rounded-xl border border-gray-900 p-3">
-      <div className="text-xs text-gray-600">
+      <div className="text-xs text-gray-400">
         {label}
       </div>
 
@@ -919,7 +919,7 @@ function MetricTag({
   inverted?: boolean;
 }) {
   return (
-    <span className="rounded-lg border border-gray-800 px-3 py-1.5 text-xs text-gray-500">
+    <span className="rounded-lg border border-gray-800 px-3 py-1.5 text-xs text-gray-400">
       {label} {normalize(value)}
       {inverted ? " · 越低越好" : ""}
     </span>
@@ -958,7 +958,7 @@ function RiskRow({
           {item.name}
         </div>
 
-        <div className="mt-1 truncate text-xs text-gray-600">
+        <div className="mt-1 truncate text-xs text-gray-400">
           {item.industry}
         </div>
       </div>
@@ -968,7 +968,7 @@ function RiskRow({
           {showControl ? control : risk}
         </div>
 
-        <div className="text-[11px] text-gray-600">
+        <div className="text-[11px] text-gray-400">
           {showControl ? "风险控制" : "风险评分"}
         </div>
       </div>
@@ -987,7 +987,7 @@ function MethodStep({
 }) {
   return (
     <div className="rounded-2xl border border-gray-900 p-5">
-      <div className="text-xs tracking-[0.15em] text-gray-700">
+      <div className="text-xs tracking-[0.15em] text-gray-400">
         {number}
       </div>
 
@@ -995,7 +995,7 @@ function MethodStep({
         {title}
       </div>
 
-      <p className="mt-2 text-xs leading-5 text-gray-600">
+      <p className="mt-2 text-xs leading-5 text-gray-400">
         {description}
       </p>
     </div>

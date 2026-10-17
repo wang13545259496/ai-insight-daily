@@ -252,7 +252,7 @@ text-gray-400
 className="
 mt-3
 text-sm
-text-gray-500
+text-gray-400
 "
 
 >

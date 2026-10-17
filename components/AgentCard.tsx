@@ -84,7 +84,7 @@ font-bold
 className="
 mt-4
 text-sm
-text-gray-500
+text-gray-400
 "
 
 >

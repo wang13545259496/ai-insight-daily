@@ -74,7 +74,7 @@ export default async function DailyPage() {
         <p
           className="
           mt-3
-          text-gray-500
+          text-gray-400
           "
         >
           自动追踪全球AI技术、企业动态与产业趋势
@@ -123,7 +123,7 @@ export default async function DailyPage() {
               >
                 <div
                   className="
-                text-gray-500
+                text-gray-400
                 mb-3
                 "
                 >
@@ -148,25 +148,25 @@ export default async function DailyPage() {
                 "
                 >
                   <div>
-                    <p className="text-gray-500">行业领域</p>
+                    <p className="text-gray-400">行业领域</p>
 
                     <p className="mt-2">{event.category}</p>
                   </div>
 
                   <div>
-                    <p className="text-gray-500">当前热度</p>
+                    <p className="text-gray-400">当前热度</p>
 
                     <p className="mt-2">{event.heatScore}</p>
                   </div>
 
                   <div>
-                    <p className="text-gray-500">相关新闻</p>
+                    <p className="text-gray-400">相关新闻</p>
 
                     <p className="mt-2">{event.news.length} 篇</p>
                   </div>
 
                   <div>
-                    <p className="text-gray-500">趋势</p>
+                    <p className="text-gray-400">趋势</p>
 
                     <p
                       className="
@@ -352,7 +352,7 @@ export default async function DailyPage() {
                 <p
                   className="
                   mt-3
-                  text-gray-500
+                  text-gray-400
                   "
                 >
                   {report.date}

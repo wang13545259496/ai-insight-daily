@@ -214,7 +214,7 @@ mt-5
 <div>
 
 <p className="
-text-gray-500
+text-gray-400
 ">
 
 热度
@@ -238,7 +238,7 @@ text-xl
 <div>
 
 <p className="
-text-gray-500
+text-gray-400
 ">
 
 峰值
@@ -263,7 +263,7 @@ text-xl
 <div>
 
 <p className="
-text-gray-500
+text-gray-400
 ">
 
 新闻

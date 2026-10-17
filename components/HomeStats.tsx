@@ -109,7 +109,7 @@ font-bold
 
 
 className="
-text-gray-500
+text-gray-400
 mt-3
 "
 

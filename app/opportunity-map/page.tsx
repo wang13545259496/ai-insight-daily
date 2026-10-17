@@ -96,7 +96,7 @@ export default async function OpportunityMapPage() {
         <section className="border-b border-zinc-200 pb-10">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div>
-              <div className="text-xs font-semibold tracking-[0.28em] text-zinc-400">
+              <div className="text-xs font-semibold tracking-[0.28em] text-zinc-600">
                 BUSINESS OPPORTUNITY INTELLIGENCE
               </div>
 
@@ -104,7 +104,7 @@ export default async function OpportunityMapPage() {
                 AI商业机会地图
               </h1>
 
-              <p className="mt-5 max-w-3xl text-base leading-8 text-zinc-500">
+              <p className="mt-5 max-w-3xl text-base leading-8 text-zinc-600">
                 从AI产业趋势、热点事件和市场变化中识别值得关注的商业机会，
                 建立从产业信号到创业方向的决策视图。
               </p>
@@ -157,7 +157,7 @@ export default async function OpportunityMapPage() {
 
         <section className="py-10">
           <div className="mb-6">
-            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
               OPPORTUNITY SIGNAL
             </div>
 
@@ -232,7 +232,7 @@ export default async function OpportunityMapPage() {
         <section className="border-t border-zinc-200 py-10">
           <div className="mb-6 flex items-end justify-between">
             <div>
-              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
                 OPPORTUNITY RADAR
               </div>
 
@@ -241,7 +241,7 @@ export default async function OpportunityMapPage() {
               </h2>
             </div>
 
-            <span className="hidden text-sm text-zinc-400 md:block">
+            <span className="hidden text-sm text-zinc-600 md:block">
               共 {opportunities.length} 个机会节点
             </span>
           </div>
@@ -257,11 +257,11 @@ export default async function OpportunityMapPage() {
                   className="group rounded-2xl border border-zinc-200 bg-white p-6 transition hover:border-black hover:shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs font-bold tracking-[0.18em] text-zinc-400">
+                    <span className="text-xs font-bold tracking-[0.18em] text-zinc-600">
                       OPPORTUNITY {String(index + 1).padStart(2, "0")}
                     </span>
 
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-zinc-600">
                       {formatDate(item.createdAt)}
                     </span>
                   </div>
@@ -284,13 +284,13 @@ export default async function OpportunityMapPage() {
                     {item.opportunity}
                   </h3>
 
-                  <p className="mt-3 line-clamp-3 text-sm leading-7 text-zinc-500">
+                  <p className="mt-3 line-clamp-3 text-sm leading-7 text-zinc-600">
                     {item.description ||
                       "暂无详细机会描述。"}
                   </p>
 
                   <div className="mt-6 flex items-center justify-between border-t border-zinc-100 pt-4">
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-zinc-600">
                       节点 #{item.id}
                     </span>
 
@@ -306,7 +306,7 @@ export default async function OpportunityMapPage() {
 
         <section className="grid gap-6 border-t border-zinc-200 py-10 lg:grid-cols-2">
           <div className="rounded-3xl border border-zinc-200 p-7">
-            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
               DIRECTION ANALYSIS
             </div>
 
@@ -316,7 +316,7 @@ export default async function OpportunityMapPage() {
 
             <div className="mt-6 space-y-4">
               {directions.length === 0 ? (
-                <div className="text-sm text-zinc-500">
+                <div className="text-sm text-zinc-600">
                   暂无方向数据。
                 </div>
               ) : (
@@ -346,7 +346,7 @@ export default async function OpportunityMapPage() {
                           </span>
                         </div>
 
-                        <span className="text-zinc-400">
+                        <span className="text-zinc-600">
                           {item.count} 个机会
                         </span>
                       </div>
@@ -367,7 +367,7 @@ export default async function OpportunityMapPage() {
           </div>
 
           <div className="rounded-3xl bg-zinc-100 p-7">
-            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
               MARKET DIRECTION
             </div>
 
@@ -377,7 +377,7 @@ export default async function OpportunityMapPage() {
 
             <div className="mt-6 space-y-3">
               {topTrends.length === 0 ? (
-                <div className="text-sm text-zinc-500">
+                <div className="text-sm text-zinc-600">
                   暂无趋势数据。
                 </div>
               ) : (
@@ -396,7 +396,7 @@ export default async function OpportunityMapPage() {
                       </span>
                     </div>
 
-                    <span className="text-sm text-zinc-500">
+                    <span className="text-sm text-zinc-600">
                       {count} 个节点
                     </span>
                   </div>
@@ -408,7 +408,7 @@ export default async function OpportunityMapPage() {
 
         <section className="py-2 pb-10">
           <div className="rounded-3xl border border-zinc-200 p-7 md:p-9">
-            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
               BUSINESS JUDGEMENT
             </div>
 
@@ -465,7 +465,7 @@ export default async function OpportunityMapPage() {
           </div>
 
           <div className="mt-10 flex flex-col justify-between gap-5 border-t border-zinc-800 pt-6 md:flex-row md:items-center">
-            <div className="max-w-2xl text-sm leading-7 text-zinc-500">
+            <div className="max-w-2xl text-sm leading-7 text-zinc-400">
               商业机会地图根据当前产业数据进行结构化整理，
               用于发现和研究潜在商业方向，不构成投资建议。
             </div>
@@ -488,7 +488,7 @@ export default async function OpportunityMapPage() {
           </div>
         </section>
 
-        <div className="mt-8 flex flex-col justify-between gap-3 border-t border-zinc-200 pt-6 text-xs text-zinc-400 md:flex-row">
+        <div className="mt-8 flex flex-col justify-between gap-3 border-t border-zinc-200 pt-6 text-xs text-zinc-600 md:flex-row">
           <span>
             AI INSIGHT DAILY · BUSINESS OPPORTUNITY INTELLIGENCE
           </span>
@@ -511,7 +511,7 @@ function StatCard({
 }) {
   return (
     <div className="bg-white p-5">
-      <div className="text-[10px] font-semibold tracking-[0.18em] text-zinc-400">
+      <div className="text-[10px] font-semibold tracking-[0.18em] text-zinc-600">
         {label}
       </div>
 
@@ -531,7 +531,7 @@ function DarkMetric({
 }) {
   return (
     <div className="rounded-xl border border-zinc-800 p-4">
-      <div className="text-[10px] tracking-[0.16em] text-zinc-500">
+      <div className="text-[10px] tracking-[0.16em] text-zinc-600">
         {label}
       </div>
 
@@ -551,7 +551,7 @@ function JudgementCard({
 }) {
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5">
-      <div className="text-xs font-semibold tracking-[0.12em] text-zinc-400">
+      <div className="text-xs font-semibold tracking-[0.12em] text-zinc-600">
         {title}
       </div>
 
@@ -573,7 +573,7 @@ function FooterMetric({
 }) {
   return (
     <div>
-      <div className="text-xs tracking-[0.18em] text-zinc-500">
+      <div className="text-xs tracking-[0.18em] text-zinc-600">
         {label}
       </div>
 
@@ -581,7 +581,7 @@ function FooterMetric({
         {value.toLocaleString("zh-CN")}
       </div>
 
-      <div className="mt-2 text-sm text-zinc-500">
+      <div className="mt-2 text-sm text-zinc-600">
         {text}
       </div>
     </div>
@@ -594,7 +594,7 @@ function EmptyState({
   text: string;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 p-8 text-sm text-zinc-500">
+    <div className="rounded-2xl border border-zinc-200 p-8 text-sm text-zinc-600">
       {text}
     </div>
   );

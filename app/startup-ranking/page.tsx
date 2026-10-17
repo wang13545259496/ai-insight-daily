@@ -112,7 +112,7 @@ gap-6
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 市场规模
 
@@ -130,7 +130,7 @@ gap-6
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 AI替代潜力
 
@@ -148,7 +148,7 @@ AI替代潜力
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 商业化能力
 

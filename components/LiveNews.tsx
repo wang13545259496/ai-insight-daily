@@ -221,7 +221,7 @@ export default function LiveNews() {
 
         <div>
 
-          <p className="text-sm text-gray-500 uppercase tracking-widest">
+          <p className="text-sm text-gray-400 uppercase tracking-widest">
 
             LIVE AI INTELLIGENCE
 
@@ -235,7 +235,7 @@ export default function LiveNews() {
           </h2>
 
 
-          <p className="text-gray-500 mt-2">
+          <p className="text-gray-400 mt-2">
 
             数据来自实时资讯源，由 AI 自动分析与排序
 
@@ -247,7 +247,7 @@ export default function LiveNews() {
 
         {updatedAt && (
 
-          <div className="text-xs text-gray-600">
+          <div className="text-xs text-gray-400">
 
             更新：
 
@@ -271,7 +271,7 @@ export default function LiveNews() {
           border-gray-800
           rounded-2xl
           p-8
-          text-gray-500
+          text-gray-400
         ">
 
           正在获取最新 AI 资讯……
@@ -292,7 +292,7 @@ export default function LiveNews() {
           border-gray-800
           rounded-2xl
           p-8
-          text-gray-500
+          text-gray-400
         ">
 
           暂时无法获取实时资讯，请稍后刷新。
@@ -315,7 +315,7 @@ export default function LiveNews() {
             border-gray-800
             rounded-2xl
             p-8
-            text-gray-500
+            text-gray-400
           ">
 
             当前暂无实时资讯。
@@ -391,7 +391,7 @@ export default function LiveNews() {
 
                     <span className="
                       text-xs
-                      text-gray-500
+                      text-gray-400
                     ">
 
                       {item.source}
@@ -401,7 +401,7 @@ export default function LiveNews() {
 
                     <span className="
                       text-xs
-                      text-gray-600
+                      text-gray-400
                     ">
 
                       {formatTime(
@@ -439,7 +439,7 @@ export default function LiveNews() {
 
                     <div className="
                       text-xs
-                      text-gray-600
+                      text-gray-400
                     ">
 
                       AI INDEX
@@ -479,7 +479,7 @@ export default function LiveNews() {
 
                   <p className="
                     text-xs
-                    text-gray-600
+                    text-gray-400
                     uppercase
                   ">
 
@@ -507,7 +507,7 @@ export default function LiveNews() {
 
                   <p className="
                     text-xs
-                    text-gray-600
+                    text-gray-400
                     uppercase
                   ">
 
@@ -535,7 +535,7 @@ export default function LiveNews() {
 
                   <p className="
                     text-xs
-                    text-gray-600
+                    text-gray-400
                     uppercase
                   ">
 
@@ -601,7 +601,7 @@ export default function LiveNews() {
                             bg-gray-900
                             border
                             border-gray-800
-                            text-gray-500
+                            text-gray-400
                           "
 
                         >

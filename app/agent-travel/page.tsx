@@ -110,13 +110,13 @@ function StatusBanner() {
               {item.ok ? "●" : "○"}
             </span>
             <span className="text-gray-300">{item.label}</span>
-            <span className="text-gray-500">{item.note}</span>
+            <span className="text-gray-400">{item.note}</span>
           </li>
         ))}
       </ul>
 
       {!anyLive && (
-        <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-500">
+        <p className="mt-3 border-t border-white/5 pt-3 text-xs text-gray-400">
           在{" "}
           <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">.env.local</code> 中填入{" "}
           <code className="rounded bg-black/40 px-1 py-0.5 text-gray-400">VARIFLIGHT_API_KEY</code>
@@ -139,7 +139,7 @@ async function HistoryList() {
     console.error("[travel] 历史方案读取失败", { error: String(error) });
 
     return (
-      <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+      <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-400">
         历史方案暂时无法读取。
       </p>
     );
@@ -147,7 +147,7 @@ async function HistoryList() {
 
   if (plans.length === 0) {
     return (
-      <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+      <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-400">
         还没有生成过方案。填写上方表单后，生成的方案会自动保存在这里，并生成可分享的链接。
       </p>
     );
@@ -173,7 +173,7 @@ async function HistoryList() {
               </span>
             </div>
 
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-400">
               {plan.departDate} 至 {plan.returnDate} · {plan.days} 天 · 成人 {plan.adults}
               {plan.children > 0 ? ` / 儿童 ${plan.children}` : ""} · 预算 {plan.budget} 元 ·{" "}
               {STYLE_LABELS[plan.style] ?? plan.style}
@@ -209,7 +209,7 @@ export default async function TravelPage() {
     <section>
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold text-white">历史方案</h2>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-gray-400">
           已收录 {supportedCityCount()} 个常用城市，其它城市可直接填机场三字码
         </span>
       </div>
@@ -217,7 +217,7 @@ export default async function TravelPage() {
       {/* HistoryList 是异步组件，用 Suspense 包住让表单先渲染出来 */}
       <Suspense
         fallback={
-          <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-500">
+          <p className="rounded-lg border border-gray-800 bg-gray-950/40 p-4 text-xs text-gray-400">
             正在读取历史方案…
           </p>
         }

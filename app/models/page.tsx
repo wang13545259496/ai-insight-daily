@@ -213,7 +213,7 @@ className="border border-gray-800 rounded-3xl bg-gray-950 p-6 hover:border-gray-
 <div className="mt-5 flex gap-6 text-sm">
 
 <div>
-<div className="text-gray-500">
+<div className="text-gray-400">
 资讯
 </div>
 <div className="mt-1 font-bold">
@@ -223,7 +223,7 @@ className="border border-gray-800 rounded-3xl bg-gray-950 p-6 hover:border-gray-
 
 
 <div>
-<div className="text-gray-500">
+<div className="text-gray-400">
 事件
 </div>
 <div className="mt-1 font-bold">
@@ -269,7 +269,7 @@ className="block border-b border-gray-800 pb-3 hover:text-gray-300"
 {item.title}
 </div>
 
-<div className="mt-2 text-xs text-gray-500">
+<div className="mt-2 text-xs text-gray-400">
 {new Date(item.createdAt).toLocaleDateString("zh-CN")}
 </div>
 
@@ -315,7 +315,7 @@ className="block border-b border-gray-800 pb-3 hover:text-gray-300"
 {item.title}
 </span>
 
-<span className="text-xs text-gray-500">
+<span className="text-xs text-gray-400">
 热度 {Math.round(item.heatScore)}
 </span>
 

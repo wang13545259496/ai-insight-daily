@@ -212,7 +212,7 @@ mb-2
 <p
 
 className="
-text-gray-500
+text-gray-400
 leading-7
 "
 

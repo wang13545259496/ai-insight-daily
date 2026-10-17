@@ -63,7 +63,7 @@ export default function DashboardCard({
 
             <p className="
                 mt-3
-                text-gray-500
+                text-gray-400
                 text-sm
             ">
 

@@ -350,7 +350,7 @@ gap-6
             <div>
               <p
                 className="
-text-gray-500
+text-gray-400
 "
               >
                 行业
@@ -369,7 +369,7 @@ mt-2
             <div>
               <p
                 className="
-text-gray-500
+text-gray-400
 "
               >
                 趋势
@@ -388,7 +388,7 @@ mt-2
             <div>
               <p
                 className="
-text-gray-500
+text-gray-400
 "
               >
                 方向
@@ -436,7 +436,7 @@ mb-6
           {!hotspot ? (
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               暂无产业趋势数据
@@ -471,7 +471,7 @@ gap-4
                     <p
                       className="
 text-xs
-text-gray-500
+text-gray-400
 uppercase
 tracking-widest
 "
@@ -498,7 +498,7 @@ text-right
                     <p
                       className="
 text-xs
-text-gray-500
+text-gray-400
 "
                     >
                       当前指数
@@ -527,7 +527,7 @@ text-sm
                   <div>
                     <p
                       className="
-text-gray-500
+text-gray-400
 "
                     >
                       近期资讯
@@ -545,7 +545,7 @@ mt-1
                   <div>
                     <p
                       className="
-text-gray-500
+text-gray-400
 "
                     >
                       累计资讯
@@ -563,7 +563,7 @@ mt-1
                   <div>
                     <p
                       className="
-text-gray-500
+text-gray-400
 "
                     >
                       趋势状态
@@ -581,7 +581,7 @@ mt-1
                   <div>
                     <p
                       className="
-text-gray-500
+text-gray-400
 "
                     >
                       企业关注度
@@ -624,7 +624,7 @@ bg-gray-950
                   <p
                     className="
 text-xs
-text-gray-500
+text-gray-400
 uppercase
 tracking-widest
 "
@@ -644,7 +644,7 @@ mt-2
 
                   <p
                     className="
-text-gray-500
+text-gray-400
 mt-3
 "
                   >
@@ -676,7 +676,7 @@ mb-6
           {investments.length === 0 ? (
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               暂无与该商业机会直接匹配的投资数据
@@ -774,7 +774,7 @@ mb-6
           {relatedEvents.length === 0 ? (
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               暂无与该商业机会直接匹配的热点事件
@@ -822,7 +822,7 @@ font-bold
                     <span
                       className="
 text-xs
-text-gray-500
+text-gray-400
 shrink-0
 "
                     >
@@ -832,7 +832,7 @@ shrink-0
 
                   <p
                     className="
-text-gray-500
+text-gray-400
 mt-4
 text-sm
 "
@@ -865,7 +865,7 @@ mb-8
           {opportunity.BusinessReport.length === 0 ? (
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               暂无商业分析报告

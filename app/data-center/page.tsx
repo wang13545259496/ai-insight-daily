@@ -20,7 +20,7 @@ h-72
 flex
 items-center
 justify-center
-text-gray-500
+text-gray-400
 text-sm
 "
     >
@@ -288,7 +288,7 @@ font-medium
                   <div
                     className="
 text-sm
-text-gray-500
+text-gray-400
 mt-1
 "
                   >

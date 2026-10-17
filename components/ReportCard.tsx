@@ -57,7 +57,7 @@ font-bold
 <span
 className="
 text-sm
-text-gray-500
+text-gray-400
 "
 >
 

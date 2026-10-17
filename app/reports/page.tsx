@@ -93,7 +93,7 @@ text-gray-300
 
 
 
-<span className="text-sm text-gray-500">
+<span className="text-sm text-gray-400">
 
 {report.date}
 
@@ -132,7 +132,7 @@ text-gray-300
 <div className="mt-6">
 
 
-<p className="text-gray-500 text-sm">
+<p className="text-gray-400 text-sm">
 
 研究员
 
@@ -195,7 +195,7 @@ text-sm
 
 
 
-<div className="mt-8 text-sm text-gray-500">
+<div className="mt-8 text-sm text-gray-400">
 
 查看完整研究报告 →
 

@@ -30,7 +30,7 @@ h-72
 flex
 items-center
 justify-center
-text-gray-500
+text-gray-400
 "
       >
         📊 暂无AI领域热度数据
@@ -149,7 +149,7 @@ font-bold
             <div
               className="
 text-xs
-text-gray-500
+text-gray-400
 "
             >
               {item.newsCount || 0} 篇新闻

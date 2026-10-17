@@ -316,7 +316,7 @@ export default async function IndustryPage() {
         <section className="border-b border-zinc-200 pb-10">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div>
-              <div className="mb-4 text-xs font-semibold tracking-[0.28em] text-zinc-400">
+              <div className="mb-4 text-xs font-semibold tracking-[0.28em] text-zinc-600">
                 INDUSTRY INTELLIGENCE
               </div>
 
@@ -324,7 +324,7 @@ export default async function IndustryPage() {
                 AI产业智能分析中心
               </h1>
 
-              <p className="mt-5 max-w-3xl text-base leading-8 text-zinc-500">
+              <p className="mt-5 max-w-3xl text-base leading-8 text-zinc-600">
                 从新闻、事件、趋势到商业机会与投资方向，
                 对当前AI产业进行统一的数据化观察。
               </p>
@@ -351,7 +351,7 @@ export default async function IndustryPage() {
         <section className="py-10">
           <div className="mb-6 flex items-end justify-between">
             <div>
-              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
                 INDUSTRY RADAR
               </div>
               <h2 className="mt-2 text-3xl font-bold tracking-tight">
@@ -359,7 +359,7 @@ export default async function IndustryPage() {
               </h2>
             </div>
 
-            <div className="hidden text-right text-sm text-zinc-500 md:block">
+            <div className="hidden text-right text-sm text-zinc-600 md:block">
               <div>近30天有效新闻 {recentNews.length}</div>
               <div className="mt-1">
                 平均AI评分 {averageAiScore}
@@ -385,7 +385,7 @@ export default async function IndustryPage() {
         <section className="rounded-3xl bg-black p-7 text-white md:p-9">
           <div className="flex flex-col justify-between gap-8 lg:flex-row">
             <div>
-              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-500">
+              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
                 LEADING INDUSTRY SIGNAL
               </div>
 
@@ -423,7 +423,7 @@ export default async function IndustryPage() {
         <section className="py-10">
           <div className="mb-6 flex items-end justify-between">
             <div>
-              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
                 EVENT DRIVEN INDUSTRY
               </div>
               <h2 className="mt-2 text-3xl font-bold tracking-tight">
@@ -440,7 +440,7 @@ export default async function IndustryPage() {
           </div>
 
           {activeRecentEvents.length === 0 ? (
-            <div className="rounded-2xl border border-zinc-200 p-8 text-zinc-500">
+            <div className="rounded-2xl border border-zinc-200 p-8 text-zinc-600">
               当前暂无最近7天有效产业事件。
             </div>
           ) : (
@@ -452,11 +452,11 @@ export default async function IndustryPage() {
                   className="group rounded-2xl border border-zinc-200 bg-white p-6 transition hover:border-black hover:shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-xs font-bold tracking-[0.18em] text-zinc-400">
+                    <span className="text-xs font-bold tracking-[0.18em] text-zinc-600">
                       TOP {index + 1}
                     </span>
 
-                    <span className="text-xs text-zinc-400">
+                    <span className="text-xs text-zinc-600">
                       {formatTime(
                         event.news.length > 0
                           ? new Date(
@@ -475,7 +475,7 @@ export default async function IndustryPage() {
                     <NewsTitle title={event.title} titleZh={event.titleZh} />
                   </h3>
 
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-zinc-500">
+                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-zinc-600">
                     {event.summary || "暂无事件摘要"}
                   </p>
 
@@ -502,7 +502,7 @@ export default async function IndustryPage() {
         <section className="border-t border-zinc-200 py-10">
           <div className="mb-6 flex items-end justify-between">
             <div>
-              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+              <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
                 BUSINESS OPPORTUNITY
               </div>
               <h2 className="mt-2 text-3xl font-bold tracking-tight">
@@ -519,7 +519,7 @@ export default async function IndustryPage() {
           </div>
 
           {opportunities.length === 0 ? (
-            <div className="rounded-2xl border border-zinc-200 p-8 text-zinc-500">
+            <div className="rounded-2xl border border-zinc-200 p-8 text-zinc-600">
               当前暂无已记录的商业机会。
             </div>
           ) : (
@@ -530,7 +530,7 @@ export default async function IndustryPage() {
                   href="/opportunity-map"
                   className="rounded-2xl border border-zinc-200 p-6 transition hover:border-black"
                 >
-                  <div className="text-xs font-semibold tracking-[0.16em] text-zinc-400">
+                  <div className="text-xs font-semibold tracking-[0.16em] text-zinc-600">
                     {item.industry}
                   </div>
 
@@ -538,7 +538,7 @@ export default async function IndustryPage() {
                     {item.opportunity}
                   </h3>
 
-                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-zinc-500">
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-zinc-600">
                     {item.description}
                   </p>
 
@@ -546,7 +546,7 @@ export default async function IndustryPage() {
                     <span className="font-semibold">
                       {item.direction}
                     </span>
-                    <span className="text-zinc-400">
+                    <span className="text-zinc-600">
                       {item.trend}
                     </span>
                   </div>
@@ -558,7 +558,7 @@ export default async function IndustryPage() {
 
         <section className="grid gap-6 pb-10 lg:grid-cols-2">
           <div className="rounded-3xl border border-zinc-200 p-7">
-            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
               INVESTMENT WATCH
             </div>
 
@@ -576,12 +576,12 @@ export default async function IndustryPage() {
                     <div className="font-semibold">
                       {item.name}
                     </div>
-                    <div className="mt-1 text-xs text-zinc-400">
+                    <div className="mt-1 text-xs text-zinc-600">
                       {item.industry}
                     </div>
                   </div>
 
-                  <div className="text-right text-xs text-zinc-500">
+                  <div className="text-right text-xs text-zinc-600">
                     <div>
                       商业 {item.businessScore}
                     </div>
@@ -593,7 +593,7 @@ export default async function IndustryPage() {
               ))}
 
               {investments.length === 0 && (
-                <div className="text-sm text-zinc-500">
+                <div className="text-sm text-zinc-600">
                   当前暂无投资观察数据。
                 </div>
               )}
@@ -601,7 +601,7 @@ export default async function IndustryPage() {
           </div>
 
           <div className="rounded-3xl bg-zinc-100 p-7">
-            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-400">
+            <div className="text-xs font-semibold tracking-[0.24em] text-zinc-600">
               INDUSTRY JUDGEMENT
             </div>
 
@@ -652,14 +652,14 @@ export default async function IndustryPage() {
             />
           </div>
 
-          <div className="mt-10 border-t border-zinc-800 pt-6 text-sm leading-7 text-zinc-500">
+          <div className="mt-10 border-t border-zinc-800 pt-6 text-sm leading-7 text-zinc-400">
             AI产业智能分析中心基于当前新闻、事件、趋势节点、
             商业机会和投资数据进行综合观察。页面指标属于数据分析结果，
             用于产业研究与趋势判断，不构成投资建议。
           </div>
         </section>
 
-        <div className="mt-8 flex flex-col justify-between gap-3 border-t border-zinc-200 pt-6 text-xs text-zinc-400 md:flex-row">
+        <div className="mt-8 flex flex-col justify-between gap-3 border-t border-zinc-200 pt-6 text-xs text-zinc-600 md:flex-row">
           <span>AI INSIGHT DAILY · INDUSTRY INTELLIGENCE</span>
           <span>
             数据更新时间：{formatDate(new Date())}
@@ -693,7 +693,7 @@ function StatCard({
       href={href}
       className="bg-white p-5 transition hover:bg-zinc-50"
     >
-      <div className="text-[10px] font-semibold tracking-[0.18em] text-zinc-400">
+      <div className="text-[10px] font-semibold tracking-[0.18em] text-zinc-600">
         {label}
       </div>
 
@@ -701,7 +701,7 @@ function StatCard({
         {value.toLocaleString("zh-CN")}
       </div>
 
-      <div className="mt-2 text-xs text-zinc-400">
+      <div className="mt-2 text-xs text-zinc-600">
         查看详情 →
       </div>
     </Link>
@@ -734,7 +734,7 @@ function DirectionRow({
 
       <div>
         <div className="font-bold group-hover:underline">{name}</div>
-        <div className="mt-1 text-xs text-zinc-400">
+        <div className="mt-1 text-xs text-zinc-600">
           点击查看相关产业新闻
         </div>
       </div>
@@ -749,17 +749,17 @@ function DirectionRow({
       </div>
 
       <div>
-        <div className="text-xs text-zinc-400">HEAT</div>
+        <div className="text-xs text-zinc-600">HEAT</div>
         <div className="mt-1 font-bold">{heat}</div>
       </div>
 
       <div>
-        <div className="text-xs text-zinc-400">7D NEWS</div>
+        <div className="text-xs text-zinc-600">7D NEWS</div>
         <div className="mt-1 font-bold">{count}</div>
       </div>
 
       <div>
-        <div className="text-xs text-zinc-400">24H / AI</div>
+        <div className="text-xs text-zinc-600">24H / AI</div>
         <div className="mt-1 font-bold">
           {recent24} / {avgScore}
         </div>
@@ -777,7 +777,7 @@ function DarkMetric({
 }) {
   return (
     <div className="min-w-[82px] rounded-xl border border-zinc-800 p-4">
-      <div className="text-[10px] tracking-[0.16em] text-zinc-500">
+      <div className="text-[10px] tracking-[0.16em] text-zinc-600">
         {label}
       </div>
       <div className="mt-2 text-xl font-bold text-white">
@@ -796,7 +796,7 @@ function JudgementCard({
 }) {
   return (
     <div className="rounded-xl border border-zinc-200 bg-white p-4">
-      <div className="text-xs font-semibold text-zinc-400">
+      <div className="text-xs font-semibold text-zinc-600">
         {title}
       </div>
       <div className="mt-2 text-sm font-semibold">
@@ -817,13 +817,13 @@ function FooterMetric({
 }) {
   return (
     <div>
-      <div className="text-xs tracking-[0.18em] text-zinc-500">
+      <div className="text-xs tracking-[0.18em] text-zinc-600">
         {label}
       </div>
       <div className="mt-3 text-4xl font-bold">
         {value.toLocaleString("zh-CN")}
       </div>
-      <div className="mt-2 text-sm text-zinc-500">
+      <div className="mt-2 text-sm text-zinc-600">
         {text}
       </div>
     </div>

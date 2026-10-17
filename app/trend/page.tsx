@@ -235,7 +235,7 @@ export default async function TrendPage() {
         <section className="border-b border-gray-200 pb-10">
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
             <div>
-              <div className="text-xs font-bold tracking-[0.3em] text-gray-400">
+              <div className="text-xs font-bold tracking-[0.3em] text-gray-600">
                 AI INDUSTRY TREND INTELLIGENCE
               </div>
 
@@ -262,7 +262,7 @@ export default async function TrendPage() {
 
         <section className="mt-10 grid grid-cols-1 gap-px border border-gray-200 bg-gray-200 md:grid-cols-2 xl:grid-cols-4">
           <div className="bg-white p-6">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               TRACKED NEWS
             </div>
 
@@ -276,7 +276,7 @@ export default async function TrendPage() {
           </div>
 
           <div className="bg-white p-6">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               7D ACTIVITY
             </div>
 
@@ -290,7 +290,7 @@ export default async function TrendPage() {
           </div>
 
           <div className="bg-white p-6">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               24H SIGNAL
             </div>
 
@@ -304,7 +304,7 @@ export default async function TrendPage() {
           </div>
 
           <div className="bg-black p-6 text-white">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-500">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
               RISING DIRECTIONS
             </div>
 
@@ -324,7 +324,7 @@ export default async function TrendPage() {
           <section className="mt-14 border border-black bg-black p-7 text-white md:p-9">
             <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
               <div className="max-w-3xl">
-                <div className="text-xs font-bold tracking-[0.25em] text-gray-500">
+                <div className="text-xs font-bold tracking-[0.25em] text-gray-400">
                   CURRENT LEADING SIGNAL
                 </div>
 
@@ -345,7 +345,7 @@ export default async function TrendPage() {
 
               <div className="grid grid-cols-3 gap-8">
                 <div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-400">
                     HEAT
                   </div>
 
@@ -355,7 +355,7 @@ export default async function TrendPage() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-400">
                     7D NEWS
                   </div>
 
@@ -365,7 +365,7 @@ export default async function TrendPage() {
                 </div>
 
                 <div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-400">
                     GROWTH
                   </div>
 
@@ -384,7 +384,7 @@ export default async function TrendPage() {
         <section className="mt-16">
           <div className="flex flex-col justify-between gap-4 border-b border-black pb-5 md:flex-row md:items-end">
             <div>
-              <div className="text-xs font-bold tracking-[0.25em] text-gray-400">
+              <div className="text-xs font-bold tracking-[0.25em] text-gray-600">
                 TREND RANKING
               </div>
 
@@ -407,7 +407,7 @@ export default async function TrendPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-[80px_1fr_170px_170px_170px]">
                   <div className="flex items-start bg-gray-50 p-5 lg:border-r lg:border-gray-100">
                     <div>
-                      <div className="text-xs font-black tracking-[0.15em] text-gray-400">
+                      <div className="text-xs font-black tracking-[0.15em] text-gray-600">
                         #{String(index + 1).padStart(2, "0")}
                       </div>
 
@@ -428,7 +428,7 @@ export default async function TrendPage() {
                   </div>
 
                   <div className="border-t border-gray-100 p-6 lg:border-l lg:border-t-0">
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-600">
                       TREND HEAT
                     </div>
 
@@ -438,7 +438,7 @@ export default async function TrendPage() {
                   </div>
 
                   <div className="border-t border-gray-100 p-6 lg:border-l lg:border-t-0">
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-600">
                       7D NEWS
                     </div>
 
@@ -446,13 +446,13 @@ export default async function TrendPage() {
                       {item.count7}
                     </div>
 
-                    <div className="mt-1 text-xs text-gray-400">
+                    <div className="mt-1 text-xs text-gray-600">
                       24H +{item.recent24}
                     </div>
                   </div>
 
                   <div className="border-t border-gray-100 bg-gray-50 p-6 lg:border-l lg:border-t-0">
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-gray-600">
                       GROWTH
                     </div>
 
@@ -461,7 +461,7 @@ export default async function TrendPage() {
                       {item.growth}%
                     </div>
 
-                    <div className="mt-1 text-xs text-gray-400">
+                    <div className="mt-1 text-xs text-gray-600">
                       AI {formatScore(item.avgScore)}
                     </div>
                   </div>
@@ -481,7 +481,7 @@ export default async function TrendPage() {
 
         <section className="mt-16 grid grid-cols-1 gap-px border border-gray-200 bg-gray-200 md:grid-cols-3">
           <div className="bg-black p-7 text-white">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-500">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
               01 · ACTIVITY
             </div>
 
@@ -495,7 +495,7 @@ export default async function TrendPage() {
           </div>
 
           <div className="bg-white p-7">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               02 · MOMENTUM
             </div>
 
@@ -509,7 +509,7 @@ export default async function TrendPage() {
           </div>
 
           <div className="bg-white p-7">
-            <div className="text-xs font-bold tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-bold tracking-[0.2em] text-gray-600">
               03 · INTELLIGENCE
             </div>
 
@@ -525,7 +525,7 @@ export default async function TrendPage() {
 
         {/* FOOTER */}
 
-        <footer className="mt-16 border-t border-gray-200 py-8 text-xs text-gray-400">
+        <footer className="mt-16 border-t border-gray-200 py-8 text-xs text-gray-600">
           AI Insight Daily · Industry Trend Intelligence
           <span className="mx-2">·</span>
           数据窗口：近30天

@@ -204,11 +204,11 @@ export default async function EventDetailPage({
               {sortedEntities.length > 0 && (
                 <div className="mt-8 border-t border-white/10 pt-6">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">
+                    <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">
                       涉及实体
                     </div>
 
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-400">
                       共 {sortedEntities.length} 个
                     </span>
                   </div>
@@ -229,7 +229,7 @@ export default async function EventDetailPage({
                     ))}
 
                     {sortedEntities.length > 14 && (
-                      <span className="px-3 py-1.5 text-xs text-gray-500">
+                      <span className="px-3 py-1.5 text-xs text-gray-400">
                         ⋯
                       </span>
                     )}
@@ -297,7 +297,7 @@ export default async function EventDetailPage({
       <section className="border-b border-gray-200 bg-gray-50">
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
           <div className="mb-6">
-            <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+            <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-600">
               EVENT INTELLIGENCE
             </div>
 
@@ -339,7 +339,7 @@ export default async function EventDetailPage({
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-8">
           <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-end">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-600">
                 EVENT TIMELINE
               </div>
 
@@ -352,7 +352,7 @@ export default async function EventDetailPage({
               </p>
             </div>
 
-            <div className="text-sm font-bold text-gray-400">
+            <div className="text-sm font-bold text-gray-600">
               共 {newsCount} 条
             </div>
           </div>
@@ -370,18 +370,18 @@ export default async function EventDetailPage({
                 >
                   <div className="grid gap-5 lg:grid-cols-[72px_1fr_auto]">
                     <div className="hidden lg:block">
-                      <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+                      <div className="text-xs font-black uppercase tracking-wider text-gray-600">
                         #{String(index + 1).padStart(2, "0")}
                       </div>
 
-                      <div className="mt-3 text-xs leading-5 text-gray-400">
+                      <div className="mt-3 text-xs leading-5 text-gray-600">
                         {formatDate(item.publishedAt ?? item.createdAt)}
                       </div>
                     </div>
 
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-bold text-gray-400 lg:hidden">
+                        <span className="text-xs font-bold text-gray-600 lg:hidden">
                           #{String(index + 1).padStart(2, "0")}
                         </span>
 
@@ -396,7 +396,7 @@ export default async function EventDetailPage({
                         )}
 
                         {item.aiScore > 0 && (
-                          <span className="text-xs font-bold text-gray-400">
+                          <span className="text-xs font-bold text-gray-600">
                             AI {formatScore(item.aiScore)}
                           </span>
                         )}
@@ -417,7 +417,7 @@ export default async function EventDetailPage({
                           "暂无新闻摘要。"}
                       </p>
 
-                      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-gray-400">
+                      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-gray-600">
                         <span>
                           发布时间：{formatDateTime(item.publishedAt ?? item.createdAt)}
                         </span>
@@ -468,7 +468,7 @@ export default async function EventDetailPage({
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
           <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-600">
                 RISK WATCH
               </div>
 
@@ -508,7 +508,7 @@ export default async function EventDetailPage({
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-8">
           <div className="flex flex-col justify-between gap-4 border-b border-gray-200 pb-6 md:flex-row md:items-end">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-600">
                 SOURCE & DATA
               </div>
 
@@ -552,7 +552,7 @@ export default async function EventDetailPage({
           </div>
 
           <div className="mt-8 border border-gray-200 bg-gray-50 p-6">
-            <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">
+            <div className="text-xs font-black uppercase tracking-[0.2em] text-gray-600">
               SOURCES
             </div>
 
@@ -586,7 +586,7 @@ export default async function EventDetailPage({
               AI Insight Daily
             </div>
 
-            <div className="mt-1 text-gray-500">
+            <div className="mt-1 text-gray-400">
               AI事件情报 · 新闻证据 · 趋势判断
             </div>
           </div>
@@ -628,7 +628,7 @@ function Metric({
 }) {
   return (
     <div className="bg-black p-5">
-      <div className="text-xs text-gray-500">
+      <div className="text-xs text-gray-400">
         {label}
       </div>
 
@@ -650,7 +650,7 @@ function InsightCard({
 }) {
   return (
     <div className="border border-gray-200 bg-white p-6">
-      <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+      <div className="text-xs font-black uppercase tracking-wider text-gray-600">
         {label}
       </div>
 
@@ -696,7 +696,7 @@ function DataCard({
 }) {
   return (
     <div className="border border-gray-200 bg-white p-6">
-      <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+      <div className="text-xs font-black uppercase tracking-wider text-gray-600">
         {label}
       </div>
 
@@ -704,7 +704,7 @@ function DataCard({
         {value}
       </div>
 
-      <div className="mt-2 text-xs leading-5 text-gray-400">
+      <div className="mt-2 text-xs leading-5 text-gray-600">
         {description}
       </div>
     </div>
@@ -715,7 +715,7 @@ function NotFound() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-6 text-black">
       <div className="w-full max-w-xl border border-gray-200 p-10 text-center">
-        <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+        <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-600">
           EVENT NOT FOUND
         </div>
 

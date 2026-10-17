@@ -63,7 +63,7 @@ export default async function TravelPlanDetailPage({
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
-      <nav className="mb-6 flex items-center gap-2 text-xs text-gray-500">
+      <nav className="mb-6 flex items-center gap-2 text-xs text-gray-400">
         <Link href="/agent-travel" className="hover:text-sky-400">
           AI 出行管家
         </Link>

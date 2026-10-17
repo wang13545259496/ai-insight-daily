@@ -106,7 +106,7 @@ text-gray-300
 
 
 
-<p className="text-gray-500 mt-2">
+<p className="text-gray-400 mt-2">
 
 {agent.role}
 
@@ -226,7 +226,7 @@ className="text-gray-300"
 
 
 
-<div className="mt-8 text-sm text-gray-500">
+<div className="mt-8 text-sm text-gray-400">
 
 查看研究员详情 →
 

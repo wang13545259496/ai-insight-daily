@@ -64,7 +64,7 @@ function QuoteBadge({ confidence }: { confidence: "live" | "estimate" }) {
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs text-gray-500">{label}</span>
+      <span className="text-xs text-gray-400">{label}</span>
       <span className="text-sm text-white">{value}</span>
     </div>
   );
@@ -87,8 +87,8 @@ function CategoryCard({ category }: { category: BudgetCategory }) {
 
       <div className="mt-2 flex items-baseline gap-2">
         <span className="text-xl font-semibold text-white">{category.amount}</span>
-        <span className="text-xs text-gray-500">元</span>
-        <span className="ml-auto text-xs text-gray-500">{percent}%</span>
+        <span className="text-xs text-gray-400">元</span>
+        <span className="ml-auto text-xs text-gray-400">{percent}%</span>
       </div>
 
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-800">
@@ -124,13 +124,13 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
                 key={`${leg.flightNumber}-${index}`}
                 className="flex items-center gap-3 text-gray-300"
               >
-                <span className="font-mono text-xs text-gray-500">
+                <span className="font-mono text-xs text-gray-400">
                   {leg.departAt.slice(5, 16).replace("T", " ")}
                 </span>
                 <span className="text-white">
                   {leg.from} → {leg.to}
                 </span>
-                <span className="ml-auto font-mono text-xs text-gray-500">{leg.flightNumber}</span>
+                <span className="ml-auto font-mono text-xs text-gray-400">{leg.flightNumber}</span>
               </div>
             ))}
           </div>
@@ -144,14 +144,14 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
             />
           </div>
 
-          <p className="mt-3 text-xs text-gray-500">{flight.note}</p>
+          <p className="mt-3 text-xs text-gray-400">{flight.note}</p>
         </div>
       )}
 
       <div className="rounded-lg border border-gray-800 bg-gray-950/50 p-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-medium text-white">住宿</h3>
-          {hotel ? <QuoteBadge confidence={hotel.confidence} /> : <span className="text-xs text-gray-500">无需住宿</span>}
+          {hotel ? <QuoteBadge confidence={hotel.confidence} /> : <span className="text-xs text-gray-400">无需住宿</span>}
         </div>
 
         {hotel ? (
@@ -187,8 +187,8 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
             */}
             {plan.hotelRooms && plan.hotelRooms.length > 0 && (
               <div className="mt-3 border-t border-gray-800 pt-3">
-                <p className="text-xs text-gray-500">
-                  可选房型 <span className="text-gray-600">（含早与退改说明，按价格排序）</span>
+                <p className="text-xs text-gray-400">
+                  可选房型 <span className="text-gray-400">（含早与退改说明，按价格排序）</span>
                 </p>
 
                 <ul className="mt-2 space-y-1.5">
@@ -199,7 +199,7 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
                     >
                       <span className="w-20 shrink-0 text-amber-400">¥{room.averagePrice}</span>
                       <span className="min-w-0 flex-1 text-gray-300">{room.roomName}</span>
-                      <span className="shrink-0 text-gray-500">
+                      <span className="shrink-0 text-gray-400">
                         {[room.bedType, room.meal, room.size ? `${room.size}㎡` : ""]
                           .filter(Boolean)
                           .join(" · ")}
@@ -215,7 +215,7 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
               </div>
             )}
 
-            <p className="mt-3 text-xs text-gray-500">{hotel.note}</p>
+            <p className="mt-3 text-xs text-gray-400">{hotel.note}</p>
           </>
         ) : (
           <p className="mt-3 text-sm text-gray-400">当日往返行程，不涉及住宿安排。</p>
@@ -254,7 +254,7 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
     <section>
       <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="text-sm font-medium text-white">跨城方式</h2>
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-gray-400">
           单程对比（火车为实时票价与余票，自驾含油费与过路费）
         </span>
       </div>
@@ -277,13 +277,13 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
                 {option.departTime ? `${option.departTime}-${option.arriveTime}` : "—"}
               </span>
 
-              <span className="w-20 shrink-0 text-xs text-gray-500">
+              <span className="w-20 shrink-0 text-xs text-gray-400">
                 {dur(option.durationMinutes)}
               </span>
 
               <span className="w-20 shrink-0 text-sm text-white">
                 ¥{option.perPerson}
-                <span className="text-xs text-gray-500">/人</span>
+                <span className="text-xs text-gray-400">/人</span>
               </span>
 
               {/*
@@ -313,13 +313,13 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
                 )}
               </span>
 
-              <span className="min-w-0 flex-1 text-xs text-gray-500">{option.breakdown}</span>
+              <span className="min-w-0 flex-1 text-xs text-gray-400">{option.breakdown}</span>
             </div>
           );
         })}
       </div>
 
-      <p className="mt-2 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-gray-400">
         火车票价与余票来自飞常准实时数据；自驾里程、时长与过路费来自高德路径规划，
         油费按 {VEHICLE_DEFAULTS.fuelPer100Km} 升/百公里、{VEHICLE_DEFAULTS.fuelPricePerLiter} 元/升估算。
       </p>
@@ -359,7 +359,7 @@ function DayCard({
           Day {day.day}
         </span>
         <span className="text-sm text-white">{day.theme}</span>
-        <span className="font-mono text-xs text-gray-500">{day.date}</span>
+        <span className="font-mono text-xs text-gray-400">{day.date}</span>
         <span className="ml-auto text-xs text-gray-400">
           当日花费约 <span className="text-amber-400">{day.estimatedCost}</span> 元
         </span>
@@ -373,7 +373,7 @@ function DayCard({
             <div key={`${activity.title}-${index}`} className="flex gap-4 px-4 py-3">
               <div className="w-24 shrink-0 pt-0.5 text-right">
                 <div className="font-mono text-xs text-gray-400">{activity.startTime}</div>
-                <div className="font-mono text-xs text-gray-600">{activity.endTime}</div>
+                <div className="font-mono text-xs text-gray-400">{activity.endTime}</div>
               </div>
 
               <div className="min-w-0 flex-1">
@@ -393,10 +393,10 @@ function DayCard({
                 </p>
 
                 {activity.location && (
-                  <p className="mt-1 text-xs text-gray-600">
+                  <p className="mt-1 text-xs text-gray-400">
                     地点：{activity.location}
                     {activity.address && activity.address !== activity.location && (
-                      <span className="text-gray-700">（{activity.address}）</span>
+                      <span className="text-gray-400">（{activity.address}）</span>
                     )}
                   </p>
                 )}
@@ -406,16 +406,16 @@ function DayCard({
         })}
       </div>
 
-      <div className="flex flex-wrap gap-4 border-t border-gray-800 px-4 py-2 text-xs text-gray-500">
+      <div className="flex flex-wrap gap-4 border-t border-gray-800 px-4 py-2 text-xs text-gray-400">
         <span>住宿：{day.accommodation}</span>
-        {nights === 0 && <span className="text-gray-600">（一日游）</span>}
+        {nights === 0 && <span className="text-gray-400">（一日游）</span>}
       </div>
 
       {mapUrl && (
         <div className="border-t border-gray-800 px-4 py-3">
-          <p className="mb-2 text-xs text-gray-500">
+          <p className="mb-2 text-xs text-gray-400">
             当日路线{" "}
-            <span className="text-gray-600">
+            <span className="text-gray-400">
               （编号对应下方活动顺序{hasRealRoute ? "，连线为实际道路" : "，连线为直线示意"}）
             </span>
           </p>
@@ -435,19 +435,19 @@ function DayCard({
 
       {day.commuteLegs && day.commuteLegs.length > 0 && (
         <div className="border-t border-gray-800 bg-gray-900/30 px-4 py-2">
-          <p className="text-xs text-gray-500">
-            当日通勤 <span className="text-gray-600">（高德地图实测）</span>
+          <p className="text-xs text-gray-400">
+            当日通勤 <span className="text-gray-400">（高德地图实测）</span>
           </p>
           <ul className="mt-1 space-y-0.5">
             {day.commuteLegs.map((leg) => (
               <li key={`${leg.from}-${leg.to}`} className="text-xs text-gray-400">
                 {leg.mode === "walk" ? "🚶" : "🚇"} {leg.from} → {leg.to}：
                 <span className="text-cyan-400"> {leg.durationMinutes} 分钟</span>
-                <span className="text-gray-600">
+                <span className="text-gray-400">
                   {" "}
                   / {(leg.distanceMeters / 1000).toFixed(1)} 公里
                 </span>
-                {leg.summary && <span className="text-gray-600">　{leg.summary}</span>}
+                {leg.summary && <span className="text-gray-400">　{leg.summary}</span>}
               </li>
             ))}
           </ul>
@@ -518,7 +518,7 @@ function PlanHeader({ plan, planId }: { plan: TravelPlan; planId?: number | null
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         {planId != null && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-400">
             方案编号 <span className="font-mono text-gray-400">#{planId}</span> · 分享链接{" "}
             <Link href={`/agent-travel/${planId}`} className="text-sky-400 hover:text-sky-300">
               /travel/{planId}
@@ -615,7 +615,7 @@ export default function PlanView({
         <section>
           <h3 className="mb-3 text-lg font-semibold text-white">
             天气预报
-            <span className="ml-2 text-sm font-normal text-gray-500">高德 · 仅中国境内</span>
+            <span className="ml-2 text-sm font-normal text-gray-400">高德 · 仅中国境内</span>
           </h3>
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -630,17 +630,17 @@ export default function PlanView({
                 >
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="font-mono text-xs text-gray-400">{w.date}</span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-400">
                       {w.nightTemp}~{w.dayTemp}℃
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-white">
                     {w.dayWeather}
                     {w.nightWeather && w.nightWeather !== w.dayWeather && (
-                      <span className="text-gray-500"> 转 {w.nightWeather}</span>
+                      <span className="text-gray-400"> 转 {w.nightWeather}</span>
                     )}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-gray-400">
                     {w.windDirection} {w.windPower} 级
                   </p>
                 </div>
@@ -659,7 +659,7 @@ export default function PlanView({
       <section>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h3 className="text-lg font-semibold text-white">预算分配</h3>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-gray-400">
             各项合计 {plan.budget.allocated} 元 = 总预算 {plan.budget.total} 元
           </span>
         </div>
@@ -682,7 +682,7 @@ export default function PlanView({
       <section>
         <h3 className="mb-3 text-lg font-semibold text-white">
           逐日行程
-          <span className="ml-2 text-sm font-normal text-gray-500">
+          <span className="ml-2 text-sm font-normal text-gray-400">
             共 {plan.itinerary.length} 天
           </span>
         </h3>
@@ -720,7 +720,7 @@ export default function PlanView({
         </section>
       </div>
 
-      <p className="text-xs text-gray-600">
+      <p className="text-xs text-gray-400">
         方案生成于 {plan.generatedAt.slice(0, 19).replace("T", " ")}
         {plan.model ? ` · 模型 ${plan.model}` : ""}
         {plan.quotes.flight?.confidence === "estimate"

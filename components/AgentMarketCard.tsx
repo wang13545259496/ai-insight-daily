@@ -154,7 +154,7 @@ text-gray-400
 
 className="
 mt-5
-text-gray-500
+text-gray-400
 leading-relaxed
 "
 

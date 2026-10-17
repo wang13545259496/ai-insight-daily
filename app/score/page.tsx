@@ -114,7 +114,7 @@ bg-neutral-950
 
 
 <div>
-<p className="text-gray-500">
+<p className="text-gray-400">
 推理能力
 </p>
 
@@ -126,7 +126,7 @@ bg-neutral-950
 
 
 <div>
-<p className="text-gray-500">
+<p className="text-gray-400">
 编程能力
 </p>
 
@@ -139,7 +139,7 @@ bg-neutral-950
 
 
 <div>
-<p className="text-gray-500">
+<p className="text-gray-400">
 中文能力
 </p>
 
@@ -152,7 +152,7 @@ bg-neutral-950
 
 
 <div>
-<p className="text-gray-500">
+<p className="text-gray-400">
 多模态
 </p>
 
@@ -165,7 +165,7 @@ bg-neutral-950
 
 
 <div>
-<p className="text-gray-500">
+<p className="text-gray-400">
 商业价值
 </p>
 

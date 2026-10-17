@@ -199,7 +199,7 @@ function ScoreCard({
 }) {
   return (
     <div>
-      <p className="text-gray-500">{title}</p>
+      <p className="text-gray-400">{title}</p>
 
       <p className="text-2xl">{value}</p>
     </div>

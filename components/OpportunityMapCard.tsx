@@ -112,7 +112,7 @@ mb-3
 <p
 
 className="
-text-gray-500
+text-gray-400
 "
 
 >

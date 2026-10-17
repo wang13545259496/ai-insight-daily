@@ -113,7 +113,7 @@ gap-5
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 智能程度
 
@@ -131,7 +131,7 @@ gap-5
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 自动化能力
 
@@ -150,7 +150,7 @@ gap-5
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 企业价值
 
@@ -169,7 +169,7 @@ gap-5
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 易用程度
 
@@ -188,7 +188,7 @@ gap-5
 
 <div>
 
-<p className="text-gray-500">
+<p className="text-gray-400">
 
 生态成熟度
 

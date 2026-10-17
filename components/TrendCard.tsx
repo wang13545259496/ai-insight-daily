@@ -71,7 +71,7 @@ mb-5
 
 <div>
 
-<div className="text-gray-500">
+<div className="text-gray-400">
 
 热度
 
@@ -98,7 +98,7 @@ font-bold
 
 <div>
 
-<div className="text-gray-500">
+<div className="text-gray-400">
 
 增长
 

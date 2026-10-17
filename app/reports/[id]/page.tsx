@@ -111,7 +111,7 @@ text-gray-300
 
 
 
-<span className="text-gray-500">
+<span className="text-gray-400">
 
 {report.date}
 

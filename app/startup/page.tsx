@@ -130,7 +130,7 @@ text-gray-400
             <p
               className="
 mt-3
-text-gray-500
+text-gray-400
 "
             >
               机会 → 产品 → 商业模式 → 投资分析
@@ -201,7 +201,7 @@ bg-gray-950
           >
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               创业机会
@@ -229,7 +229,7 @@ bg-gray-950
           >
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               商业方案
@@ -257,7 +257,7 @@ bg-gray-950
           >
             <p
               className="
-text-gray-500
+text-gray-400
 "
             >
               投资关联

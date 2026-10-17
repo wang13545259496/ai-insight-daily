@@ -54,7 +54,7 @@ export default async function DailyDetailPage({
       <p
         className="
                 mt-4
-                text-gray-500
+                text-gray-400
                 "
       >
         {String(report.date)}

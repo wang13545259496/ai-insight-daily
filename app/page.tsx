@@ -493,12 +493,12 @@ export default async function HomePage() {
                           TOP {index + 1}
                         </span>
 
-                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                        <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
                           {getEventTypeLabel(event.eventType)}
                         </span>
                       </div>
 
-                      <span className="text-xs font-bold text-gray-500">
+                      <span className="text-xs font-bold text-gray-400">
                         {getScoreLabel(event.focusScore)}
                       </span>
                     </div>
@@ -530,7 +530,7 @@ export default async function HomePage() {
                         )}
                       </div>
 
-                      <div className="mt-2 text-xs text-gray-500">
+                      <div className="mt-2 text-xs text-gray-400">
                         {latestNews
                           ? `${formatDate(latestNews.publishedAt ?? latestNews.createdAt)} · ${safeText(
                               latestNews.source,
@@ -540,7 +540,7 @@ export default async function HomePage() {
                       </div>
                     </div>
 
-                    <p className="mt-5 text-sm leading-6 text-gray-600">
+                    <p className="mt-5 text-sm leading-6 text-gray-400">
                       {getTrendLabel(
                         event.recent24h,
                         event.recent72h,
@@ -549,7 +549,7 @@ export default async function HomePage() {
                     </p>
 
                     <div className="mt-auto flex items-center justify-between border-t border-gray-200 pt-5">
-                      <div className="flex gap-4 text-xs font-bold text-gray-500">
+                      <div className="flex gap-4 text-xs font-bold text-gray-400">
                         <span>24h {event.recent24h}</span>
                         <span>72h {event.recent72h}</span>
                         <span>热度 {Math.round(event.heatScore)}</span>
@@ -576,7 +576,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
           <div className="mb-8 flex items-end justify-between gap-4">
             <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-400">
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-600">
                 LATEST INTELLIGENCE
               </div>
 
@@ -603,7 +603,7 @@ export default async function HomePage() {
                   href={`/news/${item.id}`}
                   className="group grid gap-4 py-5 transition hover:bg-gray-50 lg:grid-cols-[130px_1fr_150px]"
                 >
-                  <div className="text-xs font-bold text-gray-400">
+                  <div className="text-xs font-bold text-gray-600">
                     <div>{formatDate(item.publishedAt ?? item.createdAt)}</div>
                     <div className="mt-1">{getTimeAgo(item.publishedAt ?? item.createdAt)}</div>
                   </div>
@@ -615,7 +615,7 @@ export default async function HomePage() {
                       </span>
 
                       {item.aiScore > 0 && (
-                        <span className="text-[10px] font-bold text-gray-400">
+                        <span className="text-[10px] font-bold text-gray-600">
                           AI SCORE {Math.round(item.aiScore)} · {getTier(item.aiScore).label}
                         </span>
                       )}
@@ -641,7 +641,7 @@ export default async function HomePage() {
                     </p>
                   </div>
 
-                  <div className="text-right text-xs font-semibold text-gray-400">
+                  <div className="text-right text-xs font-semibold text-gray-600">
                     {safeText(item.source, "未知来源")}
                   </div>
                 </Link>
@@ -661,7 +661,7 @@ export default async function HomePage() {
                 上述情报按产业层级的分布，近 {industryMap.windowDays} 天共 {industryMap.total} 条。
               </p>
             </div>
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-gray-600">
               {new Date(industryMap.rangeStart).toLocaleDateString("zh-CN")} —{" "}
               {new Date(industryMap.rangeEnd).toLocaleDateString("zh-CN")}
             </div>
@@ -677,12 +677,12 @@ export default async function HomePage() {
                 <div className="mt-6 border border-gray-200 bg-white">
                   <div className="flex items-center gap-3 border-b border-gray-100 px-5 py-3">
                     <h3 className="text-sm font-bold">资本动态</h3>
-                    <span className="text-xs text-gray-400">融资、并购、估值</span>
+                    <span className="text-xs text-gray-600">融资、并购、估值</span>
                   </div>
                   <ul className="divide-y divide-gray-100">
                     {industryMap.capital.slice(0, 5).map((c) => (
                       <li key={c.id} className="flex items-baseline gap-3 px-5 py-2.5 text-sm">
-                        <span className="shrink-0 text-xs text-gray-400 tabular-nums">
+                        <span className="shrink-0 text-xs text-gray-600 tabular-nums">
                           {new Date(c.publishedAt).toLocaleDateString("zh-CN")}
                         </span>
                         <a href={`/news/${c.id}`} className="line-clamp-1 min-w-0 hover:underline">
@@ -707,7 +707,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
           <div className="mb-8 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-400">
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-600">
                 BUSINESS OPPORTUNITY
               </div>
 
@@ -739,11 +739,11 @@ export default async function HomePage() {
                   className="group border border-gray-200 bg-white p-6 transition hover:border-black hover:shadow-sm"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="text-xs font-black uppercase tracking-wider text-gray-400">
+                    <span className="text-xs font-black uppercase tracking-wider text-gray-600">
                       {safeText(item.industry, "AI产业")}
                     </span>
 
-                    <span className="text-xs font-bold text-gray-400">
+                    <span className="text-xs font-bold text-gray-600">
                       {safeText(item.direction, "观察")}
                     </span>
                   </div>
@@ -756,7 +756,7 @@ export default async function HomePage() {
                     {safeText(item.description, "暂无机会描述")}
                   </p>
 
-                  <div className="mt-5 border-t border-gray-100 pt-4 text-xs font-bold text-gray-400">
+                  <div className="mt-5 border-t border-gray-100 pt-4 text-xs font-bold text-gray-600">
                     趋势：{safeText(item.trend, "持续观察")}
                   </div>
                 </Link>
@@ -773,7 +773,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
           <div className="mb-8 flex items-end justify-between gap-4">
             <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-400">
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-600">
                 INVESTMENT WATCH
               </div>
 
@@ -813,7 +813,7 @@ export default async function HomePage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <div className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                        <div className="text-xs font-bold uppercase tracking-wider text-gray-600">
                           {safeText(item.industry, "AI产业")}
                         </div>
 
@@ -826,7 +826,7 @@ export default async function HomePage() {
                         <div className="text-2xl font-black">
                           {totalScore}
                         </div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
                           Score
                         </div>
                       </div>
@@ -841,28 +841,28 @@ export default async function HomePage() {
                         <div className="text-sm font-black">
                           {item.businessScore}
                         </div>
-                        <div className="text-[9px] text-gray-400">商业</div>
+                        <div className="text-[9px] text-gray-600">商业</div>
                       </div>
 
                       <div>
                         <div className="text-sm font-black">
                           {item.technologyScore}
                         </div>
-                        <div className="text-[9px] text-gray-400">技术</div>
+                        <div className="text-[9px] text-gray-600">技术</div>
                       </div>
 
                       <div>
                         <div className="text-sm font-black">
                           {item.marketScore}
                         </div>
-                        <div className="text-[9px] text-gray-400">市场</div>
+                        <div className="text-[9px] text-gray-600">市场</div>
                       </div>
 
                       <div>
                         <div className="text-sm font-black">
                           {item.growthScore}
                         </div>
-                        <div className="text-[9px] text-gray-400">成长</div>
+                        <div className="text-[9px] text-gray-600">成长</div>
                       </div>
                     </div>
                   </Link>

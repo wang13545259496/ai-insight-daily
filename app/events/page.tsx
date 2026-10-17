@@ -209,7 +209,7 @@ export default async function EventsPage() {
         <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+              <div className="text-xs font-black uppercase tracking-wider text-gray-600">
                 活跃事件
               </div>
 
@@ -217,13 +217,13 @@ export default async function EventsPage() {
                 {totalEvents.toLocaleString()}
               </div>
 
-              <div className="mt-2 text-xs text-gray-400">
+              <div className="mt-2 text-xs text-gray-600">
                 当前有效事件
               </div>
             </div>
 
             <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+              <div className="text-xs font-black uppercase tracking-wider text-gray-600">
                 72h动态
               </div>
 
@@ -231,13 +231,13 @@ export default async function EventsPage() {
                 {activeRecentEvents}
               </div>
 
-              <div className="mt-2 text-xs text-gray-400">
+              <div className="mt-2 text-xs text-gray-600">
                 最近72小时仍有动态
               </div>
             </div>
 
             <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+              <div className="text-xs font-black uppercase tracking-wider text-gray-600">
                 24h更新
               </div>
 
@@ -245,13 +245,13 @@ export default async function EventsPage() {
                 {eventsWithNew24h}
               </div>
 
-              <div className="mt-2 text-xs text-gray-400">
+              <div className="mt-2 text-xs text-gray-600">
                 最近24小时出现新动态
               </div>
             </div>
 
             <div className="border border-gray-200 bg-white p-6">
-              <div className="text-xs font-black uppercase tracking-wider text-gray-400">
+              <div className="text-xs font-black uppercase tracking-wider text-gray-600">
                 平均热度
               </div>
 
@@ -259,7 +259,7 @@ export default async function EventsPage() {
                 {averageHeat}
               </div>
 
-              <div className="mt-2 text-xs text-gray-400">
+              <div className="mt-2 text-xs text-gray-600">
                 当前近期事件平均热度
               </div>
             </div>
@@ -274,7 +274,7 @@ export default async function EventsPage() {
         <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
           <div className="mb-8 flex flex-col gap-3 border-b border-black pb-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="mb-2 text-xs font-black uppercase tracking-[0.25em] text-gray-400">
+              <div className="mb-2 text-xs font-black uppercase tracking-[0.25em] text-gray-600">
                 LIVE EVENT STREAM
               </div>
 
@@ -287,7 +287,7 @@ export default async function EventsPage() {
               </p>
             </div>
 
-            <div className="text-xs font-bold text-gray-400">
+            <div className="text-xs font-bold text-gray-600">
               展示前 {displayEvents.length} 个近期活跃事件
             </div>
           </div>
@@ -327,7 +327,7 @@ export default async function EventsPage() {
                           {index < 6 ? `TOP ${index + 1}` : `#${index + 1}`}
                         </span>
 
-                        <span className="text-xs font-bold text-gray-400">
+                        <span className="text-xs font-bold text-gray-600">
                           {event.category || "AI产业"}
                         </span>
                       </div>
@@ -353,7 +353,7 @@ export default async function EventsPage() {
 
                     {/* Latest update */}
                     <div className="mt-5 border-l-2 border-black pl-4">
-                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
+                      <div className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-600">
                         最新动态
                       </div>
 
@@ -369,7 +369,7 @@ export default async function EventsPage() {
                       </div>
 
                       {latestNews && (
-                        <div className="mt-2 text-xs text-gray-400">
+                        <div className="mt-2 text-xs text-gray-600">
                           {formatDate(latestNews.publishedAt ?? latestNews.createdAt)}
                           {latestNews.source
                             ? ` · ${latestNews.source}`
@@ -386,7 +386,7 @@ export default async function EventsPage() {
                     {/* Stats */}
                     <div className="mt-auto grid grid-cols-4 gap-2 border-t border-gray-100 pt-5">
                       <div>
-                        <div className="text-[10px] font-bold text-gray-400">
+                        <div className="text-[10px] font-bold text-gray-600">
                           24H
                         </div>
 
@@ -396,7 +396,7 @@ export default async function EventsPage() {
                       </div>
 
                       <div>
-                        <div className="text-[10px] font-bold text-gray-400">
+                        <div className="text-[10px] font-bold text-gray-600">
                           72H
                         </div>
 
@@ -406,7 +406,7 @@ export default async function EventsPage() {
                       </div>
 
                       <div>
-                        <div className="text-[10px] font-bold text-gray-400">
+                        <div className="text-[10px] font-bold text-gray-600">
                           热度
                         </div>
 
@@ -416,7 +416,7 @@ export default async function EventsPage() {
                       </div>
 
                       <div>
-                        <div className="text-[10px] font-bold text-gray-400">
+                        <div className="text-[10px] font-bold text-gray-600">
                           新闻
                         </div>
 
@@ -428,7 +428,7 @@ export default async function EventsPage() {
 
                     {/* Footer */}
                     <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-gray-600">
                         最新：{" "}
                         {latestNews
                           ? formatDate(latestNews.publishedAt ?? latestNews.createdAt)
@@ -454,7 +454,7 @@ export default async function EventsPage() {
         <div className="mx-auto max-w-7xl px-6 py-10 lg:px-10">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-500">
+              <div className="text-xs font-black uppercase tracking-[0.25em] text-gray-400">
                 EVENT INTELLIGENCE
               </div>
 

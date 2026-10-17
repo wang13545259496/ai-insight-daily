@@ -150,7 +150,7 @@ export default function AboutPage() {
           </div>
         </section>
 
-        <p className="mt-16 text-sm text-gray-400">
+        <p className="mt-16 text-sm text-gray-600">
           最后更新：2026 年 10 月 17 日
         </p>
       </div>

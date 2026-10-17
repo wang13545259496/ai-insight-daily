@@ -62,7 +62,7 @@ export default function AIIndexCard({
 
             <div className="
                 mt-3
-                text-gray-500
+                text-gray-400
             ">
 
                 {desc}

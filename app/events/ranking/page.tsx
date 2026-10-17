@@ -123,7 +123,7 @@ hover:border-white
 <div>
 
 
-<div className="text-gray-500">
+<div className="text-gray-400">
 
 TOP {index+1}
 
