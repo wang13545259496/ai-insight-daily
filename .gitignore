@@ -63,3 +63,4 @@ yarn-error.log*
 # 临时分析文件
 .tmp-*
 .mobile-shots/
+.migration/
