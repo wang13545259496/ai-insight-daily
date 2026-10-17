@@ -159,11 +159,84 @@ Next.js 动态路由目录（如 `app/api/travel/[id]/`）会被 PowerShell 当�
 - 改路径要确认**旧路径仍可用**（重定向）**且站内链接指向新路径**
 - 涉及数据隐藏时，要 grep 响应内容确认**没有泄漏**，而不是只看页面显示
 
+### 7. `systemctl start` 对运行中的服务是空操作
+
+改了 systemd 单元文件的 `ExecStart` 后执行 `systemctl start`：
+
+```bash
+systemctl daemon-reload
+systemctl start myservice      # ✗ 服务已在运行 → 什么都不做，也不报错
+```
+
+`daemon-reload` 只重读单元文件，**不会改变已运行进程的命令行**。
+于是「配置改了、状态显示 active」，实际跑的还是旧参数。
+
+**必须用 `restart`**，并且**核对进程的实际命令行**，而不是只看 `is-active`：
+
+```bash
+systemctl restart myservice
+ps aux | grep '[m]yservice'    # 确认参数真的变了
+```
+
+> 2026-10-17 踩过：隧道服务连续两次「安装成功」，实际进程参数都没变。
+
+### 8. `set -o pipefail` 与 `grep -q` 组合会误判
+
+```bash
+set -uo pipefail
+if systemctl list-unit-files | grep -q "^myservice"; then   # ✗ 可能判为假
+```
+
+`grep -q` 命中后立即退出，上游命令收到 SIGPIPE，整个管道返回 141（非零）。
+`if` 于是把「已存在的服务」判为不存在。
+
+失败与否取决于输出量与时序，所以**同一段代码可能时而正常时而出错**。
+
+改用不经过管道的方式：
+
+```bash
+if systemctl cat myservice > /dev/null 2>&1; then   # ✓ 确定性判断
+```
+
+> 2026-10-17 踩过：脚本把已装好的服务显示成「未安装」，导致误判部署失败。
+
+### 9. 不要用 curl 的失败率推断访客体验
+
+`curl` **不做 Happy Eyeballs**：它按顺序尝试地址，先等 IPv6 满超时再试 IPv4。
+浏览器相反 —— 250ms 后并行尝试两个协议族，谁先通用谁。
+
+同一站点同一时刻的实测差异：
+
+| 方式 | 成功 | 平均耗时 |
+| --- | --- | --- |
+| `curl`（顺序尝试） | 16/20 | 卡满超时 |
+| Node 内置 https（含 Happy Eyeballs） | 19/20 | 2.36s |
+| `curl -4`（强制 IPv4） | 20/20 | 1.89s |
+
+用 curl 会得出「20% 失败」，真实访客体验是「约 5% 失败 + 慢 0.5 秒」。
+**判断访客体验要用 Node 或浏览器**，见 `scripts/measure-browser-experience.cjs`。
+
 ---
 
 ## 三、当前状态与已知问题
 
-> 以下状态实测于 2026-10-16。数据量基线见 `DATABASE_SCHEMA.md`。
+> 以下状态实测于 2026-10-17。数据量基线见 `DATABASE_SCHEMA.md`。
+
+### 当前形态（一句话版）
+
+```
+Next.js(3000) ← cloudflared 隧道 ← Cloudflare ← 浏览器
+本机无反向代理（nginx 已停用），无公网 IP，不开放入站端口
+数据库 18 张表 / 9.7 MB，News 1668 条全部完成 AI 分析
+```
+
+| 项 | 状态 |
+| --- | --- |
+| 隧道 | IPv4 + HTTP/2，4 条连接稳定，断连 0 |
+| nginx | **已停用**（从未在链路上，详见 `DEPLOYMENT.md`） |
+| IPv6（访客侧） | **不可用且无法修复**，约 5% 请求失败，见下方已知问题 |
+| 实体体系 | 1502 实体 / 5448 新闻关联 / 176 事件关联，页面已上线 |
+| TASK-002 | 已完成（AI 分析能力） |
 
 ### 测试
 

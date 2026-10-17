@@ -3,7 +3,7 @@
 
 更新时间：
 
-2026-10-11
+2026-10-17
 
 
 
@@ -344,9 +344,22 @@ AI分析深度。
 
 
 
-当前：
+当前（2026-10-17）：
 
-持续优化数据采集质量。
+1. 访客侧 IPv6 到 Cloudflare 边缘不可达
+   问题：Cloudflare 下发的 AAAA 记录指向的边缘 IP 在当前网络下不可达，
+         但 DNS 照常下发。启用 IPv6 的客户端会优先尝试 IPv6。
+   影响：实测约 5% 请求失败、平均慢 0.47 秒（Node 含 Happy Eyeballs）。
+         ！用 curl 测会得到「20% 失败」的错误结论 ——
+           curl 不做 Happy Eyeballs，会先等 IPv6 满超时。
+   状态：无解。Cloudflare 免费版三条路全部走不通 ——
+         ① 后台「IPv6 兼容性」开关存在但禁用（Enterprise 专属）
+         ② API PATCH /zones/{id}/settings/ipv6 同为 Enterprise 专属
+         ③ API 记录级 settings.ipv4_only 返回错误码 9227
+   方案：接受现状。浏览器失败后会自动重试。
+
+2. 数据采集质量
+   状态：持续优化中。
 
 
 

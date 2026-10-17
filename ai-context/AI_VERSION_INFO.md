@@ -74,6 +74,32 @@
   容器加宽、正文限 68ch、评分移入粘性侧栏
 - 未分析的新闻不再把原始正文冒充成 AI 分析结论
 
+### 文档全量同步
+
+维护者要求「以后更新就把所有该更新的地方一次改完，不要逐个问」，
+已写入 `AGENTS.md` 规则 6，并列出 14 个需要同步的位置。
+
+本轮据此做了一次全库同步（12 份文件）：
+
+| 文档 | 更新内容 |
+| --- | --- |
+| `AGENTS.md` | 新增规则 6：文档全量更新 + 同步位置清单 + 顺序要求 |
+| `AI-START-HERE.md` | 新增坑 7/8/9；加入「当前形态」摘要 |
+| `CODE_MAP.md` | 补 `app/entities` 路由 |
+| `FEATURES.md` | 补实体库功能 |
+| `CURRENT_STATUS.md` | 更新日期；已知问题补 IPv6 无解说明 |
+| `PROJECT_STATUS_SNAPSHOT.md` | 更新日期与 commit |
+| `TODO.md` | 第二阶段标记完成 |
+| `DATABASE.md` | 加指向完整版 `DATABASE_SCHEMA.md` |
+| `AI_MASTER_INDEX.md` | 索引加入 `AI_STATUS_AUTO.md` |
+| `AI_HEALTH_REPORT.md` | 脚本重新生成 |
+| `AI_STATUS_AUTO.md` | 新文件，脚本生成 |
+| `generate-ai-status.sh` | 改为输出独立文件，不再覆盖手写文档 |
+
+**顺带修掉一个隐患**：`generate-ai-status.sh` 原先直接覆盖
+`CURRENT_STATUS.md`，一次运行就把 344 行手写内容压成 99 行机械快照。
+已改为输出独立的 `AI_STATUS_AUTO.md`，两者分工写进索引。
+
 ### 已知无解问题
 
 **访客侧 IPv6 到 Cloudflare 边缘不可达**，失败率约 5%、平均慢 0.47 秒。

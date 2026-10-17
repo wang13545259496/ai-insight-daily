@@ -1,5 +1,12 @@
 # AI Insight Daily 数据库说明
 
+> **本文是简版速查（81 行）。完整结构见
+> [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md)（18 张表、1021 行），
+> 含实体关联三表（Entity / NewsEntity / EventEntity，见 14b-14d 节）。**
+>
+> 两份文档的分工：本文只列最常用表的几个关键字段，供快速回忆；
+> 任何涉及字段定义、索引、关联关系的问题以 DATABASE_SCHEMA.md 为准。
+
 ## News
 
 用途：

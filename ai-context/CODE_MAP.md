@@ -100,6 +100,28 @@ app/industry/
 ---
 
 
+## 实体模块
+
+
+位置：
+
+app/entities/
+
+app/entities/[id]/
+
+
+职责：
+
+实体库。列出公司 / 模型 / 产品 / 人物，详情页显示该实体的
+关联事件、相关新闻（主体优先）与共同出现主体。
+
+数据来自 Entity / NewsEntity / EventEntity 三表，
+由 scripts/linkEventEntities.ts 与 scripts/linkNewsEntities.ts 建立。
+
+
+---
+
+
 ## 投资模块
 
 

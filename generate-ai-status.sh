@@ -2,7 +2,11 @@
 
 echo "生成 AI 项目状态报告..."
 
-cat > ai-context/CURRENT_STATUS.md <<EOT
+# 注意：输出到独立文件，不覆盖手写的 CURRENT_STATUS.md。
+# 原因：CURRENT_STATUS.md 含大量叙述性内容（核心功能、AI能力、
+# 优化方向、已知问题、接手提示），本脚本只能生成机械快照，
+# 直接覆盖会丢掉 300 余行有价值的手写内容（2026-10-17 实测）。
+cat > ai-context/AI_STATUS_AUTO.md <<EOT
 # AI Insight Daily 当前状态报告
 
 自动生成时间：
@@ -116,5 +120,5 @@ AI_TASK_QUEUE.md
 EOT
 
 
-echo "CURRENT_STATUS.md 已更新"
+echo "AI_STATUS_AUTO.md 已更新"
 
