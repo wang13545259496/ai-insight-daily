@@ -15,7 +15,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MARKER="$HOME/.last-db-backup"
 BACKUP_SCRIPT="$PROJECT_DIR/scripts/backup-db-to-github.sh"
 LOG="$PROJECT_DIR/logs/db-backup.log"

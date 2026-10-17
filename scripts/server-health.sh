@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_DIR="/home/administrator/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DB_FILE="$PROJECT_DIR/prisma/dev.db"
 BACKUP_DIR="$PROJECT_DIR/backup/database"
 LOG_DIR="$PROJECT_DIR/logs"

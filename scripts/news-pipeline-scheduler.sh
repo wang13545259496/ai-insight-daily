@@ -27,7 +27,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MARKER="$HOME/.last-news-pipeline"
 LOCK="/tmp/news-pipeline.lock"
 LOG="$PROJECT_DIR/logs/news-pipeline.log"

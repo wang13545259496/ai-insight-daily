@@ -24,7 +24,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="$PROJECT_DIR/logs/health-monitor.log"
 ALERT="$PROJECT_DIR/scripts/alert.sh"
 STATE_FILE="$HOME/.health-state"

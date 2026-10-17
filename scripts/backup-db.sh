@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_DIR="/home/administrator/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 DATE=$(date +"%Y-%m-%d_%H-%M-%S")
 

@@ -3,7 +3,8 @@
 从「家用电脑 + WSL + Cloudflare 隧道」迁移到「阿里云轻量香港」，
 目标是**电脑关机时网站照常运行**。
 
-> 状态：脚本与文档已就绪，**尚未执行迁移**。
+> 状态：**迁移进行中（80%）**，当前进度见
+> [`MIGRATION_IN_PROGRESS.md`](./MIGRATION_IN_PROGRESS.md)。
 >
 > 购买步骤见 [`TENCENT_CLOUD_PURCHASE.md`](./TENCENT_CLOUD_PURCHASE.md)（腾讯云轻量香港）。
 > 触发条件：维护者购买阿里云轻量应用服务器（香港地域）之后。

@@ -29,7 +29,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 USAGE_LOG="logs/ai-usage.log"

@@ -27,7 +27,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="$PROJECT_DIR/logs/alert.log"
 
 TITLE="${1:-告警}"

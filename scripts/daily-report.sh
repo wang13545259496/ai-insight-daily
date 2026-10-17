@@ -20,7 +20,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MARKER="$HOME/.last-daily-report"
 LOG="$PROJECT_DIR/logs/daily-report.log"
 ALERT="$PROJECT_DIR/scripts/alert.sh"

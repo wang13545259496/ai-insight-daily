@@ -25,7 +25,7 @@
 
 set -u
 
-PROJECT_DIR="$HOME/projects/ai-insight-daily"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BRANCH="db-backup"
 WORKTREE="$HOME/.db-backup-worktree"
 DB="$PROJECT_DIR/prisma/dev.db"
