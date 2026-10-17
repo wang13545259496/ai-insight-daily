@@ -401,6 +401,77 @@ meta 仍 index, follow」的半状态。改用常量后消失，
 顺带清掉了 PM2 内部状态里残留的 `SITE_ALLOW_INDEX=true` ——
 `pm2 restart --update-env` 清不掉它，需要 `pm2 delete` + `pm2 start`。
 
+### 采集源审计与清理
+
+体检查出 35 个源里有 16 个**从未产出过内容**。逐项探测后的结论：
+
+**根因**：这 16 个源的 `type` 是 `watch`，而采集器的取源条件是
+
+```
+enabled = true AND type IN ('rss','sitemap') AND rssUrl IS NOT NULL
+```
+
+`watch` 不在其中，所以它们从未参与采集 —— 只是占位记录。
+
+**同时发现 13 条垃圾新闻**：2026-10-07/08 初始化时，这些源被当成网页抓取，
+把官网首页的 `<title>` 当新闻导入了。例如：
+
+```
+[微博AI]     "微博-随时随地发现新鲜事"
+[智谱AI]     "Z.ai - Inspiring AGI to Benefit Humanity"
+[百度智能云]  "千帆大模型平台-企业级一站式大模型开发应用平台"
+```
+
+已全部删除，连带清理 58 条挂在它们上面的实体关联。
+
+## 探测结果
+
+**有可用 RSS（3 个，已启用）**
+
+| 源 | 地址 | 说明 |
+| --- | --- | --- |
+| NVIDIA | `developer.nvidia.com/blog/feed/` | `blogs.nvidia.com` 从本机不可达，改用开发者博客 |
+| Meta | `engineering.fb.com/category/ai-research/feed/` | `ai.meta.com` 不可达；用 **AI 分类 feed**，全量 feed 中 AI 仅占 12% |
+| Anthropic | `rsshub.rssforever.com/anthropic/news` | 官方无 RSS（`/rss.xml` 全 404），只能走 RSSHub |
+
+> **Anthropic 是外部依赖**：RSSHub 公共实例下线则此源中断。实测 7/8 成功。
+
+**无任何 feed（10 个，已停用）**
+
+智谱、月之暗面、MiniMax、字节豆包、腾讯混元、百度智能云、腾讯AI、
+华为盘古、知乎AI话题、微博AI。
+
+这些站的 `/rss` 全部返回 SPA 空壳或 404 —— 它们是前端渲染的单页应用，
+HTML 里没有文章内容，页面解析也救不了。RSSHub 对应路由均返回 503。
+
+**收尾又停用 5 个**：3 个与已有 sitemap 源重复（DeepSeek、通义、阶跃星辰），
+2 个 sitemap 结构不合适、累计产出 0（DeepSeek 官方博客、通义 Qwen 博客）。
+
+**最终：19 个源参与采集（16 RSS + 3 sitemap），16 个停用。**
+
+## 一个需要记住的判断
+
+**国产厂商的内容其实已经有覆盖，只是来自媒体转述而非官方源。**
+
+| 厂商 | 关联新闻 | 主要来源 |
+| --- | --- | --- |
+| DeepSeek | 37 条 | InfoQ、量子位、OSChina |
+| Qwen | 11 条 | arXiv、InfoQ |
+| 豆包 | 8 条 | 量子位 |
+| 阶跃星辰 | 7 条 | 量子位 |
+
+所以补官方源的价值是「更快、更权威」，不是「有没有内容」。
+在拿不到官方 RSS 的前提下，靠媒体源覆盖是可接受的现状。
+
+## 两个已知的接入特性
+
+**`MAX_ITEMS_PER_SOURCE = 30`**：单源单次最多取 30 条。
+NVIDIA 首次接入时正好灌入 30 条（9-23 到 10-16 的历史积压），
+这是设计如此 —— 防止首次接入时一次灌入上千条。之后只会增量。
+
+**`RECENT_DAYS = 30`**：只保留近 30 天。Meta 的 AI 分类 feed 首次接入
+产出 0，因为最新一篇是 2026-09-02，超出窗口。源是好的，只是发文频率低。
+
 ### 已知无解问题
 
 **访客侧 IPv6 到 Cloudflare 边缘不可达**，失败率约 5%、平均慢 0.47 秒。

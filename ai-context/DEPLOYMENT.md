@@ -422,6 +422,50 @@ curl -s https://api.deepseek.com/user/balance \
 用量日志里的 `reason` 字段记录推理 token 数 —— 若它长期不为 0，
 说明开关失效了（SDK 升级、或 DeepSeek 改了参数名），成本会悄悄涨。
 
+### 采集源状态（2026-10-17 审计后）
+
+**19 个源参与采集**（16 RSS + 3 sitemap），16 个已停用。
+
+停用的源都在 `Source` 表里保留记录，`lastError` 写明原因，
+所以「为什么没有某个源的内容」可以直接查库回答：
+
+```sql
+SELECT name, lastError FROM Source WHERE enabled = 0;
+```
+
+#### 国产厂商为什么没有官方源
+
+智谱、月之暗面、MiniMax、字节豆包、腾讯混元、百度、腾讯AI、华为盘古、
+知乎、微博 —— 实测它们的 `/rss` 全部返回 SPA 空壳或 404。
+这些站是前端渲染的单页应用，HTML 里没有文章内容，页面解析同样无效。
+RSSHub 对应路由也均返回 503。
+
+**它们的内容靠媒体源覆盖**：InfoQ、量子位、OSChina、arXiv 会报道这些厂商的动态。
+代价是比官方发布晚几小时到一天。
+
+#### 接入新源的注意事项
+
+| 常量 | 值 | 含义 |
+| --- | --- | --- |
+| `MAX_ITEMS_PER_SOURCE` | 30 | 单源单次最多取 30 条，防止首次接入灌入上千条 |
+| `RECENT_DAYS` | 30 | 只保留近 30 天的内容 |
+| `MIN_CONTENT_LENGTH` | 40 | 正文短于此丢弃 |
+
+首次接入一个大 archive 的源（如 NVIDIA，feed 有 757KB）会一次性补录
+最多 30 条 —— 这会让当天该源占比突然升高，属于预期行为，之后转增量。
+
+接入前先确认 feed 里**最新一篇的发布时间**在 30 天内，否则会零产出
+（Meta 的 AI 分类 feed 就是这样）。
+
+#### Anthropic 依赖 RSSHub
+
+Anthropic 官方无 RSS，走 `rsshub.rssforever.com` 公共实例。
+这是**外部依赖**：实例下线或限流则此源中断。
+实测 7/8 成功，偶发超时会在下一轮重试。
+
+若长期不稳定，可选：自建 RSSHub（需额外维护一个服务），
+或放弃该源（Anthropic 的动态仍会经 TechCrunch、量子位等媒体源进入）。
+
 ### 日志位置
 
 | 文件 | 内容 |
