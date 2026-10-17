@@ -1,4 +1,5 @@
 import NewsTitle from "@/components/NewsTitle";
+import { AiDisclosure } from "@/components/AiContentLabel";
 import { prisma } from "@/lib/prisma";
 import { breakdownScore } from "@/lib/ranking/scoreBreakdown";
 import { checkContentQuality } from "@/lib/news/contentQualityScore";
@@ -237,20 +238,14 @@ export default async function NewsDetailPage({
               </div>
             </section>
 
-            {/* AI 生成内容标识 —— 位于所有 AI 分析内容之前 */}
-            <div className="mt-10 rounded-xl border border-gray-300 bg-gray-50 px-5 py-4">
-              <p className="text-sm leading-7 text-gray-600">
-                <span className="rounded bg-black px-2 py-0.5 text-[12px] sm:text-[10px] font-bold text-white">
-                  AI 生成
-                </span>
-                <span className="ml-2 font-bold text-gray-900">
-                  以下内容由人工智能模型生成，未经人工编辑审核。
-                </span>
-                可能存在错误或偏差，仅供参考，
-                <span className="text-gray-900">不构成投资建议</span>。
-                事实信息请以正文与原始来源为准。
-              </p>
-            </div>
+            {/* AI 生成内容标识 —— 只在真正经过模型处理时显示。
+                未分析的记录下面显示的是原始抓取内容与 PENDING 占位文案，
+                若仍挂「AI 生成」就是虚假声明。 */}
+            {isAnalyzed && (
+              <div className="mt-10">
+                <AiDisclosure />
+              </div>
+            )}
 
             {/* 核心判断 */}
             <section className="mt-8">

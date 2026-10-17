@@ -1,5 +1,6 @@
 import Link from "next/link";
 import NewsTitle from "@/components/NewsTitle";
+import { AiGeneratedBadge } from "@/components/AiContentLabel";
 import { NewBadge, RememberVisit } from "@/components/NewSinceLastVisit";
 import { prisma } from "@/lib/prisma";
 import { buildIndustryMap } from "@/lib/industryMap/aggregate";
@@ -519,6 +520,15 @@ export default async function HomePage() {
                       */}
                       <NewsTitle title={item.title} titleZh={item.titleZh} />
                     </h3>
+
+                    {item.aiScore > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <AiGeneratedBadge />
+                        <span className="text-[12px] text-gray-500 sm:text-[10px]">
+                          本文摘要由 AI 整理，未经人工审核
+                        </span>
+                      </div>
+                    )}
 
                     <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-500">
                       {safeText(

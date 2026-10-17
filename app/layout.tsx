@@ -27,9 +27,12 @@ export const metadata: Metadata = {
   robots: SITE_ALLOW_INDEX
     ? { index: true, follow: true }
     : { index: false, follow: false, nocache: true },
-  // 站内内容是 AI 生成的聚合分析，明确告知抓取方
+  // 隐式标识（《人工智能生成合成内容标识办法》第五条）：
+  // 在元数据中声明内容属性、生成方与说明位置。
   other: {
     "ai-content": "generated",
+    "ai-content-generator": "DeepSeek（deepseek-flash）",
+    "ai-content-disclosure": "https://aibiliai.com/about",
   },
 };
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import NewsTitle from "@/components/NewsTitle";
+import { AiGeneratedBadge } from "@/components/AiContentLabel";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -591,6 +592,15 @@ export default async function NewsPage() {
                           <NewsTitle title={item.title} titleZh={item.titleZh} />
                         </h3>
                       </Link>
+
+                      {isAnalyzed && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <AiGeneratedBadge />
+                          <span className="text-[12px] text-gray-500 sm:text-[10px]">
+                            摘要由 AI 整理，未经人工审核
+                          </span>
+                        </div>
+                      )}
 
                       <p className="mt-3 line-clamp-2 max-w-4xl text-sm leading-7 text-gray-500">
                         {summary}
