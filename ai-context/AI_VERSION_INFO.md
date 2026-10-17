@@ -224,6 +224,35 @@
 **注意**：本合规包覆盖的是**技术侧与文本侧**。
 ICP 备案、运营主体资格等属于需要个案判断的事项，未涉及。
 
+### 死代码清理
+
+盘查发现 64 个组件里有 30 个未被使用（含已删的 LiveNews、NewsCard）。
+
+**判定方法**：不看组件名，而看**组件里的中文文案是否出现在构建产物中**。
+  若组件被任何页面引用，它的文案必然会打进 `.next/static/chunks/*.js`。
+  只 grep 组件名不可靠 —— 例如 `Header` 在产物里出现 3 次，
+  那是 `AgentDashboardHeader` 的子串，不代表 `Header.tsx` 被使用。
+
+**已删除 12 个、2588 行**：
+
+| 批次 | 组件 | 行数 |
+| --- | --- | --- |
+| 一 | LiveNews、NewsCard | 853 |
+| 二 | StartupCard、StartupLab、StartupOpportunityCard、AgentBusinessCard、AgentHotCard、AgentMarketCard、AgentCard、AgentRecommendCard、AgentTrendCard、AgentDashboardHeader | 1913 |
+
+第二批删除前做了四重交叉验证：无 import、无路径引用、
+无 JSX 使用、这批之间互不依赖、也无保留组件依赖它们。
+
+**仍待确认的 10 个**（疑似「没做完的功能」而非纯残留）：
+
+`AIIndexChart`、`AIIndexRefresh`、`IndexTrend`、`IndexDetailCard`、
+`ReportCard`、`HomeSearch`、`HomeLinks`、`HomeDirections`、
+`BusinessCard`、`EcosystemCard`
+
+另有 10 个无中文文案、无法自动判定：`Container`、`DashboardStats`、
+`Header`、`HomeStats`、`IndustryTrendChart`、`InvestmentRadar`、
+`OpportunityMapCard`、`Tag`、`TrendCard`、`RecommendNews`。
+
 ### 已知无解问题
 
 **访客侧 IPv6 到 Cloudflare 边缘不可达**，失败率约 5%、平均慢 0.47 秒。
