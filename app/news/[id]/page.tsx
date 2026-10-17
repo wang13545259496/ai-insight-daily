@@ -241,9 +241,24 @@ export default async function NewsDetailPage({
               </div>
             </section>
 
+            {/* AI 生成内容标识 —— 位于所有 AI 分析内容之前 */}
+            <div className="mt-10 rounded-xl border border-gray-300 bg-gray-50 px-5 py-4">
+              <p className="text-sm leading-7 text-gray-600">
+                <span className="rounded bg-black px-2 py-0.5 text-[10px] font-bold text-white">
+                  AI 生成
+                </span>
+                <span className="ml-2 font-bold text-gray-900">
+                  以下内容由人工智能模型生成，未经人工编辑审核。
+                </span>
+                可能存在错误或偏差，仅供参考，
+                <span className="text-gray-900">不构成投资建议</span>。
+                事实信息请以正文与原始来源为准。
+              </p>
+            </div>
+
             {/* 核心判断 */}
-            <section className="mt-10">
-              <SectionHeading en="CORE JUDGMENT" zh="核心判断" note="AI产业视角" />
+            <section className="mt-8">
+              <SectionHeading en="CORE JUDGMENT" zh="核心判断" note="AI生成 · 产业视角" />
 
               <div className="mt-6 border-l-4 border-black pl-6">
                 <p className="text-lg leading-9 font-medium text-gray-900">
@@ -257,7 +272,7 @@ export default async function NewsDetailPage({
               <SectionHeading
                 en="WHY IT MATTERS"
                 zh="为什么重要"
-                note="从产业、商业与投资三个角度理解这条新闻的价值"
+                note="AI生成 · 从产业、商业与投资三个角度理解"
               />
 
               <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -269,7 +284,7 @@ export default async function NewsDetailPage({
 
             {/* 04 AI研判 */}
             <section className="mt-14">
-              <SectionHeading en="AI INSIGHT" zh="AI智能分析" />
+              <SectionHeading en="AI INSIGHT" zh="AI智能分析" note="AI生成 · 未经人工审核" />
 
               <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <ResearchCard title="产业价值" content={industryValueContent} />
