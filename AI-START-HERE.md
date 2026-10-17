@@ -17,7 +17,7 @@
 | 1 | [`ai-context/AI_MASTER_INDEX.md`](./ai-context/AI_MASTER_INDEX.md) | 交接文档体系的全貌与索引 |
 | 2 | [`ai-context/ARCHITECTURE.md`](./ai-context/ARCHITECTURE.md) | 技术栈、部署拓扑、数据流、外部依赖 |
 | 3 | [`ai-context/DEPLOYMENT.md`](./ai-context/DEPLOYMENT.md) | 运维操作、构建流程、开机自启、定时任务 |
-| 4 | [`ai-context/DATABASE_SCHEMA.md`](./ai-context/DATABASE_SCHEMA.md) | 15 张表的结构与数据量基线 |
+| 4 | [`ai-context/DATABASE_SCHEMA.md`](./ai-context/DATABASE_SCHEMA.md) | 18 张表的结构与数据量基线 |
 | 5 | **本文档** | 工作方式、当前状态、历史教训 |
 
 **遇到故障时**另读 [`ai-context/AI_TROUBLESHOOTING_GUIDE.md`](./ai-context/AI_TROUBLESHOOTING_GUIDE.md)

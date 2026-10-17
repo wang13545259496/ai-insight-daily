@@ -1,4 +1,4 @@
-# AI Insight Daily 数据库结构说明 V1.1
+# AI Insight Daily 数据库结构说明 V1.2
 
 
 > 核实记录：
@@ -66,6 +66,20 @@ Investment / BusinessOpportunity
 ↓
 
 AI分析输出
+
+
+另一条支线：实体抽取
+
+新闻正文
+
+↓
+
+Entity（公司 / 模型 / 产品 / 人物）
+
+↓
+
+EventEntity（关联事件）
+NewsEntity（关联新闻）
 
 
 
@@ -362,15 +376,10 @@ Source
 
 ↓
 
-News
-
-
-News
-
-↓
-
-NewsEvent
-
+News ──→ NewsEntity ──→ Entity
+│                        ↑
+↓                        │
+NewsEvent ──→ EventEntity┘
 
 NewsEvent
 
@@ -385,6 +394,16 @@ Investment
 ↓
 
 InvestmentScore
+
+
+实体关联是**多对多**：
+
+  News       ←→ NewsEntity  ←→ Entity
+  NewsEvent  ←→ EventEntity ←→ Entity
+
+一条新闻可关联多个实体，一个实体可关联多条新闻与多个事件。
+两张关联表用显式联结模型而非隐式多对多 ——
+mentions / role / isPrimary 本身就是分析结果，不是纯粹的连接。
 
 
 
@@ -493,6 +512,169 @@ InvestmentScore
 Agent运行记录表。
 
 
+
+
+================================
+
+# 14b. Entity（实体）· 2026-10-17 新增
+
+
+用途：
+
+把「公司 / AI 模型 / 产品 / 人物」从新闻与事件中抽出来，
+建立可反向查询的关联。
+
+解决的空白：
+
+  此前只有两层组织方式 ——
+    IndustryHotspot  5 条，是**话题**级（AI大模型、AI芯片）
+    NewsEvent       31 条，是按热度聚合的**事件**
+  缺少「具体主体」这一层，无法回答
+    「OpenAI 最近有哪些动态」
+    「Claude 相关的事件有哪几个」
+
+三张表：
+
+  Entity        实体主表
+  NewsEntity    新闻 ↔ 实体（5448 条）
+  EventEntity   事件 ↔ 实体（176 条）
+
+
+## Entity 字段要点
+
+| 字段 | 说明 |
+| --- | --- |
+| name | 规范名，如 OpenAI、GPT-6 |
+| type | company / model / product / person |
+| aliases | 别名，格式 `\|a\|b\|`（**首尾带分隔符**） |
+| status | active / candidate / merged |
+| mergedIntoId | 归并后指向主记录 |
+| newsCount / eventCount | 冗余统计，供列表页排序 |
+
+aliases 首尾加分隔符的原因：
+
+  匹配时用「包含 `|别名|` 」而非简单子串。
+  否则别名 Apple 会命中正文里的 Appleby。
+
+
+status 的三个值：
+
+  active     种子实体（来自 Investment 与热点关键词）
+  candidate  模型抽取的，待核
+  merged     已被归并到别的实体，**不删除**，保留可追溯
+
+
+## NewsEntity 字段
+
+| 字段 | 说明 |
+| --- | --- |
+| role | subject / background |
+| mentions | 提及次数 |
+
+role 的含义：
+
+  subject     实体出现在新闻**标题**里，是文章主体
+  background  实体出现在摘要或正文里，被提及
+
+页面上按「主体优先、组内按时间」排序 ——
+实测若纯按时间排，OpenAI 页开头会是两篇仅提及 OpenAI 的 InfoQ 文章。
+
+
+## EventEntity 字段
+
+| 字段 | 说明 |
+| --- | --- |
+| isPrimary | 是否为该事件的主体 |
+
+isPrimary 由「是否出现在事件标题里」判定（分级加权，阈值 5）。
+
+
+================================
+
+# 14c. 实体抽取与归并规则
+
+
+## 抽取（scripts/extractEntities.ts）
+
+把已分析新闻的标题+摘要分批（30 条/批）交给模型抽取。
+
+两条硬约束：
+
+1. 提示词要求实体名**必须逐字出现在给定文本中**
+2. 代码侧再校验一次（`batchText.includes(name)`）
+
+双重防幻觉。实测 1599 条新闻分 54 批，
+抽出 1506 个实体，失败 0 批，约 5 分钟。
+
+## 归并（scripts/mergeEntities.ts）
+
+只归并**确定是同一实体**的情况：
+
+| 类型 | 条数 | 例子 |
+| --- | --- | --- |
+| 大小写不同 | 3 | invideo → Invideo |
+| 人工确认的中英对照 | 8 | 谷歌 → Google、微软 → Microsoft |
+
+**刻意不做的事**（都有实测依据）：
+
+- **不合并跨类型同名**
+  曾按 company > model > product 的优先级合并，预演发现抹掉产品语义：
+    `[product] AWS`  → `[company] AWS`   错，AWS 是云平台不是公司
+    `[product] Sora` → `[model] Sora`    错，Sora 是视频生成产品
+  根因是抽取阶段把非产品标成了产品（OpenAI Academy 是项目、Axios 是公司），
+  属于类型标注问题，不该用合并掩盖。
+
+- **不合并前缀包含关系**
+  `Amazon ⊂ Amazon Bedrock`、`ChatGPT ⊂ ChatGPT Ads` 共 98 组，
+  那是**父子层级**不是重复，合并会让两个不同对象混为一谈。
+
+## 关联（两道确定性匹配，不调模型）
+
+  scripts/linkEventEntities.ts   事件关联，分级加权：
+    事件标题 5 / 综述 3 / 新闻标题 2 / 摘要 1（设上限），阈值 3
+
+  scripts/linkNewsEntities.ts    新闻关联，分级加权：
+    标题 5 / 摘要 3 / 正文 1（每次，上限 5），阈值 1
+
+阈值不同的原因：
+
+  事件聚合最多 30 篇新闻，出现即关联会噪声过大（首版实测每事件命中 14 个）；
+  新闻是单一主题，被提到的实体通常确实相关，故取 1。
+
+**事件继承默认关闭** —— 一篇新闻属于某事件，不等于它与该事件的所有主体相关。
+启用过的实测噪声：
+  「OpenAI 最新模型发展动态」被挂上 Ringg、Basis（两家投资候选公司）
+
+
+================================
+
+# 14d. 实体数据现状（2026-10-17）
+
+
+| 项 | 数量 |
+| --- | --- |
+| Entity（未归并） | 1502 |
+| ├ company | 542 |
+| ├ product | 516 |
+| ├ model | 260 |
+| └ person | 184 |
+| Entity（已归并） | 11 |
+| NewsEntity | 5448（subject 2115 / background 3333） |
+| EventEntity | 176（其中主体 101） |
+| 有新闻关联的实体 | 1488 |
+| 新闻覆盖率 | 1532 / 1668（92%） |
+
+关联最多的实体：
+
+| 实体 | 类型 | 新闻 | 事件 |
+| --- | --- | --- | --- |
+| OpenAI | company | 1056 | 5 |
+| ChatGPT | product | 294 | 3 |
+| GPT | model | 283 | 2 |
+| Google | company | 53 | 11 |
+
+统计字段由 `scripts/refreshEntityStats.ts` 维护 ——
+冗余的理由是列表页要按活跃度排序，实时聚合上万行会慢。
 
 
 ================================
@@ -831,7 +1013,7 @@ PageView 474
 
 数据库文件大小：
 
-prisma/dev.db 约 8.7 MB
+prisma/dev.db 约 9.7 MB
 
 说明：
 

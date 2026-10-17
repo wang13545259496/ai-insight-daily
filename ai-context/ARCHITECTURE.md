@@ -86,15 +86,20 @@ Next.js  0.0.0.0:3000（PM2 管理）
 
 ## 四、数据模型
 
-共 15 张表，核心数据流：
+共 18 张表，核心数据流：
 
 ```
 Source（数据源，35 条）
   ↓  采集
 News（新闻，1668 条）
   ↓  清洗 → 去重 → 质量分级
-  ↓  AI 分析
-NewsEvent（事件聚类，31 条）
+  ↓  AI 分析                      ↓ 实体抽取（英文名逐字校验）
+  ↓                               Entity（实体，1502 条）
+  ↓                                 ├ company 542 / product 516
+  ↓                                 ├ model 260 / person 184
+  ↓                                 ↓
+  ↓                              NewsEntity（新闻↔实体，5448 条）
+NewsEvent（事件聚类，31 条）──→ EventEntity（事件↔实体，176 条）
   ↓  产业价值评分
   ↓  趋势归纳
 IndustryTrend（产业趋势，40 条）
@@ -105,11 +110,35 @@ DailyReport（日报，10 条）
 Investment（投资标的，3 条）
 BusinessOpportunity / BusinessReport
 
-PageView（访问统计，474 条）
+PageView（访问统计，513 条）
 TripPlan（出行方案，24 条）—— 出行管家模块
 ```
 
-> 上表数据量实测于 2026-10-16。数据库当前约 8.7 MB。
+> 上表数据量实测于 2026-10-17。数据库当前约 9.7 MB。
+
+### 实体体系（2026-10-17 新增）
+
+三层组织结构，粒度从粗到细：
+
+| 层 | 表 | 回答的问题 |
+| --- | --- | --- |
+| 话题 | `IndustryHotspot`（5 条） | 这属于哪个产业方向 |
+| 事件 | `NewsEvent`（31 条） | 最近发生了什么 |
+| **实体** | `Entity`（1502 条） | **这是哪家公司 / 哪个模型** |
+
+前两层无法回答「OpenAI 最近有哪些动态」—— 那是实体级的问题。
+
+两个关联表用显式联结模型而非隐式多对多，
+因为 `role`、`mentions`、`isPrimary` 本身就是分析结果：
+
+- `NewsEntity.role`：`subject`（出现在标题，是主体）/ `background`（被提及）
+- `EventEntity.isPrimary`：是否为事件主体
+
+关联由确定性匹配生成，**不调模型** ——
+实体本就抽自新闻正文并校验过「必须逐字出现」，匹配回去是纯字符串比对，
+免费、可复现、无幻觉。
+
+详见 [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md) 第 14b-14d 节。
 > 字段级说明见 [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md)。
 
 ### 一条设计原则
