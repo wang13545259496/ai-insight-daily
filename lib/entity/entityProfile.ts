@@ -13,6 +13,21 @@ export interface RelatedEvent {
   newsCount: number;
 }
 
+/** 详情页最多展示多少条相关新闻 */
+export const RELATED_NEWS_LIMIT = 30;
+
+export interface RelatedNews {
+  id: number;
+  title: string;
+  titleZh: string | null;
+  source: string;
+  publishedAt: Date | null;
+  aiScore: number;
+  /** subject（标题中出现）/ background（正文提及）/ event（事件继承，当前默认关闭） */
+  role: string;
+  mentions: number;
+}
+
 export interface CoEntity {
   id: number;
   name: string;
@@ -30,6 +45,8 @@ export interface EntityProfile {
   eventCount: number;
   newsCount: number;
   events: RelatedEvent[];
+  /** 相关新闻（按发布时间倒序，最多 RELATED_NEWS_LIMIT 条） */
+  news: RelatedNews[];
   /** 共同出现最多的其它实体 */
   coEntities: CoEntity[];
   /** 该实体作为主体的事件数 */
@@ -113,6 +130,67 @@ export async function buildEntityProfile(
 
   const eventIds = links.map((l) => l.event.id);
 
+  /**
+   * 相关新闻：**主体优先，组内按时间倒序**。
+   *
+   * 为什么不能只按时间排：
+   *   实测 OpenAI 页面上，最新两条是 InfoQ 的「CloudWatch Omni」
+   *   与「Spring 近期新闻」—— 它们确实提到了 OpenAI（标为「提及」正确），
+   *   但按时间倒序会把真正以 OpenAI 为主体的文章挤下去。
+   *   实体页的用途是「这个主体最近在发生什么」，开头就该是主体新闻。
+   *
+   * 分两次查询再合并：Prisma 无法按「role 的优先级」排序。
+   */
+  const newsSelect = {
+    role: true,
+    mentions: true,
+    news: {
+      select: {
+        id: true,
+        title: true,
+        titleZh: true,
+        source: true,
+        publishedAt: true,
+        aiScore: true,
+      },
+    },
+  } as const;
+
+  const subjectLinks = await prisma.newsEntity.findMany({
+    where: { entityId, role: "subject", news: { dataStatus: "active" } },
+    select: newsSelect,
+    orderBy: { news: { publishedAt: "desc" } },
+    take: RELATED_NEWS_LIMIT,
+  });
+
+  // 主体不足时，用「提及」类补齐
+  const remaining = RELATED_NEWS_LIMIT - subjectLinks.length;
+
+  const backgroundLinks =
+    remaining > 0
+      ? await prisma.newsEntity.findMany({
+          where: {
+            entityId,
+            role: { not: "subject" },
+            news: { dataStatus: "active" },
+          },
+          select: newsSelect,
+          orderBy: { news: { publishedAt: "desc" } },
+          take: remaining,
+        })
+      : [];
+
+  const news: RelatedNews[] = [...subjectLinks, ...backgroundLinks].map((l) => ({
+    id: l.news.id,
+    title: l.news.title,
+    titleZh: l.news.titleZh,
+    source: l.news.source,
+    publishedAt: l.news.publishedAt,
+    aiScore: l.news.aiScore,
+    role: l.role,
+    mentions: l.mentions,
+  }));
+
   // 共现实体：这些事件里还出现了谁
   let coEntities: CoEntity[] = [];
 
@@ -175,6 +253,7 @@ export async function buildEntityProfile(
     ...entity,
     aliases: parseAliases(entity.aliases),
     events,
+    news,
     coEntities,
     primaryCount: links.filter((l) => l.isPrimary).length,
     firstEventAt: times[0] ?? null,

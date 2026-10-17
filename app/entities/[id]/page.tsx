@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import NewsTitle from "@/components/NewsTitle";
 import {
   buildEntityProfile,
   ENTITY_TYPE_LABELS,
@@ -39,6 +40,19 @@ export async function generateMetadata({
  * 这里**不做兜底**：查不到就原样显示状态值本身。
  * 宁可样式朴素，也不要谎报。
  */
+/**
+ * 新闻与实体的关系标签。
+ *
+ * subject    —— 实体出现在新闻标题里，是文章主体
+ * background —— 实体出现在正文或摘要里，被提及
+ * event      —— 由事件继承而来（当前默认关闭）
+ */
+const NEWS_ROLE: Record<string, { text: string; cls: string }> = {
+  subject: { text: "主体", cls: "bg-black text-white border-black" },
+  background: { text: "提及", cls: "bg-gray-50 text-gray-600 border-gray-200" },
+  event: { text: "事件", cls: "bg-blue-50 text-blue-700 border-blue-200" },
+};
+
 const TREND_STYLE: Record<string, string> = {
   爆发增长: "bg-red-50 text-red-700 border-red-200",
   快速上升: "bg-orange-50 text-orange-700 border-orange-200",
@@ -125,6 +139,13 @@ export default async function EntityDetailPage({
             </div>
 
             <div>
+              <dt className="text-xs text-gray-500">相关新闻</dt>
+              <dd className="mt-1 text-2xl font-bold tabular-nums">
+                {profile.newsCount}
+              </dd>
+            </div>
+
+            <div>
               <dt className="text-xs text-gray-500">共同出现主体</dt>
               <dd className="mt-1 text-2xl font-bold tabular-nums">
                 {coEntities.length}
@@ -207,6 +228,66 @@ export default async function EntityDetailPage({
                   );
                 })}
               </div>
+
+              {/* 相关新闻 */}
+              {profile.news.length > 0 && (
+                <div className="mt-14">
+                  <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+                    RELATED NEWS
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-baseline justify-between gap-3">
+                    <h2 className="text-2xl font-bold">相关新闻</h2>
+
+                    <span className="text-sm text-gray-500">
+                      共 {profile.newsCount} 篇，显示最近 {profile.news.length} 篇
+                    </span>
+                  </div>
+
+                  <ul className="mt-6 space-y-3">
+                    {profile.news.map((n) => {
+                      const role = NEWS_ROLE[n.role] ?? NEWS_ROLE.background;
+
+                      return (
+                        <li key={n.id}>
+                          <Link
+                            href={`/news/${n.id}`}
+                            className="group block rounded-2xl border border-gray-200 bg-white p-5 transition hover:border-gray-900"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${role.cls}`}
+                              >
+                                {role.text}
+                              </span>
+
+                              {n.source && (
+                                <span className="text-xs text-gray-500">{n.source}</span>
+                              )}
+
+                              {n.publishedAt && (
+                                <span className="text-xs text-gray-400">
+                                  {formatDate(n.publishedAt)}
+                                </span>
+                              )}
+
+                              {n.aiScore > 0 && (
+                                <span className="ml-auto text-xs font-bold tabular-nums text-gray-400">
+                                  {Math.round(n.aiScore)}
+                                </span>
+                              )}
+                            </div>
+
+                            <h3 className="mt-2.5 text-base leading-7 font-bold group-hover:underline">
+                              <NewsTitle title={n.title} titleZh={n.titleZh} />
+                            </h3>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </section>
 
             {/* 右栏：共同出现的实体 */}
