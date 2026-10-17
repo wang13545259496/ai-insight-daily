@@ -1,0 +1,33 @@
+[Unit]
+Description=Cloudflare Tunnel client (IPv4 forced)
+Documentation=https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+After=network-online.target
+Wants=network-online.target
+
+# 关闭启动频率限制。
+# 隧道断开后必须能立即重连，不应被 systemd 的
+# "N 次启动失败后放弃" 机制拦住。
+StartLimitIntervalSec=0
+
+[Service]
+TimeoutStartSec=30
+Type=notify
+
+# 关键差异：--edge-ip-version 4
+#
+# 原服务（/etc/systemd/system/cloudflared.service）使用默认的 auto，
+# 实测隧道全部经 IPv6 连接 Cloudflare 边缘（ip=2606:4700:...），
+# 并伴随 68 次 "network is unreachable"、144 次 "Connection terminated"、
+# 158 次 "Retrying connection" —— 这是站点间歇性打不开的直接原因。
+#
+# 强制 IPv4 后应看到 ip=104.x / ip=172.x。
+#
+# 注意：--edge-ip-version 是**全局参数**，必须放在 tunnel 子命令之前。
+ExecStart=/usr/bin/cloudflared --no-autoupdate --edge-ip-version 4 tunnel run --token-file /etc/cloudflared/token
+
+# 隧道必须常驻，任何退出都重启
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
