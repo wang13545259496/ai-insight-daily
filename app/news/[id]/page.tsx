@@ -94,10 +94,6 @@ export default async function NewsDetailPage({
     ? splitAnalysisText(news.investmentView)
     : [];
 
-  const industryValueContent = isAnalyzed
-    ? buildIndustryValue(news.insight, news.content, news.summary)
-    : "";
-
   // extractRisk 在三个字段全空时仍会返回一句通用风险提示（见该函数末尾），
   // 对未分析的记录同样属于无中生有，故保持原有守卫。
   const riskContent = isAnalyzed
@@ -282,23 +278,6 @@ export default async function NewsDetailPage({
               </div>
             </section>
 
-            {/* 04 AI研判 */}
-            <section className="mt-14">
-              <SectionHeading en="AI INSIGHT" zh="AI智能分析" note="AI生成 · 未经人工审核" />
-
-              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <ResearchCard title="产业价值" content={industryValueContent} />
-                <ResearchCard
-                  title="商业方向"
-                  content={
-                    isAnalyzed
-                      ? news.businessOpportunity?.trim() || PENDING_ANALYSIS_TEXT
-                      : PENDING_ANALYSIS_TEXT
-                  }
-                />
-                <ResearchCard title="关注风险" content={riskContent} />
-              </div>
-            </section>
           </div>
 
           {/* 右栏：评分与风险（大屏粘性跟随） */}
@@ -437,28 +416,6 @@ function InsightCard({
   );
 }
 
-function ResearchCard({
-  title,
-  content,
-}: {
-  title: string;
-  content: string;
-}) {
-  return (
-    <div className="flex min-h-[220px] flex-col rounded-2xl border border-gray-200 bg-gray-50 p-6">
-      <div className="text-[10px] font-bold tracking-[0.25em] text-gray-500 uppercase">
-        AI ANALYSIS
-      </div>
-
-      <h3 className="mt-2.5 text-lg font-bold text-black">{title}</h3>
-
-      <p className="mt-4 text-sm leading-7 text-gray-700">
-        {content || PENDING_ANALYSIS_TEXT}
-      </p>
-    </div>
-  );
-}
-
 function splitArticleText(text: string) {
   return text
     .replace(/\r\n/g, "\n")
@@ -548,51 +505,6 @@ function buildCoreJudgment(
   return "暂无核心判断";
 }
 
-function buildIndustryValue(
-  insight: string | null,
-  content: string | null,
-  summary: string | null
-) {
-  const insightText = insight?.trim().replace(/\s+/g, " ");
-
-  if (insightText) {
-    const sentences = insightText
-      .split(/(?<=[。！？])/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-
-    const industrySentence = sentences.find((sentence) =>
-      /产业|行业|市场|生态|生产力|开发者|企业|应用|模型|平台|成本|价格/.test(
-        sentence
-      )
-    );
-
-    if (industrySentence) {
-      const remaining = sentences.filter(
-        (sentence) => sentence !== industrySentence
-      );
-
-      if (remaining.length > 0) {
-        return `${industrySentence} ${remaining.join(" ")}`;
-      }
-
-      return industrySentence;
-    }
-  }
-
-  if (summary?.trim()) {
-    return `从产业角度看，这一变化的关键在于：${summary
-      .trim()
-      .replace(/\s+/g, " ")}`;
-  }
-
-  if (content?.trim()) {
-    return `从产业角度看，这一事件可能进一步推动相关技术和应用落地。`;
-  }
-
-  return "暂无产业价值分析";
-}
-
 function extractRisk(
   investmentView: string | null,
   insight: string | null,
@@ -634,7 +546,6 @@ function extractRisk(
 
   return "需要关注模型技术快速迭代、价格竞争加剧以及优势持续性的变化。";
 }
-
 /**
  * 未生成 AI 分析时的占位文案。
  *
