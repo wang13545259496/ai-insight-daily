@@ -152,14 +152,38 @@ Cloudflare 免费版三条路全部走不通（后台开关、zone 级 API、记
 
 **每次重大开发后应做的事**：
 
-```bash
-# 1. 重新生成交接包（会自动写入当前 commit）
-bash update-ai-handover.sh
+**顺序很重要 —— 先更新标记，再生成包**：
 
-# 2. 更新本文档的版本标记
+```bash
+# 1. 先更新本文档的版本标记
 bash scripts/update-version-info.sh
+
+# 2. 再重新生成交接包
+bash update-ai-handover.sh
+```
+
+> **为什么顺序不能反**：`update-ai-handover.sh` 会把当时的
+> `AI_VERSION_INFO.md` 打进 ZIP。若先生成包再改标记，
+> 包里的标记就是旧日期与旧 commit —— 而 ZIP 正是交接包使用者
+> 唯一会看的东西，记录错了等于没记录。
+>
+> 2026-10-17 踩过这个坑：仓库文件记录 2026-10-17 / 142fd90，
+> ZIP 内却是 2026-10-16 / ff9e254。
+
+**生成后自检**：
+
+```bash
+# 确认 ZIP 内的标记与仓库文件一致
+unzip -p AI-HANDOVER.zip "AI-HANDOVER/ai-context/AI_VERSION_INFO.md" \
+  | sed -n '/AUTO-UPDATE-START/,/AUTO-UPDATE-END/p'
 ```
 
 > **为什么不建 CHANGELOG.md**：
-> 它与 git 提交历史功能重叠，维护成本大于收益。
-> 查阅变更请用 `git log --oneline`，本文件只记录「交接包对应哪个 commit」。
+> 逐条变更与 git 提交历史功能重叠，维护成本大于收益 ——
+> 查完整历史请用 `git log --oneline`。
+>
+> 但上面的「本轮变更」一节日的是**另一件事**：
+> 交接包的使用场景往往拿不到仓库（纯网页会话上传 zip），
+> 那时没有 git log 可查。因此这里保留**当前这一轮**的概要，
+> 只覆盖最近一次重大开发，不做长期演进记录。
+> 下一轮重大开发时，本节应整体替换而不是追加。
