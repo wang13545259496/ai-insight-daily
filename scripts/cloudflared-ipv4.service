@@ -23,7 +23,7 @@ Type=notify
 # 强制 IPv4 后应看到 ip=104.x / ip=172.x。
 #
 # 注意：--edge-ip-version 是**全局参数**，必须放在 tunnel 子命令之前。
-ExecStart=/usr/bin/cloudflared --no-autoupdate --edge-ip-version 4 tunnel run --token-file /etc/cloudflared/token
+ExecStart=/usr/bin/cloudflared --no-autoupdate --edge-ip-version 4 --edge-bind-address 0.0.0.0 --protocol http2 tunnel run --token-file /etc/cloudflared/token
 
 # 隧道必须常驻，任何退出都重启
 Restart=always

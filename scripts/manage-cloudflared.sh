@@ -32,7 +32,7 @@ StartLimitIntervalSec=0
 [Service]
 TimeoutStartSec=30
 Type=notify
-ExecStart=/usr/bin/cloudflared --no-autoupdate --edge-ip-version 4 tunnel run --token-file /etc/cloudflared/token
+ExecStart=/usr/bin/cloudflared --no-autoupdate --edge-ip-version 4 --edge-bind-address 0.0.0.0 --protocol http2 tunnel run --token-file /etc/cloudflared/token
 Restart=always
 RestartSec=5s
 
@@ -50,9 +50,14 @@ require_root() {
 show_status() {
   echo "=== 服务状态 ==="
   for S in "$OLD_UNIT" "$NEW"; do
-    if systemctl list-unit-files 2>/dev/null | grep -q "^$S"; then
-      E=$(systemctl is-enabled "$S" 2>/dev/null || echo "-")
-      A=$(systemctl is-active "$S" 2>/dev/null || echo "-")
+    # 用 systemctl cat 判断而不是 list-unit-files | grep -q：
+    # script 开了 pipefail，grep -q 提前退出会让管道返回 141，
+    # 导致已安装的服务被误判为「未安装」。
+    if systemctl cat "$S" > /dev/null 2>&1; then
+      # 注意：systemctl is-enabled 对 disabled 的服务会输出 "disabled"
+      # 但退出码为 1，因此不能用 `|| echo "-"`（那会追加一行 "-"）。
+      E=$(systemctl is-enabled "$S" 2>/dev/null); E=${E:-"-"}
+      A=$(systemctl is-active "$S" 2>/dev/null); A=${A:-"-"}
       printf '  %-28s enabled=%-10s active=%s\n' "$S" "$E" "$A"
     else
       printf '  %-28s (未安装)\n' "$S"
@@ -62,7 +67,7 @@ show_status() {
   echo ""
   echo "=== 当前隧道连接（看 ip= 是 IPv4 还是 IPv6）==="
   for S in "$OLD_UNIT" "$NEW"; do
-    systemctl list-unit-files 2>/dev/null | grep -q "^$S" || continue
+    systemctl cat "$S" > /dev/null 2>&1 || continue
     [ "$(systemctl is-active "$S" 2>/dev/null)" = "active" ] || continue
 
     echo "  [$S]"
@@ -73,7 +78,7 @@ show_status() {
     echo "    最近 10 分钟内的异常计数:"
     journalctl -u "$S" --since '10 min ago' --no-pager 2>/dev/null \
       | grep -c 'network is unreachable' \
-      | sed 's/^/      network is unreachable: /'
+      | sed 's/^/      network is unreachable（多为 ICMP proxy 的 IPv6 尝试，非隧道连接）: /'
     journalctl -u "$S" --since '10 min ago' --no-pager 2>/dev/null \
       | grep -c 'Connection terminated' \
       | sed 's/^/      Connection terminated:   /'
