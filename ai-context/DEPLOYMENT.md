@@ -466,6 +466,31 @@ Anthropic 官方无 RSS，走 `rsshub.rssforever.com` 公共实例。
 若长期不稳定，可选：自建 RSSHub（需额外维护一个服务），
 或放弃该源（Anthropic 的动态仍会经 TechCrunch、量子位等媒体源进入）。
 
+### UI 改动的视觉验证
+
+本项目用 Windows 端 Edge 的无头模式截图验证界面，不必靠推理 DOM：
+
+```bash
+EDGE="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
+
+# 移动端
+"$EDGE" --headless=new --disable-gpu --hide-scrollbars \
+  --window-size=375,900 --screenshot=/tmp/m.png \
+  --virtual-time-budget=9000 http://localhost:3000/
+
+# 桌面端整页
+"$EDGE" --headless=new --disable-gpu --hide-scrollbars \
+  --window-size=1440,6000 --screenshot=/tmp/d.png \
+  --virtual-time-budget=9000 http://localhost:3000/
+```
+
+需要临时验证「展开态」「空态」这类交互状态时，可以临时改初始 state、
+构建截图，再改回来 —— 但**改完必须重新构建并核对代码已恢复**，
+否则会把测试用的临时改动带进提交。
+
+> 踩过：临时把菜单改成默认展开来截图，结果被「路由变化时关闭」的
+> useEffect 在挂载时重置，截图仍显示关闭态。
+
 ### 日志位置
 
 | 文件 | 内容 |

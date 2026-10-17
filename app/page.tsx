@@ -1,5 +1,6 @@
 import Link from "next/link";
 import NewsTitle from "@/components/NewsTitle";
+import { NewBadge, RememberVisit } from "@/components/NewSinceLastVisit";
 import { prisma } from "@/lib/prisma";
 import { buildIndustryMap } from "@/lib/industryMap/aggregate";
 import { getTier } from "@/lib/ranking/scoreBreakdown";
@@ -259,7 +260,10 @@ export default async function HomePage() {
           createdAt: "desc",
         },
       ],
-      take: 6,
+      // 首页「最新产业情报」的条数。
+      // 取 20 而不是 6：过去 24 小时日均新增约 25 条，
+      // 20 条是一屏能扫完、又不会漏掉当天大部分动态的量。
+      take: 20,
     }),
 
     prisma.businessOpportunity.findMany({
@@ -429,7 +433,7 @@ export default async function HomePage() {
         text.includes("首页")
       );
     })
-    .slice(0, 6);
+    .slice(0, 20);
 
   const averageScore =
     focusEvents.length > 0
@@ -442,7 +446,101 @@ export default async function HomePage() {
       : 0;
 
   return (
-    <main className="min-h-screen bg-white text-black">{/* ============================================================
+    <main className="min-h-screen bg-white text-black">
+
+      {/* ============================================================
+          最新产业情报
+      ============================================================ */}
+      <section className="border-b border-gray-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
+          <div className="mb-8 flex items-end justify-between gap-4">
+            <div>
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-600">
+                LATEST INTELLIGENCE
+              </div>
+
+              <h2 className="text-2xl font-black">最新产业情报</h2>
+            </div>
+
+            <Link
+              href="/news"
+              className="text-sm font-bold underline underline-offset-4"
+            >
+              全部资讯 →
+            </Link>
+          </div>
+
+          <div className="divide-y divide-gray-200 border-y border-black">
+            {displayLatestNews.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                暂无最新产业情报。
+              </div>
+            ) : (
+              displayLatestNews.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/news/${item.id}`}
+                  className="group grid gap-4 py-5 transition hover:bg-gray-50 lg:grid-cols-[130px_1fr_150px]"
+                >
+                  <div className="text-xs font-bold text-gray-600">
+                    <div>{formatDate(item.publishedAt ?? item.createdAt)}</div>
+                    <div className="mt-1">{getTimeAgo(item.publishedAt ?? item.createdAt)}</div>
+                    <div className="mt-1.5">
+                      <NewBadge
+                        at={
+                          item.publishedAt
+                            ? new Date(item.publishedAt).getTime()
+                            : item.createdAt
+                              ? new Date(item.createdAt).getTime()
+                              : null
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="bg-gray-100 px-2 py-1 text-[10px] font-bold tracking-wider text-gray-600">
+                        {safeText(item.category, "AI资讯")}
+                      </span>
+
+                      {item.aiScore > 0 && (
+                        <span className="text-[10px] font-bold text-gray-600">
+                          AI SCORE {Math.round(item.aiScore)} · {getTier(item.aiScore).label}
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-base font-bold leading-7 group-hover:underline">
+                      {/*
+                        原代码写的是 (item as any).titleCn —— 但 schema 里
+                        没有 titleCn 字段（实际是 titleZh），因此 safeText 一直
+                        回退到英文 title。这里改为正确的字段名。
+                      */}
+                      <NewsTitle title={item.title} titleZh={item.titleZh} />
+                    </h3>
+
+                    <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-500">
+                      {safeText(
+                        (item as any).summaryCn,
+                        safeText(item.summary, "暂无摘要")
+                      )
+                        .replace(/\s+/g, " ")
+                        .replace(/(.{20,})\1+/g, "$1")
+                        .trim()}
+                    </p>
+                  </div>
+
+                  <div className="text-right text-xs font-semibold text-gray-600">
+                    {safeText(item.source, "未知来源")}
+                  </div>
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+{/* ============================================================
           今日重点
       ============================================================ */}
 
@@ -568,88 +666,6 @@ export default async function HomePage() {
       </section>
 
 
-
-      {/* ============================================================
-          最新产业情报
-      ============================================================ */}
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-          <div className="mb-8 flex items-end justify-between gap-4">
-            <div>
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-gray-600">
-                LATEST INTELLIGENCE
-              </div>
-
-              <h2 className="text-2xl font-black">最新产业情报</h2>
-            </div>
-
-            <Link
-              href="/news"
-              className="text-sm font-bold underline underline-offset-4"
-            >
-              全部资讯 →
-            </Link>
-          </div>
-
-          <div className="divide-y divide-gray-200 border-y border-black">
-            {displayLatestNews.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                暂无最新产业情报。
-              </div>
-            ) : (
-              displayLatestNews.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/news/${item.id}`}
-                  className="group grid gap-4 py-5 transition hover:bg-gray-50 lg:grid-cols-[130px_1fr_150px]"
-                >
-                  <div className="text-xs font-bold text-gray-600">
-                    <div>{formatDate(item.publishedAt ?? item.createdAt)}</div>
-                    <div className="mt-1">{getTimeAgo(item.publishedAt ?? item.createdAt)}</div>
-                  </div>
-
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="bg-gray-100 px-2 py-1 text-[10px] font-bold tracking-wider text-gray-600">
-                        {safeText(item.category, "AI资讯")}
-                      </span>
-
-                      {item.aiScore > 0 && (
-                        <span className="text-[10px] font-bold text-gray-600">
-                          AI SCORE {Math.round(item.aiScore)} · {getTier(item.aiScore).label}
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="text-base font-bold leading-7 group-hover:underline">
-                      {/*
-                        原代码写的是 (item as any).titleCn —— 但 schema 里
-                        没有 titleCn 字段（实际是 titleZh），因此 safeText 一直
-                        回退到英文 title。这里改为正确的字段名。
-                      */}
-                      <NewsTitle title={item.title} titleZh={item.titleZh} />
-                    </h3>
-
-                    <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-500">
-                      {safeText(
-                        (item as any).summaryCn,
-                        safeText(item.summary, "暂无摘要")
-                      )
-                        .replace(/\s+/g, " ")
-                        .replace(/(.{20,})\1+/g, "$1")
-                        .trim()}
-                    </p>
-                  </div>
-
-                  <div className="text-right text-xs font-semibold text-gray-600">
-                    {safeText(item.source, "未知来源")}
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-      </section>
 
       {/* ---------- 产业链总览 ---------- */}
       <section className="border-b border-gray-200 bg-white">
@@ -878,6 +894,7 @@ export default async function HomePage() {
 
 
 
-      </main>
+        <RememberVisit />
+    </main>
   );
 }
