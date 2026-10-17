@@ -39,13 +39,40 @@ dotenv.config({ path: ".env.local" });
 
 import OpenAI from "openai";
 
-/** 判断标题是否为英文：中文字符占比低于 10% 即视为英文 */
-function isEnglishTitle(title: string): boolean {
+/** 统计中文字符个数 */
+function countCjk(text: string): number {
+  return (text.match(/[\u4e00-\u9fa5]/g) || []).length;
+}
+
+/**
+ * 是否需要翻译。
+ *
+ * **按中文个数判断，不按占比**。
+ *
+ * 曾经用「中文字符占比 < 10%」：AI 新闻标题里产品名与模型名密集，
+ * 中文占比天然偏低，导致合格的译名被误判为英文而丢弃 ——
+ * 实测漏掉 10 条，例如
+ *   「OpenAI 推出 GPT-5.4 mini 与 GPT-5.4 nano」= 3 个中文 / 37 字符 = 8%
+ *
+ * 个数判断只看「有没有中文」，不受产品名长度影响。
+ */
+function needsTranslation(title: string): boolean {
   if (!title) return false;
 
-  const cjk = (title.match(/[\u4e00-\u9fa5]/g) || []).length;
+  return countCjk(title) < 2;
+}
 
-  return cjk / title.length < 0.1;
+/**
+ * 校验翻译结果。
+ *
+ * 两个条件缺一不可：
+ *   · 至少 3 个中文字符 —— 否则说明没有真的翻译
+ *   · 与原文不同 —— 防止模型原样返回英文
+ */
+function isValidTranslation(out: string, original: string): boolean {
+  if (countCjk(out) < 3) return false;
+
+  return out.trim().toLowerCase() !== original.trim().toLowerCase();
 }
 
 /** 是否为 arXiv 来源（按约定跳过） */
@@ -120,11 +147,18 @@ async function translateTitle(
     // 模型偶尔会加引号或前缀，清理掉
     out = out.replace(/^["'“”「『]+|["'“”」』]+$/g, "").replace(/^(标题|中文标题)[:：]\s*/, "").trim();
 
-    // 基本合理性检查：太短或太长都视为异常
-    if (out.length < 6 || out.length > 80) return null;
+    /**
+     * 长度合理性检查。
+     *
+     * 下限用 4 而非 6：短英文标题的正确译名可能很短 ——
+     * 「Consistency Models」的标准译名是「一致性模型」，仅 5 字，
+     * 用 6 字下限会把它误判为异常而丢弃（实测发生过）。
+     * 噪声风险由下面的「至少 3 个中文」兜住。
+     */
+    if (out.length < 4 || out.length > 80) return null;
 
-    // 若模型原样返回英文，视为失败
-    if (isEnglishTitle(out)) return null;
+    // 校验：必须有中文，且不能与原文相同
+    if (!isValidTranslation(out, title)) return null;
 
     return out;
   } catch (error) {
@@ -187,9 +221,9 @@ async function main() {
     orderBy: { publishedAt: "desc" },
   });
 
-  // 在应用层过滤：英文标题、非 arXiv
+  // 在应用层过滤：需要翻译的标题、非 arXiv
   const targets = candidates.filter(
-    (n) => isEnglishTitle(n.title) && !isArxiv(n.source),
+    (n) => needsTranslation(n.title) && !isArxiv(n.source),
   );
 
   const skippedChinese = candidates.length - targets.length;

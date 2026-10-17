@@ -43,6 +43,8 @@ interface Options {
   limit: number | null;
   concurrency: number;
   includeArxiv: boolean;
+  /** 只处理 impact 仍为「对AI产业而言…」这类公式化句式的记录 */
+  formulaic: boolean;
 }
 
 function parseArgs(argv: string[]): Options {
@@ -52,12 +54,14 @@ function parseArgs(argv: string[]): Options {
     limit: null,
     concurrency: 2,
     includeArxiv: false,
+    formulaic: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--write") o.write = true;
     else if (a === "--include-arxiv") o.includeArxiv = true;
+    else if (a === "--formulaic") o.formulaic = true;
     else if (a === "--days") o.days = Number(argv[++i]) || null;
     else if (a === "--limit") o.limit = Number(argv[++i]) || null;
     else if (a === "--concurrency") o.concurrency = Math.max(1, Number(argv[++i]) || 2);
@@ -109,8 +113,18 @@ async function main() {
 
   const isArxiv = (s: string | null) => /arxiv/i.test(s || "");
 
+  /**
+   * impact 仍为公式化句式的记录。
+   *
+   * 这两种写法在历史数据里都存在（「对AI产业而言」与「对 AI 产业而言」），
+   * 用 \s* 一并覆盖。
+   */
+  const isFormulaicImpact = (t: string | null) =>
+    /^对\s*AI\s*产业而言/.test((t || "").trim());
+
   const queue = rows
     .filter((r) => opts.includeArxiv || !isArxiv(r.source))
+    .filter((r) => !opts.formulaic || isFormulaicImpact(r.impact))
     .slice(0, opts.limit ?? rows.length);
 
   const formulaic = queue.filter((r) => /^对\s*AI\s*产业而言/.test((r.impact || "").trim())).length;
