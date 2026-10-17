@@ -52,12 +52,26 @@ ss -tln 2>/dev/null | grep ':3000' | sed 's/^/    /'
 echo ""
 echo "=== 4. 验证停用后的链路 ==="
 FAIL=0
-echo "  ① 域名访问（最关键）"
-for i in 1 2 3; do
-  C=$(curl -s -o /dev/null --max-time 20 -w '%{http_code}' https://aibiliai.com/ 2>/dev/null)
+echo "  ① 域名访问（最关键，强制 IPv4）"
+# 必须加 -4：Cloudflare 的 AAAA 记录在当前网络下不可达，
+# 不加则约 20% 概率卡满超时返回 000（实测 20 次里失败 4 次），
+# 那是访客侧 IPv6 问题，与 nginx 无关。
+DOMAIN_FAIL=0
+for i in 1 2 3 4 5; do
+  C=$(curl -4 -s -o /dev/null --max-time 20 -w '%{http_code}' https://aibiliai.com/ 2>/dev/null)
   echo "     第 $i 次: $C"
-  [ "$C" = "200" ] || FAIL=1
+  [ "$C" = "200" ] || DOMAIN_FAIL=$((DOMAIN_FAIL+1))
 done
+# 允许 1 次偶发抖动，超过则判为异常
+[ "$DOMAIN_FAIL" -gt 1 ] && FAIL=1
+
+echo "  ①b IPv6 可达性（已知问题，不作为失败判定）"
+C6=$(curl -6 -s -o /dev/null --max-time 8 -w '%{http_code}' https://aibiliai.com/ 2>/dev/null || echo "超时")
+echo "     IPv6 → $C6"
+if [ "$C6" != "200" ]; then
+  echo "     ⚠ IPv6 不可达（访客若优先走 IPv6 会卡顿）"
+  echo "       解决：Cloudflare 面板 → 网络 → IPv6 兼容性 → 关闭"
+fi
 
 echo "  ② 局域网 :3000（应仍可用）"
 C=$(curl -s -o /dev/null --max-time 15 -w '%{http_code}' "http://$LAN_IP:3000/" 2>/dev/null)
@@ -65,8 +79,8 @@ echo "     http://$LAN_IP:3000/  →  $C"
 [ "$C" = "200" ] || FAIL=1
 
 echo "  ③ 局域网 :80（应已失效）"
-C=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' "http://$LAN_IP/" 2>/dev/null)
-echo "     http://$LAN_IP/       →  $C  （000 或 502 表示已失效，符合预期）"
+C=$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' "http://$LAN_IP/" 2>/dev/null)
+echo "     http://$LAN_IP/       →  $C  （000 表示已失效，符合预期）"
 
 echo "  ④ 本机 :3000"
 C=$(curl -s -o /dev/null --max-time 10 -w '%{http_code}' http://127.0.0.1:3000/ 2>/dev/null)
