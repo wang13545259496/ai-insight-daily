@@ -3,9 +3,8 @@
 # 安装全部定时任务（幂等）。
 #
 # 变更（2026-10-17 第二次）：
-#   新闻采集从「每小时检查陈旧度 >6h」改为「开机 10 分钟后触发，每天一次」。
-#   @reboot sleep 600 为主触发，每小时那条降级为兜底 —— 同样受日期判断约束，
-#   不会一天采两次。
+#   新闻采集：每小时整点采集一次（陈旧 >50 分钟才真跑），配合 @reboot 补跑。
+#   阈值取 50 而非 60 的原因见 news-pipeline-scheduler.sh 文件头。
 #
 # 为什么用受管区块标记：
 #   早期版本用「过滤含项目路径的行」清理旧条目，但注释行没有路径，
@@ -81,7 +80,7 @@ echo "=== 3. 写入新 crontab ==="
 #   · 原 0 3 * * * 备份 → 10 天里只成功 1 次
 #   · 原 0 2 * * * 采集 → logs/daily-cron.log 从未生成
 
-# 新闻采集：每小时检查陈旧度（>6 小时才真跑）+ 开机补跑
+# 新闻采集：每小时整点采集一次（陈旧 >50 分钟才真跑）+ 开机补跑
 0 * * * * $PROJECT_DIR/scripts/news-pipeline-scheduler.sh
 @reboot sleep 180 && $PROJECT_DIR/scripts/news-pipeline-scheduler.sh
 
@@ -117,7 +116,7 @@ fi
 
 echo ""
 echo "=== 4. 验证 ==="
-printf '  %-22s %s\n' "新闻采集" "$(crontab -l 2>/dev/null | grep -c 'news-pipeline-scheduler')（应 2：reboot + 兜底）"
+printf '  %-22s %s\n' "新闻采集" "$(crontab -l 2>/dev/null | grep -c 'news-pipeline-scheduler')（应 2：每小时 + reboot）"
 printf '  %-22s %s\n' "健康监控" "$(crontab -l 2>/dev/null | grep -c 'health-monitor')（应 2）"
 printf '  %-22s %s\n' "数据库备份" "$(crontab -l 2>/dev/null | grep -c 'db-backup-scheduler')（应 2）"
 printf '  %-22s %s\n' "旧直调 API" "$(crontab -l 2>/dev/null | grep -c '/api/cron/daily')（应 0）"
