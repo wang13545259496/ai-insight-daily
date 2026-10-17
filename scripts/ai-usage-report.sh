@@ -4,11 +4,23 @@
 #
 # 用途：回答「今天跑了多少轮采集、导入多少条、花了多少钱」。
 #
-# 数据来源：
-#   logs/news-pipeline.log   每轮采集的时间、导入数、耗时
-#   logs/ai-usage.log        每次 AI 调用的 token 用量（JSONL）
-#   数据库                    实际入库量与分析量
-#   DeepSeek 余额接口         当前余额
+# ## 数据来源的分工（重要）
+#
+# 三处数据各有盲区，必须交叉：
+#
+#   logs/news-pipeline.log  采集轮次、每轮导入/分析数、耗时
+#                           → 只覆盖「由脚本触发的那些轮」
+#                             手动调用 API、或日志被清理时会有遗漏
+#
+#   数据库                   实际入库量与完成分析量
+#                           → **权威来源**，不受日志影响
+#
+#   logs/ai-usage.log       每次 AI 调用的 token 用量
+#                           → 只从加了记录之后才有效
+#
+# 因此「导入/分析」以数据库为准，「轮次」与「token」用日志。
+# 当分析量大于 AI 调用次数时，说明有调用没被记录 —— 报表会明确指出，
+# 而不是让读者以为「30 条分析只花了 1 次调用」。
 #
 # 用法：
 #   bash scripts/ai-usage-report.sh            # 今天
@@ -23,7 +35,6 @@ cd "$PROJECT_DIR" || exit 1
 USAGE_LOG="logs/ai-usage.log"
 PIPELINE_LOG="logs/news-pipeline.log"
 
-# ---------- 参数 ----------
 TARGET=""
 WEEK=0
 
@@ -33,50 +44,35 @@ case "${1:-}" in
   *) TARGET="$1" ;;
 esac
 
-# ---------- 定价（元/百万 tokens）----------
-# 来源 https://api-docs.deepseek.com/zh-cn/quick_start/pricing/
-# deepseek-flash：空闲时段为高峰时段一半
-# 高峰：周一至周五 9:00-12:00、14:00-18:00（北京时间）
-PRICE_HIT_IDLE=0.02
-PRICE_HIT_PEAK=0.04
-PRICE_MISS_IDLE=1.0
-PRICE_MISS_PEAK=2.0
-PRICE_OUT_IDLE=4.0
-PRICE_OUT_PEAK=8.0
-
 python3 - "$TARGET" "$WEEK" "$USAGE_LOG" "$PIPELINE_LOG" <<'PYEOF'
-import sys, os, json, subprocess, re
-from datetime import datetime, timedelta, timezone
+import sys, os, json, re, sqlite3
+from datetime import datetime, timedelta
 
 target, week_flag, usage_log, pipeline_log = sys.argv[1], sys.argv[2] == "1", sys.argv[3], sys.argv[4]
 
-# ---------- 定价 ----------
+# ---------- 定价（元/百万 tokens），来源官方文档 ----------
 P = {
-    "hit_idle": 0.02, "hit_peak": 0.04,
-    "miss_idle": 1.0, "miss_peak": 2.0,
-    "out_idle": 4.0, "out_peak": 8.0,
+    "hit_idle": 0.02,  "hit_peak": 0.04,
+    "miss_idle": 1.0,  "miss_peak": 2.0,
+    "out_idle": 4.0,   "out_peak": 8.0,
 }
-SYSTEM_TOK = 1021   # 系统提示词，可命中缓存
+SYSTEM_TOK = 1021  # 系统提示词，可命中缓存
 
 def is_peak(dt):
     """北京时间周一至周五 9-12、14-18 为高峰。"""
     if dt.weekday() >= 5:
         return False
-    h = dt.hour
-    return (9 <= h < 12) or (14 <= h < 18)
+    return (9 <= dt.hour < 12) or (14 <= dt.hour < 18)
 
 def cost(in_tok, out_tok, peak):
-    """按缓存命中估算：系统提示词部分命中缓存，其余算未命中。"""
     hit = min(in_tok, SYSTEM_TOK)
     miss = max(0, in_tok - SYSTEM_TOK)
-
-    c = 0.0
-    c += hit / 1e6 * (P["hit_peak"] if peak else P["hit_idle"])
+    c = hit / 1e6 * (P["hit_peak"] if peak else P["hit_idle"])
     c += miss / 1e6 * (P["miss_peak"] if peak else P["miss_idle"])
     c += out_tok / 1e6 * (P["out_peak"] if peak else P["out_idle"])
     return c
 
-# ---------- 读取 AI 用量 ----------
+# ---------- AI 用量 ----------
 records = []
 if os.path.exists(usage_log):
     with open(usage_log, encoding="utf-8", errors="ignore") as f:
@@ -95,23 +91,11 @@ def rec_date(r):
     except Exception:
         return None
 
-# ---------- 确定日期范围 ----------
-if week_flag:
-    end = datetime.now()
-    days = [(end - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
-else:
-    days = [target]
-
-# ---------- 读取采集日志 ----------
+# ---------- 采集日志 ----------
 def pipeline_stats(day):
-    runs = 0
-    imported = 0
-    analyzed = 0
-    durations = []
-
+    runs, imported, analyzed, durations = 0, 0, 0, []
     if not os.path.exists(pipeline_log):
         return runs, imported, analyzed, durations
-
     with open(pipeline_log, encoding="utf-8", errors="ignore") as f:
         for line in f:
             if day not in line:
@@ -125,17 +109,54 @@ def pipeline_stats(day):
                 durations.append(int(m.group(3)))
     return runs, imported, analyzed, durations
 
+# ---------- 数据库（权威来源）----------
+def db_stats(day):
+    """统计某天入库量与完成分析量。按本地时区当天 0 点起算。"""
+    try:
+        dt = datetime.strptime(day, "%Y-%m-%d")
+    except Exception:
+        return None, None
+
+    start = dt.timestamp() * 1000
+    end = (dt + timedelta(days=1)).timestamp() * 1000
+
+    try:
+        conn = sqlite3.connect("prisma/dev.db")
+        c = conn.cursor()
+
+        c.execute("SELECT COUNT(*) FROM News WHERE createdAt >= ? AND createdAt < ?", (start, end))
+        ingested = c.fetchone()[0]
+
+        c.execute(
+            "SELECT COUNT(*) FROM News WHERE createdAt >= ? AND createdAt < ? AND analysisStatus='completed'",
+            (start, end),
+        )
+        analyzed = c.fetchone()[0]
+
+        conn.close()
+        return ingested, analyzed
+    except Exception:
+        return None, None
+
+# ---------- 日期范围 ----------
+if week_flag:
+    now = datetime.now()
+    days = [(now - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+else:
+    days = [target]
+
 # ---------- 输出 ----------
 print()
-print("=" * 66)
+print("=" * 68)
 print("  AI 用量与成本报告" + ("（最近 7 天）" if week_flag else f"：{target}"))
-print("=" * 66)
+print("=" * 68)
 
-grand = {"runs": 0, "imported": 0, "analyzed": 0, "in": 0, "out": 0, "reason": 0, "cost": 0.0, "calls": 0}
+G = {"runs": 0, "ingested": 0, "analyzed": 0, "calls": 0, "in": 0, "out": 0, "reason": 0, "cost": 0.0}
 
 for day in days:
     day_recs = [r for r in records if rec_date(r) == day]
-    runs, imported, analyzed, durations = pipeline_stats(day)
+    runs, log_imported, log_analyzed, durations = pipeline_stats(day)
+    db_ingested, db_analyzed = db_stats(day)
 
     in_tok = sum(r.get("in", 0) for r in day_recs)
     out_tok = sum(r.get("out", 0) for r in day_recs)
@@ -149,48 +170,61 @@ for day in days:
             dt = datetime.now()
         c += cost(r.get("in", 0), r.get("out", 0), is_peak(dt))
 
-    grand["runs"] += runs
-    grand["imported"] += imported
-    grand["analyzed"] += analyzed
-    grand["in"] += in_tok
-    grand["out"] += out_tok
-    grand["reason"] += reason
-    grand["cost"] += c
-    grand["calls"] += len(day_recs)
+    # 入库/分析以数据库为准，缺失时退回日志
+    ingested = db_ingested if db_ingested is not None else log_imported
+    analyzed = db_analyzed if db_analyzed is not None else log_analyzed
+
+    G["runs"] += runs
+    G["ingested"] += ingested or 0
+    G["analyzed"] += analyzed or 0
+    G["calls"] += len(day_recs)
+    G["in"] += in_tok
+    G["out"] += out_tok
+    G["reason"] += reason
+    G["cost"] += c
 
     print()
     print(f"  {day}")
     print(f"    采集轮次      {runs} 轮" + (f"（平均耗时 {sum(durations)//len(durations)} 秒）" if durations else ""))
-    print(f"    导入新闻      {imported} 条")
-    print(f"    完成分析      {analyzed} 条")
-    print(f"    AI 调用       {len(day_recs)} 次")
+    print(f"    入库新闻      {ingested} 条  ← 数据库")
+    print(f"    完成分析      {analyzed} 条  ← 数据库")
+    print(f"    AI 调用       {len(day_recs)} 次  ← 用量日志")
+
     if day_recs:
         print(f"    输入 token    {in_tok:,}")
         print(f"    输出 token    {out_tok:,}" + (f"（其中推理 {reason:,}）" if reason else ""))
         print(f"    估算成本      ¥{c:.3f}")
     else:
-        print(f"    （无 AI 调用记录）")
+        print(f"    估算成本      —（无用量记录）")
+
+    # 不一致时明确提示，避免读者误以为「30 条分析只花了 1 次调用」
+    if analyzed and len(day_recs) and analyzed > len(day_recs) * 1.2:
+        print()
+        print(f"    ⚠ 分析 {analyzed} 条但只记录到 {len(day_recs)} 次调用：")
+        print(f"      差额来自用量日志启用之前、或日志被清理时发生的调用。")
+        print(f"      真实成本会高于上面数字，可按 {analyzed} 次 × 单条均价估算。")
 
 if week_flag:
     print()
-    print("-" * 66)
-    print(f"  合计")
-    print(f"    采集轮次      {grand['runs']} 轮")
-    print(f"    导入新闻      {grand['imported']} 条")
-    print(f"    完成分析      {grand['analyzed']} 条")
-    print(f"    AI 调用       {grand['calls']} 次")
-    print(f"    输入 token    {grand['in']:,}")
-    print(f"    输出 token    {grand['out']:,}")
-    print(f"    估算成本      ¥{grand['cost']:.2f}")
-    if grand["calls"]:
-        print(f"    单条均摊      ¥{grand['cost']/max(grand['analyzed'],1):.4f}")
+    print("-" * 68)
+    print("  合计")
+    print(f"    采集轮次      {G['runs']} 轮")
+    print(f"    入库新闻      {G['ingested']} 条")
+    print(f"    完成分析      {G['analyzed']} 条")
+    print(f"    AI 调用       {G['calls']} 次")
+    print(f"    输入 token    {G['in']:,}")
+    print(f"    输出 token    {G['out']:,}")
+    print(f"    估算成本      ¥{G['cost']:.2f}")
+    if G["calls"]:
+        print(f"    单次均摊      ¥{G['cost']/G['calls']:.4f}")
 
 print()
-print("=" * 66)
+print("=" * 68)
 print("  说明")
-print("  · 成本按官方定价与调用时刻所处时段（高峰/空闲）逐条计算")
+print("  · 入库/分析量取自数据库，不受日志缺失影响")
+print("  · 采集轮次与 token 取自日志；日志启用前的调用无法统计")
+print("  · 成本按官方定价逐条计算，区分高峰（工作日 9-12、14-18）与空闲时段")
 print("  · 系统提示词 1021 tokens 按缓存命中计价，其余按未命中")
-print("  · 数据来源：logs/ai-usage.log 与 logs/news-pipeline.log")
 PYEOF
 
 # ---------- 余额 ----------

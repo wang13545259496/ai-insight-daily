@@ -68,7 +68,7 @@ log "已生成 $TARGET 的报告（$(printf '%s' "$BODY" | wc -l) 行）"
 # ---------- 推送 ----------
 # 控制长度：Server 酱对正文有长度限制，过长会被截断或拒绝。
 # 只取核心数字，不把整份报告塞进去。
-SUMMARY=$(printf '%s' "$BODY" | grep -E '采集轮次|导入新闻|完成分析|AI 调用|输入 token|输出 token|估算成本|当前余额' | sed 's/^ *//')
+SUMMARY=$(printf '%s' "$BODY" | grep -E '采集轮次|入库新闻|完成分析|AI 调用|输入 token|输出 token|估算成本|当前余额' | sed 's/^ *//')
 
 if [ -z "$SUMMARY" ]; then
   SUMMARY=$(printf '%s' "$BODY" | head -25)
