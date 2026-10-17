@@ -73,6 +73,32 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
    **脚本文档不手改**：`AI_HEALTH_REPORT.md` 与 `AI_STATUS_AUTO.md`
    由脚本生成，手改会被下次运行覆盖。
 
+7. **未经维护者明确许可，不得开启搜索引擎收录。**
+
+   `lib/site-indexing.ts` 里的 `SITE_ALLOW_INDEX` 必须保持 `false`。
+
+   这**不是**一个待优化的技术默认值，而是维护者基于合规状态做的决定：
+   本站尚未完成 ICP 备案，运营主体未定。
+
+   为什么这条要写成硬规则：
+   搜索引擎收录**不可逆** —— 缓存、第三方镜像、Wayback 存档会长期留存。
+   而 `noindex` 只是请求，随时可撤。所以当前选择保留选择权。
+
+   **不要因为以下理由擅自改成 true：**
+   - 「网站没人访问，开了收录才有流量」
+   - 「加个 sitemap 能提升 SEO」
+   - 「noindex 让站点显得不完整」
+
+   流量与 SEO 是维护者已经权衡过并**暂时放弃**的收益。
+   想改变这一点，必须先由维护者明确表态，再动代码。
+
+   改法（维护者同意后）：把常量改成 `true`，
+   `npm run build && pm2 restart ai-insight-daily`。
+   三处会同步变化，详见 `ai-context/DEPLOYMENT.md` 的「搜索引擎收录开关」。
+
+   **注意：`noindex` 不是保密。** 它只请求搜索引擎不收录，
+   不阻止任何人直接访问。要真正私密需要鉴权。
+
 ## 遇到问题时
 
 读 `ai-context/AI_TROUBLESHOOTING_GUIDE.md`（含实测案例）。
