@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import { SITE_ALLOW_INDEX } from "./lib/site-indexing";
+
 /**
  * 安全响应头
  * 说明：这里刻意不启用 Content-Security-Policy。
@@ -15,6 +17,19 @@ const securityHeaders = [
     key: "Permissions-Policy",
     value: "camera=(), microphone=(), geolocation=()",
   },
+  /**
+   * 请求搜索引擎不要收录。
+   *
+   * 与 app/robots.ts、layout.tsx 的 robots meta 三重叠加，因为：
+   *   · robots.txt 是请求，可被无视
+   *   · meta 只对 HTML 页面生效，对 PDF / 图片等资源无效
+   *   · 响应头对任意资源都生效，且优先级高于 meta
+   *
+   * 撤销方式见 layout.tsx 里 robots 字段的注释。
+   */
+  ...(SITE_ALLOW_INDEX
+    ? []
+    : [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }]),
 ];
 
 const nextConfig: NextConfig = {

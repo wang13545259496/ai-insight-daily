@@ -435,6 +435,81 @@ curl -s https://api.deepseek.com/user/balance \
 
 ---
 
+## 七之二、搜索引擎收录开关
+
+**当前状态：不收录。**
+
+原因是尚未完成 ICP 备案，运营主体与合规状态未定。
+而搜索引擎收录**不可逆** —— 缓存、第三方镜像、Wayback 存档会长期留存，
+即使事后删除也不一定撤得回来；`noindex` 只是请求，随时可撤。
+所以先选保守一侧，把选择权保留下来。
+
+### 开关在哪
+
+单一常量：`lib/site-indexing.ts`
+
+```ts
+export const SITE_ALLOW_INDEX = false;
+```
+
+改成 `true` 后：
+
+```bash
+npm run build && pm2 restart ai-insight-daily
+```
+
+三处会一起变化：
+
+| 位置 | 效果 |
+| --- | --- |
+| `app/robots.ts` | `robots.txt` 的 `Allow` / `Disallow` |
+| `app/layout.tsx` | 页面 `<meta name="robots">` |
+| `next.config.ts` | `X-Robots-Tag` 响应头 |
+
+### 为什么要三层叠加
+
+| 层 | 覆盖 | 弱点 |
+| --- | --- | --- |
+| `robots.txt` | 全站 | 只是请求，可被无视 |
+| `<meta name="robots">` | HTML 页面 | 对 PDF / 图片等资源无效 |
+| `X-Robots-Tag` 头 | **任意资源** | 无 |
+
+响应头优先级高于 meta，且对非 HTML 资源同样生效 ——
+所以 PDF、图片这类被直接链接的资源也受控。
+
+### 为什么用常量而不是环境变量
+
+最初写成 `SITE_ALLOW_INDEX` 环境变量，实测出问题：
+
+- `robots.txt` 是静态路由，构建时就把值烤进去
+- 首页是动态渲染，`metadata` 在**请求时**读 `process.env`
+
+于是「重新构建但 PM2 进程环境里还留着旧变量」时，
+`robots.txt` 已经变回 `Disallow`，页面 meta 却还是 `index, follow` —— 半状态。
+更麻烦的是 PM2 的 `--update-env` 清不掉它内部状态里的变量，
+排查时很容易误判成代码没生效。
+
+常量会被打包成字面量，构建期与运行期必然一致，没有这个缝隙。
+改常量必须重新构建，这一步无法省略，也就不存在「改了没生效」。
+
+### 已验证
+
+两个方向都实测过（本地 + 经 Cloudflare）：
+
+```
+false → robots: Disallow: / ｜ meta: noindex, nofollow, nocache ｜ header: 有
+true  → robots: Allow: /     ｜ meta: index, follow             ｜ header: 无
+```
+
+来回切换后恢复正常，页面在两种状态下都能正常访问。
+
+### 这不是保密
+
+`noindex` 只是请求搜索引擎不要收录，**不是访问控制**。
+知道域名的人照样能访问。要真正私密需要鉴权（如 Cloudflare Access）。
+
+---
+
 ## 八、注意事项
 
 **不要随意修改**：隧道服务配置、PM2 配置、生产环境变量。修改前先备份。

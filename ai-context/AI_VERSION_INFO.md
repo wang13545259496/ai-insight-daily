@@ -373,6 +373,34 @@ bash scripts/ai-usage-report.sh --week     # 最近 7 天
 
 读法与定价细节见 `DEPLOYMENT.md` 的「AI 用量与成本报告」一节。
 
+### 搜索引擎收录：已关闭
+
+在运营主体与合规状态明确之前，不向搜索引擎公开。
+
+**为什么选这一侧**：收录不可逆 —— 缓存、镜像、Wayback 存档长期留存，
+即使事后删 sitemap 也不一定撤得回来；而 `noindex` 只是请求，随时可撤。
+当前未备案，选择保留选择权。
+
+**三层叠加**（各有弱点，缺一不可）：
+
+| 层 | 覆盖 | 弱点 |
+| --- | --- | --- |
+| `robots.txt` | 全站 | 只是请求，可被无视 |
+| `<meta name="robots">` | HTML 页面 | 对 PDF / 图片无效 |
+| `X-Robots-Tag` 头 | 任意资源 | 无 |
+
+**开关**：`lib/site-indexing.ts` 的 `SITE_ALLOW_INDEX` 常量，
+改成 `true` 后重新构建即可，三处一起变。
+
+**踩到的坑**：最初用环境变量做开关，结果 `robots.txt`（静态路由，
+构建时定值）与首页 meta（动态渲染，请求时读 `process.env`）不同步 ——
+重新构建但 PM2 进程里残留旧变量时，出现「robots 已 Disallow、
+meta 仍 index, follow」的半状态。改用常量后消失，
+因为字面量在构建期就固定了。
+
+顺带清掉了 PM2 内部状态里残留的 `SITE_ALLOW_INDEX=true` ——
+`pm2 restart --update-env` 清不掉它，需要 `pm2 delete` + `pm2 start`。
+
 ### 已知无解问题
 
 **访客侧 IPv6 到 Cloudflare 边缘不可达**，失败率约 5%、平均慢 0.47 秒。
