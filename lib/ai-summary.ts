@@ -204,7 +204,7 @@ export async function generateSummary(
   const startedAt = Date.now();
 
   const response = await client.chat.completions.create({
-    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
     temperature: 0.2,
     response_format: { type: "json_object" },
     messages: [
@@ -247,7 +247,7 @@ export async function generateSummaryStream(
   }
 
   const stream = await client.chat.completions.create({
-    model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+    model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
     temperature: 0.2,
     stream: true,
     response_format: { type: "json_object" },

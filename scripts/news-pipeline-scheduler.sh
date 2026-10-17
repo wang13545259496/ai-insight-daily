@@ -1,18 +1,19 @@
 #!/bin/bash
 #
-# 新闻采集调度：定时触发 + 开机补跑 + 陈旧度判断。
+# 新闻采集调度：开机 10 分钟后触发，每天只采集一次。
 #
-# 为什么需要这个包装脚本（与 db-backup-scheduler.sh 同一思路）：
-# 原先 cron 定在凌晨 2 点直接调 /api/cron/daily，但——
-#   · 这台机器不是 24 小时开机（活跃时段大致 8-23 点）
-#   · cron 不补跑错过的任务
-# 结果：logs/daily-cron.log 从未生成，内容停在 47 小时前。
+# 为什么用「日历日」而不是「间隔小时数」：
+#   维护者要求「每天只采集一次」。用小时数（比如 >20h）会在
+#   跨天时间点漂移 —— 今天 9:10 跑，明天可能变成 5:10 或 22:10。
+#   用日期判断则严格保证：同一天无论触发多少次，最多采集一次。
 #
-# 做法：
-#   · cron 每小时触发一次
-#   · @reboot 时也触发
-#   · 本脚本先判断「距上次成功采集是否超过 N 小时」，只有超时才真正执行
-#     —— 于是无论触发多少次，实际频率都稳定在每 N 小时一次
+# 触发方式（两条 crontab 协同）：
+#   @reboot sleep 600   → 开机 10 分钟后，主触发
+#   5 * * * *           → 兜底，覆盖「连续多天不关机」的情况
+#
+#   兜底那条不会导致一天采集两次 —— 进入脚本后先查日期，
+#   今天已经采过就直接退出（耗时不到 1 秒）。
+#   若维护者能保证每天关机，可以把兜底那条删掉，只留 @reboot。
 #
 # 并发保护：用 flock。管线一次约 90 秒，若上一轮还没跑完就跳过，
 # 避免两个进程同时抓取、重复导入。
@@ -20,15 +21,11 @@
 set -u
 
 PROJECT_DIR="$HOME/projects/ai-insight-daily"
-MARKER="$HOME/.last-news-pipeline"
+MARKER="$HOME/.last-news-pipeline-date"
+OLD_MARKER="$HOME/.last-news-pipeline"
 LOCK="/tmp/news-pipeline.lock"
 LOG="$PROJECT_DIR/logs/news-pipeline.log"
 ALERT="$PROJECT_DIR/scripts/alert.sh"
-
-# 超过这个小时数就采集。
-# 6 小时 = 每天至少 2-4 次（取决于机器在线时长）。
-# 新闻站对新鲜度敏感，但又不能太频繁（每次会消耗 DeepSeek 额度）。
-MAX_AGE_HOURS=6
 
 # 管线最长允许跑多久（实测约 90 秒，留足余量）
 TIMEOUT_SEC=300
@@ -44,25 +41,36 @@ if ! flock -n 9; then
   exit 0
 fi
 
-# ---------- 判断是否需要采集 ----------
-NEED=1
-AGE_HOURS=-1
+# ---------- 今天是否已采集 ----------
+TODAY=$(date +%Y-%m-%d)
 
 if [ -f "$MARKER" ]; then
   LAST=$(tr -d '[:space:]' < "$MARKER" 2>/dev/null)
 
-  if [ -n "$LAST" ] && [ "$LAST" -eq "$LAST" ] 2>/dev/null; then
-    AGE_HOURS=$(( ($(date +%s) - LAST) / 3600 ))
-
-    if [ "$AGE_HOURS" -lt "$MAX_AGE_HOURS" ]; then
-      log "跳过：距上次采集 $AGE_HOURS 小时（阈值 $MAX_AGE_HOURS）"
-      exit 0
-    fi
-
-    log "距上次采集 $AGE_HOURS 小时，开始执行"
+  if [ "$LAST" = "$TODAY" ]; then
+    log "跳过：今天（$TODAY）已采集过"
+    exit 0
   fi
+
+  log "上次采集 $LAST，今天是 $TODAY，开始执行"
 else
-  log "无采集记录，开始执行"
+  # 兼容旧版按时间戳记录的 marker：从时间戳推算出日期，
+  # 避免升级当天立刻重复采集一次。
+  if [ -f "$OLD_MARKER" ]; then
+    OLD_TS=$(tr -d '[:space:]' < "$OLD_MARKER" 2>/dev/null)
+
+    if [ -n "$OLD_TS" ] && [ "$OLD_TS" -eq "$OLD_TS" ] 2>/dev/null; then
+      OLD_DATE=$(date -d "@$OLD_TS" +%Y-%m-%d 2>/dev/null)
+
+      if [ "$OLD_DATE" = "$TODAY" ]; then
+        echo "$TODAY" > "$MARKER"
+        log "沿用旧记录：今天（$TODAY）已采集过，迁移 marker 后跳过"
+        exit 0
+      fi
+    fi
+  fi
+
+  log "今天（$TODAY）尚未采集，开始执行"
 fi
 
 # ---------- 取值 ----------
@@ -108,8 +116,6 @@ $(printf '%s' "$BODY" | head -c 400)" 2>/dev/null
 fi
 
 # ---------- 解析结果 ----------
-# 响应形如：
-# {"success":true,"data":{"rss":{"imported":93,...},"analysis":{"analyzed":30,...},...}}
 IMPORTED=$(printf '%s' "$BODY" | grep -oE '"imported":[0-9]+' | head -1 | cut -d: -f2)
 ANALYZED=$(printf '%s' "$BODY" | grep -oE '"analyzed":[0-9]+' | head -1 | cut -d: -f2)
 EVENTS=$(printf '%s' "$BODY" | grep -oE '"events":[0-9]+' | head -1 | cut -d: -f2)
@@ -117,9 +123,8 @@ DURATION=$(printf '%s' "$BODY" | grep -oE '"duration":[0-9]+' | head -1 | cut -d
 
 log "✓ 成功：导入 ${IMPORTED:-?} 条，分析 ${ANALYZED:-?} 条，事件 ${EVENTS:-?} 个，耗时 $(( ${DURATION:-0} / 1000 )) 秒"
 
-date +%s > "$MARKER"
+echo "$TODAY" > "$MARKER"
 
-# 若成功但一条都没导入，值得提一句（可能全部重复，也可能抓取异常）
 if [ "${IMPORTED:-0}" = "0" ]; then
   log "注意：本轮未导入新新闻（可能全部重复）"
 fi
