@@ -42,10 +42,59 @@ async function api(path, opts = {}) {
   return json.result;
 }
 
+/**
+ * 校验 token 格式。
+ *
+ * 直接把手里的字符串塞进 Authorization 头时，若含非 ASCII 字符，
+ * fetch 会抛出难以理解的内层错误：
+ *   Cannot convert argument to a ByteString because the character at
+ *   index 7 has a value of 31896 which is greater than 255.
+ * 因此提前检查，给出能照着做的提示。
+ */
+function validateToken(token) {
+  if (!token) {
+    return "未设置 CF_TOKEN";
+  }
+
+  const badChar = [...token].find((c) => c.charCodeAt(0) > 127);
+
+  if (badChar) {
+    const idx = [...token].indexOf(badChar);
+
+    return (
+      `CF_TOKEN 含有非 ASCII 字符「${badChar}」（第 ${idx + 1} 个字符）。\n` +
+      "  Cloudflare 的 token 只由英文字母与数字组成。\n" +
+      "  最常见的原因是直接复制了文档里的占位符，没有换成真实 token。"
+    );
+  }
+
+  if (/\s/.test(token)) {
+    return "CF_TOKEN 含有空格或换行，复制时可能带入了多余字符";
+  }
+
+  if (token.length < 30) {
+    return `CF_TOKEN 长度只有 ${token.length}，Cloudflare 的 token 通常约 40 字符，可能复制不完整`;
+  }
+
+  return null;
+}
+
 async function main() {
-  if (!TOKEN) {
-    console.error("✗ 未设置 CF_TOKEN");
-    console.error('  用法：export CF_TOKEN="..." && node scripts/cf-ipv4-only.mjs');
+  const tokenError = validateToken(TOKEN);
+
+  if (tokenError) {
+    console.error("");
+    console.error(`✗ ${tokenError}`);
+    console.error("");
+    console.error("  正确的用法：");
+    console.error('    export CF_TOKEN="真实的token字符串"');
+    console.error("    node scripts/cf-ipv4-only.mjs");
+    console.error("");
+    console.error("  获取 token：");
+    console.error("    https://dash.cloudflare.com/profile/api-tokens");
+    console.error('    → Create Token → 模板选 "Edit zone DNS"');
+    console.error("    → Zone Resources 限定到 aibiliai.com");
+    console.error("");
     process.exit(1);
   }
 
