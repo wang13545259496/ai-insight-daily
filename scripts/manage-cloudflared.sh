@@ -72,8 +72,12 @@ show_status() {
 
     echo "  [$S]"
     journalctl -u "$S" -n 200 --no-pager 2>/dev/null \
-      | grep -oE 'ip=[0-9a-fA-F:.]+.?(location=[a-z0-9]+)?' \
+      | grep -oE 'ip=[0-9a-fA-F:.]+.?(location=[a-z0-9]+)?.?(protocol=[a-z0-9]+)?' \
       | tail -6 | sed 's/^/    /'
+
+    echo "    协议统计:"
+    journalctl -u "$S" --no-pager 2>/dev/null \
+      | grep -oE 'protocol=[a-z0-9]+' | sort | uniq -c | sed 's/^/      /'
 
     echo "    最近 10 分钟内的异常计数:"
     journalctl -u "$S" --since '10 min ago' --no-pager 2>/dev/null \
@@ -112,7 +116,11 @@ do_install() {
   systemctl disable "$OLD_UNIT" 2>/dev/null && echo "  已禁用 $OLD_UNIT（下次开机不再启动）"
 
   systemctl enable "$NEW" 2>/dev/null && echo "  已启用 $NEW"
-  systemctl start "$NEW" 2>/dev/null && echo "  已启动 $NEW"
+
+  # 用 restart 而不是 start：
+  # start 对已在运行的服务是空操作，会导致新参数不生效，
+  # 而 is-active 仍显示 active —— 看起来成功，实际还是旧进程。
+  systemctl restart "$NEW" 2>/dev/null && echo "  已重启 $NEW（应用新参数）"
 
   echo ""
   echo "=== 4. 等待连接建立（15 秒）==="
@@ -121,6 +129,27 @@ do_install() {
   echo ""
   echo "=== 5. 验证 ==="
   systemctl is-active "$NEW" | sed 's/^/  状态: /'
+
+  # 只看 is-active 不够 —— 服务可能在跑，但用的是旧参数。
+  # 必须核对进程的实际命令行。
+  echo ""
+  echo "  进程实际参数:"
+  PROC=$(ps aux 2>/dev/null | grep '[c]loudflared.*tunnel run' | head -1)
+  echo "    $PROC" | cut -c1-160
+
+  if echo "$PROC" | grep -q -- '--protocol http2'; then
+    echo "    ✓ 含 --protocol http2"
+  else
+    echo "    ✗ 缺少 --protocol http2 —— 新参数未生效"
+    echo "      可能是服务未真正重启，请执行：sudo systemctl restart $NEW"
+  fi
+
+  if echo "$PROC" | grep -q -- '--edge-bind-address 0.0.0.0'; then
+    echo "    ✓ 含 --edge-bind-address 0.0.0.0"
+  else
+    echo "    ✗ 缺少 --edge-bind-address —— 新参数未生效"
+  fi
+
   echo ""
   echo "  隧道连接:"
   journalctl -u "$NEW" -n 60 --no-pager 2>/dev/null \
