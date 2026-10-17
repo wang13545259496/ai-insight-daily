@@ -193,6 +193,21 @@ export function isAIConfigured(): boolean {
   return client !== null;
 }
 
+/**
+ * DeepSeek 扩展开关：关闭思考模式。
+ *
+ * 实测同一素材：
+ *   思考模式  输出 4408 tokens（推理 3029 + 正文 1379）  21.3 秒
+ *   非思考    输出 1152 tokens（纯正文）                  6.4 秒
+ *
+ * 两者返回字段数相同，insight 质量都在可用范围。本任务是
+ * 按提示词输出固定 JSON 的结构化抽取，不依赖深度推理，
+ * 而输出 token 占单条成本 90% 以上。
+ *
+ * OpenAI SDK 的类型定义里没有这个字段，但请求会透传给 DeepSeek。
+ */
+const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
+
 export async function generateSummary(
   title: string,
   content: string
@@ -206,6 +221,7 @@ export async function generateSummary(
   const response = await client.chat.completions.create({
     model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
     temperature: 0.2,
+    ...THINKING_DISABLED,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
@@ -249,6 +265,7 @@ export async function generateSummaryStream(
   const stream = await client.chat.completions.create({
     model: process.env.DEEPSEEK_MODEL || "deepseek-flash",
     temperature: 0.2,
+    ...THINKING_DISABLED,
     stream: true,
     response_format: { type: "json_object" },
     messages: [

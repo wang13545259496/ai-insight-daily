@@ -81,10 +81,9 @@ echo "=== 3. 写入新 crontab ==="
 #   · 原 0 3 * * * 备份 → 10 天里只成功 1 次
 #   · 原 0 2 * * * 采集 → logs/daily-cron.log 从未生成
 
-# 新闻采集：开机 10 分钟后触发，每天一次
-@reboot sleep 600 && $PROJECT_DIR/scripts/news-pipeline-scheduler.sh
-# 兜底：连续多天不关机时也能每天采一次（今天已采过会立即退出）
-5 * * * * $PROJECT_DIR/scripts/news-pipeline-scheduler.sh
+# 新闻采集：每小时检查陈旧度（>6 小时才真跑）+ 开机补跑
+0 * * * * $PROJECT_DIR/scripts/news-pipeline-scheduler.sh
+@reboot sleep 180 && $PROJECT_DIR/scripts/news-pipeline-scheduler.sh
 
 # 健康监控：每小时一次，仅在状态变化时告警
 15 * * * * $PROJECT_DIR/scripts/health-monitor.sh
