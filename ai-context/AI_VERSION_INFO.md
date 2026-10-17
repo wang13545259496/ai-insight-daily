@@ -224,34 +224,47 @@
 **注意**：本合规包覆盖的是**技术侧与文本侧**。
 ICP 备案、运营主体资格等属于需要个案判断的事项，未涉及。
 
-### 死代码清理
+### 死代码清理（已完成）
 
-盘查发现 64 个组件里有 30 个未被使用（含已删的 LiveNews、NewsCard）。
+盘查发现 64 个组件里有 32 个未被使用。**已全部删除，合计 2651 行**，
+分三轮提交、每轮独立构建验证。
 
 **判定方法**：不看组件名，而看**组件里的中文文案是否出现在构建产物中**。
-  若组件被任何页面引用，它的文案必然会打进 `.next/static/chunks/*.js`。
-  只 grep 组件名不可靠 —— 例如 `Header` 在产物里出现 3 次，
-  那是 `AgentDashboardHeader` 的子串，不代表 `Header.tsx` 被使用。
+若组件被任何页面引用，文案必然打进 `.next/static/chunks/*.js`。
+只 grep 组件名不可靠 —— `Header` 在产物里出现 3 次，
+那是 `AgentDashboardHeader` 的子串。
 
-**已删除 12 个、2588 行**：
+**删除清单（20 个组件 + 此前 12 个 = 32 个）**
 
 | 批次 | 组件 | 行数 |
 | --- | --- | --- |
-| 一 | LiveNews、NewsCard | 853 |
-| 二 | StartupCard、StartupLab、StartupOpportunityCard、AgentBusinessCard、AgentHotCard、AgentMarketCard、AgentCard、AgentRecommendCard、AgentTrendCard、AgentDashboardHeader | 1913 |
+| 早前 | LiveNews、NewsCard | 853 |
+| 一 | Header、AIIndexChart、AIIndexRefresh、ReportCard、RecommendNews、Container、Tag | 1007 |
+| 二 | HomeDirections、HomeStats、HomeLinks、HomeSearch | 509 |
+| 三 | BusinessCard、InvestmentRadar、TrendCard、OpportunityMapCard、IndexTrend、DashboardStats、IndexDetailCard、EcosystemCard、IndustryTrendChart | 1116 |
 
-第二批删除前做了四重交叉验证：无 import、无路径引用、
-无 JSX 使用、这批之间互不依赖、也无保留组件依赖它们。
+**这些不是「没做完」，是「做完了新版忘删旧版」**，例如：
 
-**仍待确认的 10 个**（疑似「没做完的功能」而非纯残留）：
+- `Header`(222 行) 是旧导航，现行导航是 `Navbar`（11 项，含实体库、预测、出行管家）
+- `AIIndexChart` 被 `AIIndexCard` 替代 —— data-center 页实际 import 的是后者
+- `RecommendNews` 依赖 `recommendScore` 字段，该字段在 schema 中不存在
+- `Container` 只有 `max-w-7xl mx-auto px-6`，页面已内联 48 处
+- 四个 `Home*` 组件属于旧首页，当前首页只 import `NewsTitle`
 
-`AIIndexChart`、`AIIndexRefresh`、`IndexTrend`、`IndexDetailCard`、
-`ReportCard`、`HomeSearch`、`HomeLinks`、`HomeDirections`、
-`BusinessCard`、`EcosystemCard`
+**每轮的验证流程**（`scripts/delete-component-batch.sh` 固化）：
 
-另有 10 个无中文文案、无法自动判定：`Container`、`DashboardStats`、
-`Header`、`HomeStats`、`IndustryTrendChart`、`InvestmentRadar`、
-`OpportunityMapCard`、`Tag`、`TrendCard`、`RecommendNews`。
+```
+删除前三重验证（import / 路径引用 / JSX 标签）
+  → tsc
+  → 构建
+  → 12 个页面 HTTP 200
+  → 460 项测试
+  → 提交
+```
+
+任一步失败即中止且不提交。三轮全部一次通过。
+
+组件数 64 → 32。明细见 `ai-context/DEAD_COMPONENT_REPORT.md`。
 
 ### 已知无解问题
 
