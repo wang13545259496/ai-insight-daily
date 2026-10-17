@@ -457,7 +457,21 @@ crontab -e
 @reboot sleep 120 && /home/administrator/projects/ai-insight-daily/scripts/db-backup-scheduler.sh
 
 # 每日抓取任务（原机器上就有）
-0 2 * * * CRON_SECRET=$(grep "^CRON_SECRET=" /home/administrator/projects/ai-insight-daily/.env.production | cut -d= -f2- | tr -d "\r") && curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/daily >> /home/administrator/projects/ai-insight-daily/logs/daily-cron.log 2>&1
+# 新闻采集：每小时检查陈旧度（>6h 才真跑）+ 开机补跑
+0 * * * * /home/administrator/projects/ai-insight-daily/scripts/news-pipeline-scheduler.sh
+@reboot sleep 180 && /home/administrator/projects/ai-insight-daily/scripts/news-pipeline-scheduler.sh
+
+# 健康监控：每小时 + 开机（状态变化时才告警）
+15 * * * * /home/administrator/projects/ai-insight-daily/scripts/health-monitor.sh
+@reboot sleep 240 && /home/administrator/projects/ai-insight-daily/scripts/health-monitor.sh
+
+# 提示：以上内容不必手工粘贴。直接运行下面这个脚本会自动装好全部条目，
+# 且可重复运行（幂等），不会产生重复：
+#
+#   bash scripts/install-cron.sh
+#
+# 它会用 BEGIN/END 标记包裹自己管理的区块，重装时整块替换，
+# 区块外的其它 cron 任务原样保留。回滚：crontab ~/.crontab.before-install
 ```
 
 验证：

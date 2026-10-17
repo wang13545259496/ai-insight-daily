@@ -100,6 +100,52 @@
 `CURRENT_STATUS.md`，一次运行就把 344 行手写内容压成 99 行机械快照。
 已改为输出独立的 `AI_STATUS_AUTO.md`，两者分工写进索引。
 
+### 内容自动化与监控（P0）
+
+上线前盘查发现两个阻塞项，已修复。
+
+**问题 1：内容不会自动更新**
+
+实测：最新新闻停在 47 小时前，近 24 小时 0 条，`logs/daily-cron.log` 从未生成。
+
+根因：cron 定在 `0 2 * * *`，而这台机器不是 24 小时开机 ——
+**cron 不补跑错过的任务**。管线本身没问题（手动触发 200，导入 93 条）。
+
+修法：照搬既有的 `db-backup-scheduler.sh` 模式 ——
+`scripts/news-pipeline-scheduler.sh`，每小时检查陈旧度（>6 小时才真跑），
+`@reboot` 补跑，`flock` 防并发。
+
+**问题 2：没有告警**
+
+站点挂了没人知道。新增两个脚本：
+
+| 脚本 | 作用 |
+| --- | --- |
+| `scripts/health-monitor.sh` | 检查本地应用 / 域名 / 隧道 / 磁盘 / 内存 |
+| `scripts/alert.sh` | 分发告警，支持 Server酱 / Telegram / 通用 webhook |
+
+关键设计：**只在状态变化时告警**。正常→故障立即推送，
+故障→正常发恢复通知，持续故障不重复推送（否则每小时一条会很快被无视）。
+
+四种状态转换均已实测通过。
+
+告警渠道**未配置也能运行**（只写 `logs/alert.log`）。
+配置位置：`.env.local` 或 `~/.alert-config`，说明已写进 `.env.local` 注释。
+
+**crontab 变更**（6 条）：
+
+```
+0 * * * *     news-pipeline-scheduler.sh
+@reboot+180   news-pipeline-scheduler.sh
+15 * * * *    health-monitor.sh
+@reboot+240   health-monitor.sh
+0 23 * * *    db-backup-scheduler.sh
+@reboot+120   db-backup-scheduler.sh
+```
+
+同时移除了原先 `0 2 * * *` 直接调 `/api/cron/daily` 的条目
+（固定时间点 + 无陈旧度判断，正是问题根源）。
+
 ### 已知无解问题
 
 **访客侧 IPv6 到 Cloudflare 边缘不可达**，失败率约 5%、平均慢 0.47 秒。

@@ -259,21 +259,83 @@ pm2 save
 crontab -l
 ```
 
-| 时间 | 任务 |
+| 时间 | 任务 | 脚本 |
+| --- | --- | --- |
+| 每小时整点 | 新闻采集（陈旧 >6 小时才真跑） | `scripts/news-pipeline-scheduler.sh` |
+| 每小时 15 分 | 健康检查（状态变化才告警） | `scripts/health-monitor.sh` |
+| `0 23 * * *` | 数据库异地备份（陈旧 >20 小时才真跑） | `scripts/db-backup-scheduler.sh` |
+| `@reboot` | 上述三项各补跑一次（错峰 120/180/240 秒） | — |
+
+**一键安装**：
+
+```bash
+bash scripts/install-cron.sh
+```
+
+该脚本幂等（用 BEGIN/END 标记包裹自己管理的区块，重装时整块替换），
+区块外的其它 cron 任务原样保留。备份在 `~/.crontab.before-install`。
+
+### 为什么不用固定时间点
+
+**cron 不会补跑错过的任务，而这台机器不是 24 小时开机。**
+
+实际教训：
+
+| 教训 | 后果 |
 | --- | --- |
-| `0 2 * * *` | 调用 `/api/cron/daily` 抓取资讯（Bearer 鉴权） |
-| `0 23 * * *` | 数据库异地备份（调度脚本自行判断是否真的需要跑） |
-| `@reboot` | 开机补跑备份 |
+| 原 `0 3 * * *` 备份 | 10 天里只成功执行过 1 次 |
+| 原 `0 2 * * *` 采集 | `logs/daily-cron.log` 从未生成，内容停在 47 小时前 |
 
-### 这台机器不是 24 小时开机
+**因此所有定时任务都采用同一模式**：
 
-**cron 不会补跑错过的任务。** 凌晨时段机器常处于关机状态。
+```
+定时触发（每小时） + 陈旧度判断（超过 N 小时才真跑） + @reboot 补跑
+```
 
-实际后果：原 `0 3 * * *` 的备份任务在 10 天里只成功执行过 1 次。
+这样无论触发多少次，实际执行频率都稳定在设定值，
+且机器什么时候开机都能补上。
 
-**新增定时任务前，先确认目标时间点机器是否在运行。**
-需要「必定执行」的任务，应改用「定时触发 + 判断上次执行时间」的模式
-（参考 `scripts/db-backup-scheduler.sh`）。
+### 三个调度脚本
+
+**`news-pipeline-scheduler.sh`** —— 新闻采集
+
+- 阈值 6 小时（新闻对新鲜度敏感，但每次会消耗 DeepSeek 额度）
+- 用 `flock` 防止并发（管线一次约 90 秒，避免重复抓取）
+- 先探测本地 `:3000` 是否就绪，未就绪则跳过（不告警，交给健康监控）
+
+**`health-monitor.sh`** —— 健康检查
+
+检查五项：本地应用、域名（**强制 IPv4**）、隧道服务、磁盘、内存。
+
+**只在状态变化时告警**：正常→故障立即推送；故障→正常发恢复通知；
+持续故障不重复推送（否则每小时一条，很快被无视）。
+
+> 域名检查必须加 `-4`：Cloudflare 的 AAAA 记录在当前网络不可达，
+> 不加会因 IPv6 超时而误判故障。
+
+**`db-backup-scheduler.sh`** —— 数据库备份，阈值 20 小时。
+
+### 告警渠道（可选）
+
+`scripts/alert.sh` 支持三种渠道，**不配置也能运行**（只写本地日志）。
+配置写在 `.env.local` 或 `~/.alert-config`：
+
+```ini
+# 三选一
+SERVERCHAN_KEY=SCTxxxxx                      # Server 酱，微信推送
+TELEGRAM_BOT_TOKEN=123:ABC                   # Telegram
+TELEGRAM_CHAT_ID=xxx
+ALERT_WEBHOOK_URL=https://...                # 通用 webhook，POST JSON
+```
+
+### 日志位置
+
+| 文件 | 内容 |
+| --- | --- |
+| `logs/news-pipeline.log` | 每次采集的时间、导入数、耗时 |
+| `logs/health-monitor.log` | 每次检查的结果与状态变化 |
+| `logs/alert.log` | 所有告警（即使推送成功也记录） |
+| `logs/db-backup.log` | 数据库备份 |
 
 ---
 
