@@ -2,7 +2,8 @@
 
 > 版本：V2.0（2026-10-16 核实重写）
 > V1.0 写于 2026-10-05，当时站点尚未接入 Cloudflare 隧道，
-> 文中「nginx 作用：域名解析、HTTPS」与实际不符，已更正。
+> 本文档经过两轮修正：①「nginx 作用：域名解析、HTTPS」不实；
+> ② nginx 实际不在链路上，已于 2026-10-17 停用。
 
 ---
 
@@ -24,7 +25,6 @@
 | Next.js | 16.3.5 |
 | React | 19.2.8 |
 | Prisma Client | 6.19.3 |
-| nginx | 1.28.3 |
 | PM2 | 7.0.4 |
 | cloudflared | 2026.10.0 |
 
@@ -44,9 +44,6 @@ Cloudflare 边缘  ← 证书由 Cloudflare 提供，自动续期
 cloudflared（本机常驻进程）
   │
   ▼
-nginx  127.0.0.1:80
-  │  仅反向代理
-  ▼
 Next.js  0.0.0.0:3000
   │
   ▼
@@ -61,20 +58,33 @@ SQLite  prisma/dev.db
 | 层 | 职责 | 不负责什么 |
 | --- | --- | --- |
 | **Cloudflare** | DNS 解析、HTTPS 证书、HTTP→HTTPS 跳转 | 不管应用逻辑 |
-| **cloudflared** | 建立隧道，把公网请求转到本机 80 | 不处理业务 |
-| **nginx** | 反向代理到 3000 | **不做 HTTPS，不解析域名** |
-| **Next.js** | 应用本身 | — |
+| **cloudflared** | 建立隧道，把公网请求转到本机 3000 | 不处理业务 |
+| **Next.js** | 应用本身（同时承担 HTTP 服务） | — |
 
-### 为什么 nginx 只监听 80
+### 隧道回源到 3000，不经过 nginx
 
-站点通过 Cloudflare 隧道对外，**隧道回源目标是本机 80 端口**。
+隧道 ingress 的实际配置（从 cloudflared 日志读取）：
+
+```json
+{"hostname":"aibiliai.com","service":"http://127.0.0.1:3000"}
+```
+
+即请求直接交给 Next.js，**本机不设反向代理**。
+
+> **历史说明**：早期曾用 nginx 监听 80 反代到 3000，文档也据此写过
+> 「隧道回源到本机 80」。但实际隧道配置指向 3000，nginx 从未处理过
+> 真实流量 —— 2026-10-17 实测其访问日志中非 127.0.0.1 的请求为 0 条，
+> 已停用。
+
 因此：
 
-- nginx **不需要**监听 443，**不需要**配置证书
 - 服务器**不需要**公网 IP，**不需要**开放任何入站端口
+- 本机不需要配置 HTTPS 证书（由 Cloudflare 边缘提供）
 - 隧道由 cloudflared **主动向 Cloudflare 建立**出站连接
 
-> 验证：`ss -tlnp | grep -E ':(80|443)'` 只会看到 80，没有 443。
+> 验证：`ss -tlnp | grep :3000` 应看到 `0.0.0.0:3000`（Next.js）。
+> `0.0.0.0` 表示同时监听局域网，因此手机等设备可通过
+> `http://<本机IP>:3000` 访问，无需端口转发。
 
 ### 隧道是唯一的对外通路
 
@@ -83,41 +93,56 @@ SQLite  prisma/dev.db
 
 ---
 
-## 三、Web 服务：nginx
+## 三、Web 服务：Next.js（本机无反向代理）
 
-**站点配置**：`/etc/nginx/sites-available/ai-insight-daily`（已软链到 `sites-enabled/`）
+**nginx 已于 2026-10-17 停用。**
 
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name aibiliai.com www.aibiliai.com;
+停用理由：隧道 ingress 指向 `http://127.0.0.1:3000`，请求从未经过 nginx。
+实测其访问日志中非 `127.0.0.1` 的请求为 0 条 —— 它一直在空转，
+却因文档写着「隧道回源到 80」而被误认为在链路上。
 
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-        proxy_connect_timeout 10s;
-    }
-}
-```
+原配置保留在 `/etc/nginx/sites-available/ai-insight-daily`，未删除，
+需要时可 `sudo systemctl start nginx` 临时启用。
 
-**常用命令**：
+**Next.js 监听**：
 
 ```bash
-sudo nginx -t                      # 测试配置语法（改完必跑）
-sudo systemctl restart nginx
-sudo systemctl status nginx
+ss -tlnp | grep :3000
+# 0.0.0.0:3000  ← 同时监听局域网，手机可直接访问 http://<本机IP>:3000
 ```
 
-> `proxy_read_timeout 60s` 是个需要留意的值：生成行程需要 40-60 秒，
-> 若未来耗时继续增长，可能触发 nginx 超时。
+**没有代理层超时**：过去 nginx 的 `proxy_read_timeout 60s` 曾是行程生成
+（40-60 秒）的隐患。现在请求直连 Next.js，约束只剩两端：
+
+- Next.js 自身不设请求超时（长任务可跑完）
+- Cloudflare 免费版对源站的响应上限约 100 秒
+
+> 若未来出现长任务接近 100 秒，需要考虑改为异步任务 + 轮询，
+> 而不是依赖超时配置。
+
+---
+
+### 隧道参数（2026-10-17 实测修正）
+
+隧道必须以 IPv4 + HTTP/2 运行，否则会反复断开。详见
+[`AI_TROUBLESHOOTING_GUIDE.md`](./AI_TROUBLESHOOTING_GUIDE.md)。
+
+```ini
+# /etc/systemd/system/cloudflared-ipv4.service
+ExecStart=/usr/bin/cloudflared --no-autoupdate \
+  --edge-ip-version 4 \
+  --edge-bind-address 0.0.0.0 \
+  --protocol http2 \
+  tunnel run --token-file /etc/cloudflared/token
+```
+
+管理命令：
+
+```bash
+bash scripts/manage-cloudflared.sh status     # 查状态与协议
+sudo bash scripts/manage-cloudflared.sh install    # 安装/更新
+sudo bash scripts/manage-cloudflared.sh rollback   # 切回原服务
+```
 
 ---
 
@@ -213,7 +238,6 @@ npx prisma db push
 | --- | --- | --- |
 | **WSL** | `/etc/wsl.conf` 设 `systemd=true` | 无需操作 |
 | **PM2** | systemd 服务 `pm2-administrator` 执行 `pm2 resurrect` | `systemctl is-enabled pm2-administrator` |
-| **nginx** | systemd 服务 | `systemctl is-enabled nginx` |
 | **cloudflared** | systemd 服务 | `systemctl is-enabled cloudflared` |
 
 **PM2 的自启依赖 `~/.pm2/dump.pm2`**（进程快照）。
@@ -255,7 +279,7 @@ crontab -l
 
 ## 八、注意事项
 
-**不要随意修改**：nginx 配置、PM2 配置、生产环境变量。修改前先备份。
+**不要随意修改**：隧道服务配置、PM2 配置、生产环境变量。修改前先备份。
 
 **改完必须验证**：本项目发生过多次「代码正确但线上未生效」，原因包括构建失败、
 服务未重启、环境变量未更新。验证方式是用 `curl` 实际请求页面或接口，

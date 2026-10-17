@@ -16,7 +16,6 @@
 | **API Key** | ✅ 在各服务商后台 | 重新获取 |
 | **环境变量文件** | ❌ 随电脑丢失 | **需提前备份**，见 [第一步](#第一步提前准备你只有一次机会) |
 | **隧道凭据** | ❌ 随电脑丢失 | Cloudflare 后台重新生成 |
-| **nginx 配置** | ❌ 随电脑丢失 | 本文档第七步给出完整内容 |
 
 **预计耗时**：熟练的话 1-2 小时；第一次做约 3 小时。
 
@@ -97,9 +96,6 @@ sudo apt-get install -y nodejs
 # 必需工具：git（拉代码）、sqlite3（备份/恢复数据库）、rsync
 sudo apt-get install -y git sqlite3 rsync
 
-# nginx（反代到应用）
-sudo apt-get install -y nginx
-
 # PM2 进程管理器（原机器 v7.0.4）
 sudo npm install -g pm2
 
@@ -116,7 +112,6 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 ```bash
 node -v            # v22.x
 pm2 -v             # 7.x
-nginx -v           # 1.28.x
 sqlite3 --version  # 3.x
 cloudflared --version
 ```
@@ -280,45 +275,27 @@ Prisma 没有 `skills` 这个子命令。脚本末尾的 `|| exit 0` 让安装�
 
 ---
 
-## 第七步：配置 nginx
+## 第七步：不需要反向代理
+
+**本项目不用 nginx。** 隧道直接把请求交给 Next.js。
+
+早期版本曾配置 nginx 监听 80 反代到 3000，文档也据此写过
+「隧道回源到本机 80」。但实际隧道配置指向 `http://127.0.0.1:3000`，
+**请求从未经过 nginx** —— 2026-10-17 实测其访问日志中非 `127.0.0.1`
+的请求为 0 条，已停用。
+
+所以新机器上**不要安装也不要配置 nginx**。
+
+只需确认 Next.js 监听在所有网卡上：
 
 ```bash
-sudo nano /etc/nginx/sites-available/ai-insight-daily
+ss -tlnp | grep :3000
+# 期望：0.0.0.0:3000
+# 若是 127.0.0.1:3000，局域网设备将无法访问（但隧道仍正常）
 ```
 
-粘贴以下内容（**这是原机器上的实际配置**）：
-
-```nginx
-server {
-    listen 80;
-    listen [::]:80;
-    server_name aibiliai.com www.aibiliai.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-        proxy_connect_timeout 10s;
-    }
-}
-```
-
-启用并重启：
-
-```bash
-sudo ln -sf /etc/nginx/sites-available/ai-insight-daily /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default      # 移除默认站点，避免抢占
-sudo nginx -t                                     # 测试配置语法
-sudo systemctl restart nginx
-```
-
-> **为什么 nginx 只监听 80 端口**：站点通过 Cloudflare 隧道对外，隧道回源到本机 80。不需要开 443，也不需要证书——HTTPS 由 Cloudflare 边缘处理。
+> `0.0.0.0` 是 Next.js 的默认值。若见 `127.0.0.1`，
+> 检查 `package.json` 的 start 脚本是否带了 `-H 127.0.0.1`。
 
 ---
 
@@ -335,7 +312,7 @@ sudo systemctl restart nginx
    Domain:    aibiliai.com
    Path:      （留空）
    Type:      HTTP
-   URL:       localhost:80
+   URL:       localhost:3000
    ```
    再添加一条 `www` 的，或按需配置
 5. 复制页面给出的 **token**（一长串 `eyJ...`）
@@ -347,10 +324,49 @@ sudo mkdir -p /etc/cloudflared
 sudo nano /etc/cloudflared/token          # 粘贴上一步复制的 token
 sudo chmod 600 /etc/cloudflared/token
 
-# 注册并启动服务
+# 注册服务（先用官方方式生成基础单元）
 sudo cloudflared service install $(sudo cat /etc/cloudflared/token)
-sudo systemctl enable --now cloudflared
-sudo systemctl status cloudflared          # 应为 active (running)
+```
+
+**然后必须改为 IPv4 + HTTP/2**，否则隧道会反复断开：
+
+```bash
+sudo tee /etc/systemd/system/cloudflared-ipv4.service > /dev/null <<'UNIT'
+[Unit]
+Description=Cloudflare Tunnel client (IPv4 forced)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+TimeoutStartSec=30
+Type=notify
+ExecStart=/usr/bin/cloudflared --no-autoupdate --edge-ip-version 4 --edge-bind-address 0.0.0.0 --protocol http2 tunnel run --token-file /etc/cloudflared/token
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl disable --now cloudflared      # 停掉官方那个，只跑一个
+sudo systemctl enable --now cloudflared-ipv4
+systemctl status cloudflared-ipv4 --no-pager
+```
+
+**为什么必须加这三个参数**（2026-10-17 实测）：
+
+| 参数 | 作用 | 不加会怎样 |
+| --- | --- | --- |
+| `--edge-ip-version 4` | 边缘地址解析为 IPv4 | 走 IPv6，实测频繁 `network is unreachable` |
+| `--edge-bind-address 0.0.0.0` | 套接字绑 IPv4 | 源地址是 `[::]`，向 IPv4 目标写入报错 |
+| `--protocol http2` | 用 TCP 而非 UDP/QUIC | 国内网络 UDP 常被 QoS，实测每 40 秒断一次 |
+
+验证（关键看 `protocol=http2` 且 `ip=198.41.x` 或 `104.x`）：
+
+```bash
+journalctl -u cloudflared-ipv4 -n 30 --no-pager | grep -E 'Initial protocol|Registered tunnel'
 ```
 
 > **如果旧隧道还在 Cloudflare 后台**：可以直接复用（不需要新建），但 token 需重新生成——旧 token 在旧机器上，已随电脑丢失。
@@ -386,13 +402,15 @@ pm2 save
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 # 期望 200
 
-# 2. 经 nginx
-curl -s -o /dev/null -w '%{http_code}\n' -H "Host: aibiliai.com" http://127.0.0.1/
-# 期望 200
-
-# 3. 隧道
-systemctl is-active cloudflared
+# 2. 隧道服务与协议
+systemctl is-active cloudflared-ipv4
 # 期望 active
+journalctl -u cloudflared-ipv4 -n 30 --no-pager | grep -E 'Initial protocol|Registered tunnel'
+# 期望：Initial protocol http2，且 ip=IPv4（不是 2606:4700:）
+
+# 3. 局域网可访问（可选，验证监听地址）
+curl -s -o /dev/null -w '%{http_code}\n' http://$(hostname -I | awk '{print $1}'):3000/
+# 期望 200
 
 # 4. 经公网域名（最关键的验证）
 curl -s -o /dev/null -w '%{http_code}\n' https://aibiliai.com/
@@ -456,13 +474,25 @@ tail -5 logs/db-backup.log                          # 看日志
 
 ### 网站打不开，但 `localhost:3000` 正常
 
-说明问题在隧道或 nginx，按顺序查：
+说明问题在隧道（本机没有反向代理，不必查 nginx），按顺序查：
 
 ```bash
-systemctl status nginx
-systemctl status cloudflared
-journalctl -u cloudflared -n 30 --no-pager
+systemctl status cloudflared-ipv4
+journalctl -u cloudflared-ipv4 -n 30 --no-pager
 ```
+
+**重点看两件事**：
+
+```bash
+# 1. 协议是否为 http2、IP 是否为 IPv4
+journalctl -u cloudflared-ipv4 -n 50 --no-pager | grep 'Registered tunnel'
+
+# 2. 近期是否频繁断连
+journalctl -u cloudflared-ipv4 --since '10 min ago' --no-pager | grep -c 'Connection terminated'
+```
+
+若 `Connection terminated` 次数偏高，先确认三个参数还在
+（`ps aux | grep cloudflared`），这是 2026-10-17 排查出的根因。
 
 **最可能的原因**：DNS 解析异常。原机器上遇到过一次——WSL 的虚拟网卡没初始化，导致 cloudflared 连不上 Cloudflare 边缘。检查：
 
@@ -506,7 +536,7 @@ npm run build
 | 备份分支 | `db-backup`（孤儿分支，只存最新一份数据库快照） |
 | 域名 | aibiliai.com |
 | 应用端口 | 3000（Next.js） |
-| nginx 端口 | 80（隧道回源目标） |
+| 隧道回源 | `http://127.0.0.1:3000`（直连 Next.js，无反向代理） |
 | WSL 发行版 | Ubuntu，用户 `administrator` |
 | 项目路径 | `~/projects/ai-insight-daily` |
 | PM2 进程名 | `ai-insight-daily` |

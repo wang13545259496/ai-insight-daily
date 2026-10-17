@@ -341,7 +341,7 @@ crontab -l
 
 | 文档 | 原问题 | 状态 |
 | --- | --- | --- |
-| `DEPLOYMENT.md` | 写「nginx 作用：域名解析、HTTPS」，实际 HTTPS 与 DNS 都在 Cloudflare 侧；部署链路漏了隧道 | V2.0 已更正 |
+| `DEPLOYMENT.md` | 写「nginx 作用：域名解析、HTTPS」，实际 HTTPS 与 DNS 都在 Cloudflare 侧；部署链路漏了隧道 | V2.0 已更正；2026-10-17 进一步确认 nginx 不在链路上，已停用 |
 | `ARCHITECTURE.md` | 全文约 360 字符，是个骨架；部署拓扑缺隧道层 | V2.0 已重写 |
 | `DATABASE_SCHEMA.md` | 未记录出行管家的访问控制与导出设计 | 已补充 |
 
