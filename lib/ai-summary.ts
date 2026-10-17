@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import OpenAI from "openai";
 
 const apiKey = process.env.DEEPSEEK_API_KEY;
@@ -208,6 +209,37 @@ export function isAIConfigured(): boolean {
  */
 const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
 
+/**
+ * 记录一次 AI 调用的 token 用量，供成本统计使用。
+ *
+ * 写到 logs/ai-usage.log，每行一条 JSON。写失败不影响分析结果 ——
+ * 统计是次要功能，不能因为它出问题就让整条新闻分析失败。
+ */
+function recordUsage(model: string, usage: unknown) {
+  try {
+    const u = usage as {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
+    } | null;
+
+    if (!u || typeof u.prompt_tokens !== "number") return;
+
+    const line =
+      JSON.stringify({
+        t: new Date().toISOString(),
+        model,
+        in: u.prompt_tokens ?? 0,
+        out: u.completion_tokens ?? 0,
+        reason: u.completion_tokens_details?.reasoning_tokens ?? 0,
+      }) + "\n";
+
+    appendFileSync("logs/ai-usage.log", line);
+  } catch {
+    // 统计失败不入日志、不抛出 —— 避免递归或噪音
+  }
+}
+
 export async function generateSummary(
   title: string,
   content: string
@@ -231,6 +263,11 @@ export async function generateSummary(
 
   const elapsed = Date.now() - startedAt;
   const text = response.choices?.[0]?.message?.content || "";
+
+  recordUsage(
+    process.env.DEEPSEEK_MODEL || "deepseek-flash",
+    response.usage,
+  );
 
   // 显式计时替代原来的 console.time：并发调用时 console.time 会互相覆盖
   console.log(`[ai] 分析完成 ${(elapsed / 1000).toFixed(1)}s｜${String(title).slice(0, 34)}`);
