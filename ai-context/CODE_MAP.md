@@ -100,6 +100,26 @@ app/industry/
 ---
 
 
+## 运维脚本
+
+位置：`scripts/`
+
+| 脚本 | 作用 |
+| --- | --- |
+| `install-cron.sh` | 幂等安装全部定时任务（受管区块标记） |
+| `news-pipeline-scheduler.sh` | 新闻采集调度，按陈旧度判断 |
+| `health-monitor.sh` | 站点健康检查，状态变化才告警 |
+| `alert.sh` | 告警分发（Server 酱 / Telegram / webhook） |
+| `set-alert-channel.sh` | 配置告警渠道 |
+| `ai-usage-report.sh` | AI 用量与成本报告 |
+| `daily-report.sh` | 每日报告推送到微信 |
+| `audit-contrast.py` | 按背景检查并修正文字对比度 |
+
+报告读法与三个数据源的盲区见 `DEPLOYMENT.md`。
+
+
+---
+
 ## 配色与对比度
 
 全站有两套主题：深色页（`bg-black`）与浅色页（`bg-white`），
