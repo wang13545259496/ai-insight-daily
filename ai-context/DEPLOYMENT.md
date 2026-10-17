@@ -491,6 +491,75 @@ EDGE="/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
 > 踩过：临时把菜单改成默认展开来截图，结果被「路由变化时关闭」的
 > useEffect 在挂载时重置，截图仍显示关闭态。
 
+### 局域网访问（手机 / 其它设备）
+
+家里设备访问站点有两条路，用途不同：
+
+| 地址 | 路径 | 速度 |
+| --- | --- | --- |
+| `http://192.168.1.25` | Windows 80 → 127.0.0.1:3000 | 最快，不经外网 |
+| `https://aibiliai.com` | Cloudflare → 隧道 → 本机 | 慢，且可能超时 |
+
+#### 为什么要有 80 端口转发
+
+应用监听 **3000**。此前局域网只能访问 `http://192.168.1.25:3000`，
+而人会顺手输 `http://192.168.1.25`（默认 80 端口）—— 80 上没有服务，
+连不上。80 端口空着是因为 nginx 已于早前停用（现在由 Cloudflare 隧道直接转发）。
+
+因此在 Windows 加了一条端口转发：
+
+```
+netsh interface portproxy add v4tov4   listenport=80 listenaddress=0.0.0.0   connectport=3000 connectaddress=127.0.0.1
+```
+
+转发到 `127.0.0.1` 而非 WSL 的 IP：本机 WSL2 用镜像网络，
+WSL 里的 `0.0.0.0:3000` 在 Windows 的 `127.0.0.1:3000` 上可达，
+WSL 换 IP 也不受影响。
+
+**持久性**：规则存在注册表 `HKLM\SYSTEM\CurrentControlSet\Services\PortProxy\v4tov4\tcp`，
+重启后仍在。但依赖 `iphlpsvc`（IP Helper）服务，该服务被禁用则失效。
+系统重装或部分大版本更新后可能丢失，重跑上面的命令即可。
+
+**撤销**：
+
+```
+netsh interface portproxy delete v4tov4 listenport=80 listenaddress=0.0.0.0
+```
+
+#### 域名访问为什么慢 / 偶尔打不开
+
+实测（2026-10-17 夜）：手机在局域网内访问 `https://aibiliai.com`
+间歇性失败，而 `http://192.168.1.25:3000` 一直正常。
+
+排查结论：**不是站点故障，是 Cloudflare 免费版对该网络的 IPv4 调度太远。**
+
+| 协议 | Cloudflare 边缘节点 | 单次耗时 |
+| --- | --- | --- |
+| IPv6（手机优先使用） | SJC 圣何塞 | 正常 |
+| IPv4 | **LHR 伦敦**（12 次中 10 次） | **3–6 秒** |
+
+一个页面要发 20 多个子请求（HTML、JS、CSS、favicon、统计接口），
+全走伦敦时累计耗时超过浏览器超时阈值，于是表现为「打不开」。
+路由切换后又能打开，所以是间歇性的。
+
+验证方式：临时在 `proxy.ts` 里加入站请求日志（记录 UA、`cf-connecting-ip`、
+`cf-ray`），用手机访问后对比。手机请求的 `cf-ray` 是 `-SJC`，
+而服务器自身的 IPv4 请求是 `-LHR`。排查完已撤销该临时改动。
+
+改善 IPv4 路由的三条路，都有代价：
+
+| 方案 | 效果 | 代价 |
+| --- | --- | --- |
+| Cloudflare Argo Smart Routing | 自动选择更优路径 | $5/月 + 流量费 |
+| 关闭 Cloudflare 代理（灰云）直连家宽 | 路由由运营商决定 | 需公网 IP + 端口映射，隧道方案作废，家宽 IP 会变 |
+| 不处理 | 在家用局域网 IP，在外靠 IPv6 | 0 元 |
+
+**当前选择：不处理。** 站点只有维护者自用，家中有局域网直连，
+在外的偶发慢速可以接受。
+
+> 附带发现：公网有扫描器在探 `/wp-admin/install.php` 之类的路径
+> （来源节点 AMS、GRU）。本站不是 WordPress，扫不到内容，属正常背景噪音。
+
 ### 日志位置
 
 | 文件 | 内容 |
