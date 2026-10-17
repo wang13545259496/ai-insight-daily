@@ -693,7 +693,7 @@ function StatCard({
       href={href}
       className="bg-white p-5 transition hover:bg-zinc-50"
     >
-      <div className="text-[10px] font-semibold tracking-[0.18em] text-zinc-600">
+      <div className="text-[12px] sm:text-[10px] font-semibold tracking-[0.18em] text-zinc-600">
         {label}
       </div>
 
@@ -777,7 +777,7 @@ function DarkMetric({
 }) {
   return (
     <div className="min-w-[82px] rounded-xl border border-zinc-800 p-4">
-      <div className="text-[10px] tracking-[0.16em] text-zinc-600">
+      <div className="text-[12px] sm:text-[10px] tracking-[0.16em] text-zinc-600">
         {label}
       </div>
       <div className="mt-2 text-xl font-bold text-white">

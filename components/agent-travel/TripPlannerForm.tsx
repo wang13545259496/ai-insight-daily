@@ -571,7 +571,7 @@ export default function TripPlannerForm({ historySlot }: { historySlot?: React.R
                   <span className={`block text-sm ${active ? "text-sky-300" : "text-white"}`}>
                     {option.label}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-gray-400">{option.hint}</span>
+                  <span className="mt-0.5 block text-[12px] sm:text-[11px] text-gray-400">{option.hint}</span>
                 </button>
               );
             })}

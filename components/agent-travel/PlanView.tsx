@@ -205,7 +205,7 @@ function QuoteSection({ plan }: { plan: TravelPlan }) {
                           .join(" · ")}
                       </span>
                       {room.cancelable && (
-                        <span className="shrink-0 rounded bg-emerald-500/10 px-1 text-[10px] text-emerald-400">
+                        <span className="shrink-0 rounded bg-emerald-500/10 px-1 text-[12px] sm:text-[10px] text-emerald-400">
                           可免费取消
                         </span>
                       )}
@@ -293,13 +293,13 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
               */}
               <span className="w-24 shrink-0">
                 {isCheapest && (
-                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                  <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[12px] sm:text-[10px] text-emerald-400">
                     最低价
                   </span>
                 )}
                 {isFastest && (
                   <span
-                    className={`rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-400 ${
+                    className={`rounded bg-sky-500/15 px-1.5 py-0.5 text-[12px] sm:text-[10px] text-sky-400 ${
                       isCheapest ? "ml-1" : ""
                     }`}
                   >
@@ -307,7 +307,7 @@ function IntercitySection({ plan }: { plan: TravelPlan }) {
                   </span>
                 )}
                 {option.confidence === "estimate" && (
-                  <span className="rounded bg-gray-500/15 px-1.5 py-0.5 text-[10px] text-gray-400">
+                  <span className="rounded bg-gray-500/15 px-1.5 py-0.5 text-[12px] sm:text-[10px] text-gray-400">
                     估算
                   </span>
                 )}
@@ -380,7 +380,7 @@ function DayCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`text-xs ${meta.color}`}>{meta.icon}</span>
                   <span className="text-sm text-white">{activity.title}</span>
-                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-400">
+                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[12px] sm:text-[10px] text-gray-400">
                     {meta.label}
                   </span>
                   {activity.estimatedCost > 0 && (

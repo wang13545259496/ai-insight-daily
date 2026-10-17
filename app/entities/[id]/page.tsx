@@ -101,7 +101,7 @@ export default async function EntityDetailPage({
         {/* 头部 */}
         <header className="mt-6 border-b border-gray-200 pb-8">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-bold tracking-wide text-gray-700">
+            <span className="rounded-full bg-gray-100 px-3 py-1 text-[12px] sm:text-[11px] font-bold tracking-wide text-gray-700">
               {ENTITY_TYPE_LABELS[profile.type] ?? profile.type}
             </span>
 
@@ -178,7 +178,7 @@ export default async function EntityDetailPage({
           <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
             {/* 左栏：关联事件 */}
             <section className="lg:col-span-8">
-              <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+              <div className="text-[12px] sm:text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
                 RELATED EVENTS
               </div>
 
@@ -197,14 +197,14 @@ export default async function EntityDetailPage({
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         {ev.isPrimary && (
-                          <span className="rounded-full bg-black px-2.5 py-0.5 text-[10px] font-bold text-white">
+                          <span className="rounded-full bg-black px-2.5 py-0.5 text-[12px] sm:text-[10px] font-bold text-white">
                             主体
                           </span>
                         )}
 
                         {ev.trendStatus && (
                           <span
-                            className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${
+                            className={`rounded-full border px-2.5 py-0.5 text-[12px] sm:text-[10px] font-medium ${
                               trendCls || "border-gray-200 bg-gray-50 text-gray-600"
                             }`}
                           >
@@ -232,7 +232,7 @@ export default async function EntityDetailPage({
               {/* 相关新闻 */}
               {profile.news.length > 0 && (
                 <div className="mt-14">
-                  <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+                  <div className="text-[12px] sm:text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
                     RELATED NEWS
                   </div>
 
@@ -256,7 +256,7 @@ export default async function EntityDetailPage({
                           >
                             <div className="flex flex-wrap items-center gap-2">
                               <span
-                                className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${role.cls}`}
+                                className={`rounded-full border px-2.5 py-0.5 text-[12px] sm:text-[10px] font-bold ${role.cls}`}
                               >
                                 {role.text}
                               </span>
@@ -293,7 +293,7 @@ export default async function EntityDetailPage({
             {/* 右栏：共同出现的实体 */}
             <aside className="lg:col-span-4">
               <div className="lg:sticky lg:top-8">
-                <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+                <div className="text-[12px] sm:text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
                   CO-OCCURRENCE
                 </div>
 

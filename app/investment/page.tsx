@@ -123,11 +123,11 @@ export default async function InvestmentPage() {
 
         <section className="mb-10">
           <div className="mb-5 flex flex-wrap items-center gap-3">
-            <span className="rounded-full border border-gray-700 px-3 py-1 text-[11px] tracking-[0.18em] text-gray-400">
+            <span className="rounded-full border border-gray-700 px-3 py-1 text-[12px] sm:text-[11px] tracking-[0.18em] text-gray-400">
               AI INDUSTRY INTELLIGENCE
             </span>
 
-            <span className="rounded-full border border-gray-800 px-3 py-1 text-[11px] tracking-[0.18em] text-gray-400">
+            <span className="rounded-full border border-gray-800 px-3 py-1 text-[12px] sm:text-[11px] tracking-[0.18em] text-gray-400">
               INVESTMENT OBSERVATION
             </span>
           </div>
@@ -244,8 +244,16 @@ export default async function InvestmentPage() {
                 description="五维指标用于比较不同主体的产业投资观察价值，不代表实际收益概率。"
               />
 
+              {/* 手机上 6 列放不下（主体名会被截断），改为横向滚动。
+                  min-w 取 600px：桌面容器更宽，视觉不变；手机上滑动约 1.6 屏。 */}
+              <p className="mb-2 text-xs text-gray-500 lg:hidden">
+                ← 左右滑动查看五维评分 →
+              </p>
+
               <div className="overflow-hidden rounded-3xl border border-gray-800 bg-gray-950">
-                <div className="grid grid-cols-6 border-b border-gray-800 px-5 py-4 text-xs text-gray-400">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[600px]">
+                    <div className="grid grid-cols-6 border-b border-gray-800 px-5 py-4 text-xs text-gray-400">
                   <div>主体</div>
                   <div>商业</div>
                   <div>技术</div>
@@ -286,6 +294,8 @@ export default async function InvestmentPage() {
                     </div>
                   </Link>
                 ))}
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -543,14 +553,14 @@ export default async function InvestmentPage() {
                           {item.calculatedScore}
                         </div>
 
-                        <div className="text-[10px] text-gray-400">
+                        <div className="text-[12px] sm:text-[10px] text-gray-400">
                           SCORE
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-5 border-t border-gray-900 pt-4">
-                      <div className="text-[11px] text-gray-400">
+                      <div className="text-[12px] sm:text-[11px] text-gray-400">
                         SOURCE NEWS #{item.sourceNewsId}
                       </div>
 
@@ -559,7 +569,7 @@ export default async function InvestmentPage() {
                           "暂无来源新闻"}
                       </div>
 
-                      <div className="mt-4 text-[11px] text-gray-400">
+                      <div className="mt-4 text-[12px] sm:text-[11px] text-gray-400">
                         SOURCE EVENT #{item.sourceEventId}
                       </div>
 
@@ -932,7 +942,7 @@ function LevelBadge({
   level: string;
 }) {
   return (
-    <span className="mt-2 inline-block rounded-full border border-gray-700 px-2.5 py-1 text-[11px] text-gray-400">
+    <span className="mt-2 inline-block rounded-full border border-gray-700 px-2.5 py-1 text-[12px] sm:text-[11px] text-gray-400">
       {level}
     </span>
   );
@@ -968,7 +978,7 @@ function RiskRow({
           {showControl ? control : risk}
         </div>
 
-        <div className="text-[11px] text-gray-400">
+        <div className="text-[12px] sm:text-[11px] text-gray-400">
           {showControl ? "风险控制" : "风险评分"}
         </div>
       </div>

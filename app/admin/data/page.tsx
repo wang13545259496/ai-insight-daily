@@ -633,7 +633,7 @@ AI INSIGHT DAILY · ADMIN </div>
                         {problems.map((problem) => (
                           <span
                             key={problem}
-                            className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/50"
+                            className="rounded-full border border-white/10 px-2.5 py-1 text-[12px] sm:text-[11px] text-white/50"
                           >
                             {problem}
                           </span>

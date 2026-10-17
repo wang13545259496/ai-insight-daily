@@ -511,7 +511,7 @@ function StatCard({
 }) {
   return (
     <div className="bg-white p-5">
-      <div className="text-[10px] font-semibold tracking-[0.18em] text-zinc-600">
+      <div className="text-[12px] sm:text-[10px] font-semibold tracking-[0.18em] text-zinc-600">
         {label}
       </div>
 
@@ -531,7 +531,7 @@ function DarkMetric({
 }) {
   return (
     <div className="rounded-xl border border-zinc-800 p-4">
-      <div className="text-[10px] tracking-[0.16em] text-zinc-600">
+      <div className="text-[12px] sm:text-[10px] tracking-[0.16em] text-zinc-600">
         {label}
       </div>
 

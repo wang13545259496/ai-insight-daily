@@ -500,12 +500,12 @@ export default async function HomePage() {
 
                   <div>
                     <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className="bg-gray-100 px-2 py-1 text-[10px] font-bold tracking-wider text-gray-600">
+                      <span className="bg-gray-100 px-2 py-1 text-[12px] sm:text-[10px] font-bold tracking-wider text-gray-600">
                         {safeText(item.category, "AI资讯")}
                       </span>
 
                       {item.aiScore > 0 && (
-                        <span className="text-[10px] font-bold text-gray-600">
+                        <span className="text-[12px] sm:text-[10px] font-bold text-gray-600">
                           AI SCORE {Math.round(item.aiScore)} · {getTier(item.aiScore).label}
                         </span>
                       )}
@@ -587,7 +587,7 @@ export default async function HomePage() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <span className="bg-black px-2 py-1 text-[10px] font-black tracking-widest text-white">
+                        <span className="bg-black px-2 py-1 text-[12px] sm:text-[10px] font-black tracking-widest text-white">
                           TOP {index + 1}
                         </span>
 
@@ -613,7 +613,7 @@ export default async function HomePage() {
                     </h3>
 
                     <div className="mt-6 border-l-2 border-black pl-4">
-                      <div className="text-[11px] font-black uppercase tracking-widest text-gray-400">
+                      <div className="text-[12px] sm:text-[11px] font-black uppercase tracking-widest text-gray-400">
                         最新动态
                       </div>
 
@@ -842,7 +842,7 @@ export default async function HomePage() {
                         <div className="text-2xl font-black">
                           {totalScore}
                         </div>
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+                        <div className="text-[12px] sm:text-[10px] font-bold uppercase tracking-wider text-gray-600">
                           Score
                         </div>
                       </div>
@@ -857,28 +857,28 @@ export default async function HomePage() {
                         <div className="text-sm font-black">
                           {item.businessScore}
                         </div>
-                        <div className="text-[9px] text-gray-600">商业</div>
+                        <div className="text-[11px] sm:text-[9px] text-gray-600">商业</div>
                       </div>
 
                       <div>
                         <div className="text-sm font-black">
                           {item.technologyScore}
                         </div>
-                        <div className="text-[9px] text-gray-600">技术</div>
+                        <div className="text-[11px] sm:text-[9px] text-gray-600">技术</div>
                       </div>
 
                       <div>
                         <div className="text-sm font-black">
                           {item.marketScore}
                         </div>
-                        <div className="text-[9px] text-gray-600">市场</div>
+                        <div className="text-[11px] sm:text-[9px] text-gray-600">市场</div>
                       </div>
 
                       <div>
                         <div className="text-sm font-black">
                           {item.growthScore}
                         </div>
-                        <div className="text-[9px] text-gray-600">成长</div>
+                        <div className="text-[11px] sm:text-[9px] text-gray-600">成长</div>
                       </div>
                     </div>
                   </Link>

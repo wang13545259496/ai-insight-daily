@@ -10,7 +10,7 @@ export default function AboutPage() {
   return (
     <main className="min-h-screen bg-white text-black">
       <div className="mx-auto max-w-3xl px-6 py-16">
-        <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+        <div className="text-[12px] sm:text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
           ABOUT
         </div>
 

@@ -381,16 +381,16 @@ export default async function AdminNewsPage({
                   <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/45">
+                        <span className="rounded-full border border-white/10 px-2.5 py-1 text-[12px] sm:text-[11px] text-white/45">
                           {item.category || "未分类"}
                         </span>
 
-                        <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/45">
+                        <span className="rounded-full border border-white/10 px-2.5 py-1 text-[12px] sm:text-[11px] text-white/45">
                           {item.source || "未知来源"}
                         </span>
 
                         <span
-                          className={`rounded-full border px-2.5 py-1 text-[11px] ${
+                          className={`rounded-full border px-2.5 py-1 text-[12px] sm:text-[11px] ${
                             item.verified
                               ? "border-white/20 text-white/75"
                               : "border-white/10 text-white/35"
@@ -399,7 +399,7 @@ export default async function AdminNewsPage({
                           {item.verified ? "已验证" : "未验证"}
                         </span>
 
-                        <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-white/35">
+                        <span className="rounded-full border border-white/10 px-2.5 py-1 text-[12px] sm:text-[11px] text-white/35">
                           {item.dataStatus || "unknown"}
                         </span>
                       </div>

@@ -81,7 +81,7 @@ export default async function EntitiesPage({
       <div className="mx-auto max-w-7xl">
         {/* 头部 */}
         <header className="border-b border-gray-200 pb-8">
-          <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+          <div className="text-[12px] sm:text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
             ENTITIES
           </div>
 
@@ -136,7 +136,7 @@ export default async function EntitiesPage({
                   {e.name}
                 </h2>
 
-                <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-medium text-gray-600">
+                <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-[12px] sm:text-[11px] font-medium text-gray-600">
                   {ENTITY_TYPE_LABELS[e.type] ?? e.type}
                 </span>
               </div>

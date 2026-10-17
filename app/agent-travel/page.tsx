@@ -168,7 +168,7 @@ async function HistoryList() {
               <span className="text-sm text-white group-hover:text-sky-300">
                 {plan.origin} → {plan.destination}
               </span>
-              <span className={`rounded px-2 py-0.5 text-[11px] ${badge.className}`}>
+              <span className={`rounded px-2 py-0.5 text-[12px] sm:text-[11px] ${badge.className}`}>
                 {badge.text}
               </span>
             </div>

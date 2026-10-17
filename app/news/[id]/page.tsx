@@ -240,7 +240,7 @@ export default async function NewsDetailPage({
             {/* AI 生成内容标识 —— 位于所有 AI 分析内容之前 */}
             <div className="mt-10 rounded-xl border border-gray-300 bg-gray-50 px-5 py-4">
               <p className="text-sm leading-7 text-gray-600">
-                <span className="rounded bg-black px-2 py-0.5 text-[10px] font-bold text-white">
+                <span className="rounded bg-black px-2 py-0.5 text-[12px] sm:text-[10px] font-bold text-white">
                   AI 生成
                 </span>
                 <span className="ml-2 font-bold text-gray-900">
@@ -333,7 +333,7 @@ export default async function NewsDetailPage({
 
               {/* 关注风险固定放侧栏：它是读者决策前最需要先看到的一条 */}
               <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-                <div className="text-[10px] font-bold tracking-[0.25em] text-gray-500 uppercase">
+                <div className="text-[12px] sm:text-[10px] font-bold tracking-[0.25em] text-gray-500 uppercase">
                   RISK
                 </div>
 
@@ -371,7 +371,7 @@ function SectionHeading({
 }) {
   return (
     <div>
-      <div className="text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
+      <div className="text-[12px] sm:text-[11px] font-bold tracking-[0.3em] text-gray-500 uppercase">
         {en}
       </div>
 
@@ -393,7 +393,7 @@ function InsightCard({
 }) {
   return (
     <div className="flex min-h-[220px] flex-col rounded-2xl border border-gray-200 bg-gray-50 p-6">
-      <div className="text-[10px] font-bold tracking-[0.25em] text-gray-500">
+      <div className="text-[12px] sm:text-[10px] font-bold tracking-[0.25em] text-gray-500">
         {label}
       </div>
 

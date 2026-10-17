@@ -80,7 +80,7 @@ export function NewBadge({ at }: { at: number | null | undefined }) {
 
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded-sm bg-red-600 px-1.5 py-0.5 text-[10px] leading-none font-bold tracking-wide text-white"
+      className="inline-flex shrink-0 items-center rounded-sm bg-red-600 px-1.5 py-0.5 text-[12px] sm:text-[10px] leading-none font-bold tracking-wide text-white"
       title="上次访问之后新增"
     >
       NEW
