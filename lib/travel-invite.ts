@@ -218,6 +218,24 @@ export async function consumeInvite(
   return record?.grantId ?? null;
 }
 
+/**
+ * 按 id 撤销未使用的码。
+ *
+ * 页面用这个 —— 列表接口不返回明文（库里只有哈希），前端拿不到码。
+ * 与 revokeInvite 的区别只是定位方式，撤销逻辑相同：
+ * 把 expiresAt 提前到当前时间，保留记录痕迹。
+ */
+export async function revokeInviteById(id: number): Promise<boolean> {
+  if (!Number.isInteger(id) || id <= 0) return false;
+
+  const result = await prisma.travelInvite.updateMany({
+    where: { id, usedAt: null },
+    data: { expiresAt: new Date(0) },
+  });
+
+  return result.count === 1;
+}
+
 /** 列出所有邀请码（不含明文与哈希） */
 export async function listInvites(): Promise<InviteRecord[]> {
   return prisma.travelInvite.findMany({

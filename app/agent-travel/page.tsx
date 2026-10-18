@@ -8,13 +8,12 @@ import TripPlannerForm from "@/components/agent-travel/TripPlannerForm";
 import { isRollingGoConfigured } from "@/lib/agents/travel/rollinggo";
 import { isVariflightConfigured } from "@/lib/agents/travel/variflight";
 import { summaryOf } from "@/lib/agents/travel/summary";
-import { isTravelProtected } from "@/lib/travel-access";
-import { isRequestAuthed } from "@/lib/travel-access-server";
+import { OWNER_GRANT, isTravelProtected } from "@/lib/travel-access";
+import { currentTravelGrant, isRequestAuthed } from "@/lib/travel-access-server";
 import TravelLogoutButton from "@/components/agent-travel/TravelLogoutButton";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
-import { currentTravelGrant } from "@/lib/travel-access-server";
 import { getTravelAIModel, isTravelAIEnabled } from "@/lib/agents/travel/ai";
 
 export const metadata: Metadata = {
@@ -206,6 +205,8 @@ export default async function TravelPage() {
    */
   const protectedMode = isTravelProtected();
   const authed = await isRequestAuthed();
+  // 只有维护者能看到「邀请码」入口 —— 好友既进不去，看到也只是困惑
+  const isOwner = (await currentTravelGrant()) === OWNER_GRANT;
 
   const historySlot = authed ? (
     <section>
@@ -257,6 +258,15 @@ export default async function TravelPage() {
           未登录时必须有这个入口 —— 否则想登录的人只能先填完整个表单
           再点「生成」，而「只是想看历史方案」的用户根本没有门可进。
         */}
+        {protectedMode && isOwner && (
+          <Link
+            href="/agent-travel/invites"
+            className="inline-flex items-center gap-1.5 rounded border border-gray-700 px-3 py-1.5 text-xs text-gray-300 transition hover:border-gray-500 hover:text-white"
+          >
+            邀请码
+          </Link>
+        )}
+
         {protectedMode &&
           (authed ? (
             <TravelLogoutButton />
