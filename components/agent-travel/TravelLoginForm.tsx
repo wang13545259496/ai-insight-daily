@@ -11,7 +11,11 @@ import { useState } from "react";
  */
 
 export default function TravelLoginForm({ next }: { next: string }) {
-  const [password, setPassword] = useState("");
+  /**
+   * 单个输入框，既可能是口令（维护者）也可能是邀请码（好友）。
+   * 由服务端按格式判断，用户不用关心自己是哪种身份。
+   */
+  const [credential, setCredential] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -27,7 +31,7 @@ export default function TravelLoginForm({ next }: { next: string }) {
       const res = await fetch("/api/travel/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, next }),
+        body: JSON.stringify({ credential, next }),
       });
 
       const data = (await res.json().catch(() => ({}))) as {
@@ -54,18 +58,19 @@ export default function TravelLoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={submit} className="w-full max-w-sm">
-      <label htmlFor="travel-password" className="block text-xs text-gray-400">
-        访问口令
+      <label htmlFor="travel-credential" className="block text-xs text-gray-400">
+        访问口令 / 邀请码
       </label>
 
       <input
-        id="travel-password"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        id="travel-credential"
+        type="text"
+        value={credential}
+        onChange={(e) => setCredential(e.target.value)}
         autoFocus
-        autoComplete="current-password"
-        placeholder="请输入口令"
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="口令，或 TRV-XXXX-XXXX"
         className="mt-2 w-full rounded border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition focus:border-sky-500"
       />
 
@@ -77,14 +82,16 @@ export default function TravelLoginForm({ next }: { next: string }) {
 
       <button
         type="submit"
-        disabled={pending || password.length === 0}
+        disabled={pending || credential.trim().length === 0}
         className="mt-4 w-full rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-400"
       >
         {pending ? "校验中…" : "进入"}
       </button>
 
-      <p className="mt-3 text-center text-xs text-gray-400">
-        口令由站点管理员设置，登录状态保持 30 天。
+      <p className="mt-3 text-center text-xs leading-relaxed text-gray-400">
+        邀请码只能使用一次，登录状态保持 1 天。
+        <br />
+        口令登录保持 30 天。
       </p>
     </form>
   );

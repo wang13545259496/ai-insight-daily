@@ -39,7 +39,7 @@ export default async function TravelLoginPage({
 
         <p className="mt-2 text-xs leading-relaxed text-gray-400">
           {protectedMode
-            ? "该模块需要访问口令。输入正确口令后可查看与生成行程方案。"
+            ? "输入访问口令或好友给你的邀请码，即可查看与生成行程方案。"
             : "当前未设置访问口令，该模块处于公开状态。"}
         </p>
 

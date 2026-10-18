@@ -17,7 +17,7 @@ import {
   peekRateLimit,
   resetRateLimits,
 } from "./travel-ratelimit";
-import { hashCode, normalizeCode } from "./travel-invite";
+import { hashCode, looksLikeInviteCode, normalizeCode } from "./travel-invite";
 
 /**
  * 好友身份、行程隔离、限流、邀请码归一化的测试。
@@ -250,6 +250,19 @@ describe("邀请码归一化", () => {
 
     assert.ok(!h.includes("7K2M"));
     assert.ok(!h.includes("TRV"));
+  });
+
+  it("能区分邀请码与口令", () => {
+    // 码：TRV + 8 位
+    assert.equal(looksLikeInviteCode("TRV-7K2M-9X4P"), true);
+    assert.equal(looksLikeInviteCode("trv7k2m9x4p"), true);
+    assert.equal(looksLikeInviteCode("  TRV 7K2M 9X4P  "), true);
+
+    // 口令：长度或前缀不符
+    assert.equal(looksLikeInviteCode("my-secret-password"), false);
+    assert.equal(looksLikeInviteCode("TRV-7K2M"), false, "太短");
+    assert.equal(looksLikeInviteCode("TRV-7K2M-9X4PQ"), false, "太长");
+    assert.equal(looksLikeInviteCode("ABC-7K2M-9X4P"), false, "前缀不对");
   });
 
   it("空输入也能归一化（不抛错）", () => {

@@ -132,6 +132,21 @@ export async function hashCode(code: string): Promise<string> {
 }
 
 /**
+ * 判断输入是否「看起来像邀请码」。
+ *
+ * 归一化后是 TRV + 8 位共 11 个字符。
+ * 登录表单只有一个输入框，靠这个区分「输的是码还是口令」——
+ * 让用户自己选「我是主人还是访客」会很别扭。
+ *
+ * 只做格式判断，不做有效性判断 —— 有效性由查表决定。
+ */
+export function looksLikeInviteCode(input: string): boolean {
+  const normalized = normalizeCode(input);
+
+  return normalized.length === CODE_PREFIX.length + CODE_LENGTH && normalized.startsWith(CODE_PREFIX);
+}
+
+/**
  * 生成一个新邀请码。
  *
  * @param options.note 备注（给谁的），便于核对

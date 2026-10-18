@@ -9,7 +9,7 @@ import {
   grantToken,
   verifyPassword,
 } from "@/lib/travel-access";
-import { consumeInvite } from "@/lib/travel-invite";
+import { consumeInvite, looksLikeInviteCode } from "@/lib/travel-invite";
 
 /**
  * 旅行模块的登录与注销。
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, message: "未启用访问口令" });
   }
 
-  let body: { password?: unknown; code?: unknown; next?: unknown };
+  let body: { credential?: unknown; password?: unknown; code?: unknown; next?: unknown };
 
   try {
     body = await request.json();
@@ -77,8 +77,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: "请求格式不正确" }, { status: 400 });
   }
 
-  const code = typeof body.code === "string" ? body.code.trim() : "";
-  const password = typeof body.password === "string" ? body.password : "";
+  /**
+   * 登录表单只有一个输入框，提交的是 credential。
+   * 这里按格式判断它是邀请码还是口令 ——
+   * 让用户自己选「我是主人还是访客」既多余又容易选错。
+   *
+   * 同时保留 code / password 两个字段，供脚本与测试直接调用。
+   */
+  const credential = typeof body.credential === "string" ? body.credential.trim() : "";
+
+  const code = credential
+    ? looksLikeInviteCode(credential)
+      ? credential
+      : ""
+    : typeof body.code === "string"
+      ? body.code.trim()
+      : "";
+
+  const password = credential
+    ? looksLikeInviteCode(credential)
+      ? ""
+      : credential
+    : typeof body.password === "string"
+      ? body.password
+      : "";
 
   // ---------- 邀请码登录 ----------
   if (code.length > 0) {
