@@ -46,6 +46,32 @@ export function getTravelAIModel(): string {
   return process.env.DEEPSEEK_MODEL || "deepseek-chat";
 }
 
+/**
+ * 关闭思考模式。
+ *
+ * ## 为什么必须关
+ *
+ * 2026-10-18 线上出现：生成行程后返回的是模板兜底内容
+ * （「早餐与出发准备」「首选景区」「景区周边」），而不是真实景点。
+ *
+ * 查 AI 用量日志发现：
+ *
+ *   {"in":3480,"out":8000,"reason":8000}
+ *
+ * `reason: 8000` —— 推理把 8000 的 max_tokens 全部吃光，正文 0 token。
+ * travelChat 拿到空字符串返回 null，planner 降级到确定性模板。
+ *
+ * 触发条件是 `DEEPSEEK_MODEL=deepseek-flash`（支持思考模式的模型）
+ * 而本文件没有关闭思考。`lib/ai-summary.ts` 早就处理过这个问题，
+ * 唯独旅行模块漏了。
+ *
+ * 行程编排是按提示词输出固定结构的 JSON，不依赖深度推理，
+ * 关掉思考既能出结果，又把单次成本降到约 1/3。
+ *
+ * OpenAI SDK 的类型定义里没有这个字段，但请求会透传给 DeepSeek。
+ */
+const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
+
 export interface TravelChatOptions {
   system: string;
   user: string;
@@ -75,6 +101,8 @@ export async function travelChat(options: TravelChatOptions): Promise<string | n
         model,
         temperature: options.temperature ?? 0.6,
         max_tokens: options.maxTokens ?? 8000,
+        // 不关思考时，推理会吃掉全部 max_tokens，正文为空
+        ...THINKING_DISABLED,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: options.system },
@@ -101,7 +129,21 @@ export async function travelChat(options: TravelChatOptions): Promise<string | n
         return text;
       }
 
-      console.warn("[travel] 模型返回空内容", { attempt, model });
+      /**
+       * 空内容有两种完全不同的原因，必须能从日志区分：
+       *
+       *   reasoning_tokens 顶到 max_tokens → 思考模式没关，推理吃光了预算
+       *   reasoning_tokens 很小              → 模型真的没话说，或提示词/内容有问题
+       *
+       * 不带 usage 的话，只能看到「返回空内容」，无法判断该改哪边。
+       */
+      console.warn("[travel] 模型返回空内容", {
+        attempt,
+        model,
+        maxTokens: options.maxTokens ?? 8000,
+        finishReason: response.choices?.[0]?.finish_reason,
+        usage: response.usage,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
 
