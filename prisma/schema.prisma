@@ -494,6 +494,17 @@ model TravelInvite {
   /** 使用时的来源 IP（只取尾段，够判断异常即可） */
   usedIp String?
 
+  /**
+   * 该码已被用于生成行程的次数。
+   *
+   * 额度跟着码走、不重置：一个码最多生成 10 次，用完就要新码。
+   *
+   * 为什么落库而不是放内存：内存计数在每次部署重启后清零，
+   * 而部署很频繁，等于限流形同虚设。落库配合
+   * `WHERE generations < N` 的条件自增，还能防并发超发。
+   */
+  generations Int @default(0)
+
   @@index([usedAt])
   @@index([expiresAt])
 }

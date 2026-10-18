@@ -12,12 +12,12 @@ import {
   travelToken,
 } from "./travel-access";
 import {
-  consumeRateLimit,
-  formatRetryAfter,
-  peekRateLimit,
-  resetRateLimits,
-} from "./travel-ratelimit";
-import { hashCode, looksLikeInviteCode, normalizeCode } from "./travel-invite";
+  INVITE_GENERATION_LIMIT,
+  hashCode,
+  looksLikeInviteCode,
+  normalizeCode,
+  quotaExceededMessage,
+} from "./travel-invite";
 
 /**
  * 好友身份、行程隔离、限流、邀请码归一化的测试。
@@ -35,8 +35,6 @@ beforeEach(() => {
 afterEach(() => {
   if (ORIGINAL === undefined) delete process.env.TRAVEL_PASSWORD;
   else process.env.TRAVEL_PASSWORD = ORIGINAL;
-
-  resetRateLimits();
 });
 
 /* ============================================================
@@ -159,59 +157,32 @@ describe("行程归属判定", () => {
 });
 
 /* ============================================================
- * 限流
+ * 生成额度
+ *
+ * 实际扣减在数据库里（lib/travel-invite.ts 的 consumeInviteQuota），
+ * 需要真实数据库，属于集成测试范围。
+ * 这里只测不依赖数据库的部分：常量与提示文案。
  * ============================================================ */
 
-describe("生成频率限制", () => {
-  it("默认每小时 5 次", () => {
-    const peek = peekRateLimit("gabc123");
-
-    assert.equal(peek.limit, 5);
-    assert.equal(peek.used, 0);
-    assert.equal(peek.allowed, true);
+describe("生成额度", () => {
+  it("默认每个码 10 次", () => {
+    assert.equal(INVITE_GENERATION_LIMIT, 10);
   });
 
-  it("用满 5 次后拒绝第 6 次", () => {
-    for (let i = 0; i < 5; i++) {
-      assert.equal(consumeRateLimit("gabc123").allowed, true);
-    }
+  it("额度用尽时不说「稍后再试」", () => {
+    const msg = quotaExceededMessage(10);
 
-    const sixth = consumeRateLimit("gabc123");
+    assert.ok(msg.includes("10"), "应包含具体次数");
+    assert.ok(msg.includes("用完"), "应说明已用完");
+    assert.ok(msg.includes("新码"), "应告诉对方怎么办");
 
-    assert.equal(sixth.allowed, false);
-    assert.equal(sixth.used, 5);
-    assert.ok(sixth.retryAfterMs > 0);
+    // 额度跟着码走、不重置 —— 说「稍后」会让人一直重试
+    assert.ok(!msg.includes("稍后"), "不应出现「稍后」");
+    assert.ok(!msg.includes("再试"), "不应出现「再试」");
   });
 
-  it("被拒绝的请求不消耗配额", () => {
-    for (let i = 0; i < 5; i++) consumeRateLimit("gabc123");
-
-    consumeRateLimit("gabc123");
-    consumeRateLimit("gabc123");
-
-    assert.equal(peekRateLimit("gabc123").used, 5);
-  });
-
-  it("不同身份互不影响", () => {
-    for (let i = 0; i < 5; i++) consumeRateLimit("gaaa");
-
-    assert.equal(consumeRateLimit("gaaa").allowed, false);
-    assert.equal(consumeRateLimit("gbbb").allowed, true);
-  });
-
-  it("reset 后恢复额度", () => {
-    for (let i = 0; i < 5; i++) consumeRateLimit("gabc123");
-
-    assert.equal(consumeRateLimit("gabc123").allowed, false);
-
-    resetRateLimits();
-
-    assert.equal(consumeRateLimit("gabc123").allowed, true);
-  });
-
-  it("等待时长文案可读", () => {
-    assert.ok(formatRetryAfter(30_000).includes("1 分钟"));
-    assert.ok(formatRetryAfter(10 * 60_000).includes("10 分钟"));
+  it("文案跟随传入的上限", () => {
+    assert.ok(quotaExceededMessage(3).includes("3 次"));
   });
 });
 

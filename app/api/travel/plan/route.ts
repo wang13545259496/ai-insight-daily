@@ -11,7 +11,7 @@ import {
 import { generateTravelPlan, type PlanProgressReporter } from "@/lib/agents/travel/planner";
 import { TravelValidationError } from "@/lib/agents/travel/validation";
 import { OWNER_GRANT } from "@/lib/travel-access";
-import { consumeRateLimit, formatRetryAfter } from "@/lib/travel-ratelimit";
+import { consumeInviteQuota, quotaExceededMessage } from "@/lib/travel-invite";
 import { travelGrantFromRequest } from "@/lib/travel-access-server";
 
 /**
@@ -65,20 +65,23 @@ export async function POST(request: Request) {
   }
 
   /**
-   * 频率限制：一次行程规划约 ¥0.02–0.03，是新闻摘要的 5–7 倍。
+   * 生成额度：一次行程规划约 ¥0.02–0.03，是新闻摘要的 5–7 倍。
    * 维护者不受限 —— 这条限制防的是「别人的使用变成不可控账单」。
+   *
+   * 额度跟着邀请码走、不重置，所以提示语不能说「稍后再试」——
+   * 等多久都不会恢复，那样写会让用户一直重试。
    */
   if (grantId !== OWNER_GRANT) {
-    const limit = consumeRateLimit(grantId);
+    const quota = await consumeInviteQuota(grantId);
 
-    if (!limit.allowed) {
+    if (!quota.allowed) {
       return NextResponse.json(
         {
           success: false,
-          message: `生成太频繁，请${formatRetryAfter(limit.retryAfterMs)}后再试`,
-          code: "TRAVEL_RATE_LIMITED",
-          limit: limit.limit,
-          used: limit.used,
+          message: quotaExceededMessage(quota.limit),
+          code: "TRAVEL_QUOTA_EXCEEDED",
+          limit: quota.limit,
+          used: quota.used,
         },
         { status: 429 },
       );

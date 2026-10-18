@@ -41,8 +41,82 @@ const CODE_LENGTH = 8;
 /** 展示用前缀。参与哈希，避免与其它用途的哈希撞车 */
 const CODE_PREFIX = "TRV";
 
-/** 默认有效期（天） */
+/** 默认有效期（天）。控制「未使用的码何时作废」 */
 export const DEFAULT_INVITE_DAYS = 1;
+
+/**
+ * 每个邀请码允许生成的行程次数。
+ *
+ * 跟着码走、不重置：用完就要新码。
+ * 改这个值只影响之后的判断，不会追溯已经用掉的量。
+ */
+export const INVITE_GENERATION_LIMIT = 10;
+
+/** 额度查询/消耗的结果 */
+export interface QuotaResult {
+  allowed: boolean;
+  used: number;
+  limit: number;
+}
+
+/**
+ * 额度用尽时的提示文案。
+ *
+ * 与「频率限制」的措辞刻意不同：这里不是「稍后再试」，
+ * 而是**这个码的额度永久用完了** —— 等多久都不会恢复。
+ * 如果写成「请 X 分钟后再试」，用户会一直重试。
+ */
+export function quotaExceededMessage(limit: number = INVITE_GENERATION_LIMIT): string {
+  return `本次邀请码的 ${limit} 次生成额度已用完，需要更多请找维护者要新码。`;
+}
+
+/**
+ * 查询某身份已用掉的额度。
+ *
+ * @returns 找不到该身份时 used 为 0（例如维护者没有对应的邀请码记录）
+ */
+export async function getInviteQuota(
+  grantId: string,
+  limit: number = INVITE_GENERATION_LIMIT,
+): Promise<QuotaResult> {
+  const row = await prisma.travelInvite.findUnique({
+    where: { grantId },
+    select: { generations: true },
+  });
+
+  const used = row?.generations ?? 0;
+
+  return { allowed: used < limit, used, limit };
+}
+
+/**
+ * 消耗一次生成额度。
+ *
+ * 用条件自增而不是「先查再改」：两个请求同时到达时，
+ * 只有第一个能让 `generations < limit` 成立，第二个影响行数为 0。
+ *
+ * @param grantId 身份标识（对应 TravelInvite.grantId）
+ */
+export async function consumeInviteQuota(
+  grantId: string,
+  limit: number = INVITE_GENERATION_LIMIT,
+): Promise<QuotaResult> {
+  const claimed = await prisma.travelInvite.updateMany({
+    where: { grantId, generations: { lt: limit } },
+    data: { generations: { increment: 1 } },
+  });
+
+  if (claimed.count !== 1) {
+    // 没抢到：要么额度用尽，要么该身份不对应任何邀请码
+    const current = await getInviteQuota(grantId, limit);
+
+    return { allowed: false, used: current.used, limit };
+  }
+
+  const after = await getInviteQuota(grantId, limit);
+
+  return { allowed: true, used: after.used, limit };
+}
 
 /** 邀请码记录（对外返回时不含 codeHash） */
 export interface InviteRecord {

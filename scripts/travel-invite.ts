@@ -130,7 +130,7 @@ async function main() {
   console.log("");
   console.log(`  备注：    ${opts.note}`);
   console.log(`  有效期：  ${days} 天（到 ${fmt(invite.expiresAt)}）`);
-  console.log(`  登录后：  会话 1 天，每小时最多生成 5 次行程`);
+  console.log(`  登录后：  会话 1 天，该码最多生成 10 次行程`);
   console.log("");
   console.log("  把码发给对方，让他打开 https://aibiliai.com/agent-travel/login");
   console.log("  码只能用一次，用掉就作废 —— 转发给别人也没用。");

@@ -71,7 +71,7 @@ export default async function TravelInvitesPage() {
 
       <p className="mt-2 text-xs leading-relaxed text-gray-400">
         好友用邀请码登录旅行模块，登录后只能看到自己生成的行程，
-        每小时最多生成 5 次。码只用一次，兑换后立即失效。
+        每个邀请码最多生成 10 次。码只用一次，兑换后立即失效。
       </p>
 
       <div className="mt-8">

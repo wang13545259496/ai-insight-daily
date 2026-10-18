@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { DEFAULT_HOURLY_LIMIT } from "@/lib/travel-ratelimit";
+import { INVITE_GENERATION_LIMIT } from "@/lib/travel-invite";
 
 /**
  * 邀请码管理面板。
@@ -221,16 +221,14 @@ export default function InviteManager() {
   /**
    * 分享文案。
    *
-   * 天数用中文「一天」而不是「1 天」—— 这段文字是直接粘到微信里的，
-   * 「有效期一天」读起来更自然。
+   * 只讲收码人需要知道的两件事：去哪输、能用几次。
+   * 有效期在生成页上标着，不写进分享文字 —— 多一句就多一分被忽略的可能。
    *
-   * 次数从 DEFAULT_HOURLY_LIMIT 取而不是写死 5 ——
-   * 将来调限流时文案自动跟着变，不会出现「文案说 5 次、实际 10 次」。
+   * 次数从 INVITE_GENERATION_LIMIT 取而不是写死，
+   * 避免「文案说 10 次、实际 5 次」这种漂移。
    */
-  const daysText = generated?.days === 1 ? "一天" : `${generated?.days ?? 1}天`;
-
   const shareText = generated
-    ? `AI 出行管家邀请码：${generated.code}\n打开 https://aibiliai.com/agent-travel/login 输入邀请码，有效期${daysText}，每小时最多生成${DEFAULT_HOURLY_LIMIT}次。`
+    ? `AI 出行管家邀请码：${generated.code}\n打开 https://aibiliai.com/agent-travel/login 输入邀请码，每个邀请码最多生成${INVITE_GENERATION_LIMIT}次。`
     : "";
 
   return (
