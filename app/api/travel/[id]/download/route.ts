@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { getPlanById } from "@/lib/agents/travel/data";
+import { getPlanById, getPlanOwnerGrant } from "@/lib/agents/travel/data";
 import { buildPlanDocument, documentFileName } from "@/lib/agents/travel/export";
 import type { ExportOptions } from "@/lib/agents/travel/export";
 import { renderPlanDocx } from "@/lib/agents/travel/exportDocx";
 import { fetchDayMapImages } from "@/lib/agents/travel/exportImages";
-import { requireTravelAccess } from "@/lib/travel-access-server";
+import { canAccessPlan } from "@/lib/travel-access";
+import { travelGrantFromRequest } from "@/lib/travel-access-server";
 
 /**
  * 旅行方案下载。
@@ -42,9 +43,14 @@ function parseOptions(url: URL): ExportOptions {
 }
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireTravelAccess(request);
+  const grantId = await travelGrantFromRequest(request);
 
-  if (denied) return denied;
+  if (!grantId) {
+    return NextResponse.json(
+      { success: false, message: "需要访问口令", code: "TRAVEL_AUTH_REQUIRED" },
+      { status: 401 },
+    );
+  }
 
   const { id } = await context.params;
   const numericId = Number(id);
@@ -54,6 +60,13 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   }
 
   try {
+    // 下载同样要校验归属：否则知道 id 就能导出别人的完整行程
+    const ownerGrant = await getPlanOwnerGrant(numericId);
+
+    if (!canAccessPlan(grantId, ownerGrant)) {
+      return NextResponse.json({ success: false, message: "方案不存在" }, { status: 404 });
+    }
+
     const plan = await getPlanById(numericId);
 
     if (!plan) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { TRAVEL_COOKIE, accessCookieOptions, isTravelAuthed, isTravelProtected } from "./lib/travel-access";
+import { TRAVEL_COOKIE, accessCookieOptions, isTravelProtected, parseGrant } from "./lib/travel-access";
 
 /**
  * Next.js 16 起 middleware 更名为 proxy，文件名与导出名都必须使用 proxy。
@@ -81,7 +81,11 @@ export async function proxy(request: NextRequest) {
   if (isTravelPage(pathname) && isTravelProtected()) {
     const cookie = request.cookies.get(TRAVEL_COOKIE)?.value;
 
-    if (cookie && (await isTravelAuthed(cookie))) {
+    // 解析出身份：续期时要按身份决定有效期 ——
+    // 维护者 30 天，好友 1 天。都用默认值会把好友的会话续成 30 天。
+    const grantId = await parseGrant(cookie);
+
+    if (cookie && grantId) {
       /**
        * 为什么需要显式续期：Cookie 的过期时间只在设置它的那一刻确定，
        * 浏览器不会因为"一直在用"而自动延后。若不重设，
@@ -91,7 +95,7 @@ export async function proxy(request: NextRequest) {
        */
       const response = NextResponse.next();
 
-      renewAccessCookie(response, cookie);
+      renewAccessCookie(response, cookie, grantId);
 
       return response;
     }
@@ -120,6 +124,11 @@ export const config = {
  *
  * @param value 当前 Cookie 值（已通过校验，必定非空）
  */
-function renewAccessCookie(response: NextResponse, value: string): void {
-  response.cookies.set(TRAVEL_COOKIE, value, accessCookieOptions());
+function renewAccessCookie(
+  response: NextResponse,
+  value: string,
+  grantId: string,
+): void {
+  // 有效期跟着身份走：好友续期后仍是 1 天，不会因为反复访问被续成 30 天
+  response.cookies.set(TRAVEL_COOKIE, value, accessCookieOptions(grantId));
 }

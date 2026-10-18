@@ -10,7 +10,9 @@ import {
 } from "@/lib/agents/travel/data";
 import { generateTravelPlan, type PlanProgressReporter } from "@/lib/agents/travel/planner";
 import { TravelValidationError } from "@/lib/agents/travel/validation";
-import { requireTravelAccess } from "@/lib/travel-access-server";
+import { OWNER_GRANT } from "@/lib/travel-access";
+import { consumeRateLimit, formatRetryAfter } from "@/lib/travel-ratelimit";
+import { travelGrantFromRequest } from "@/lib/travel-access-server";
 
 /**
  * 旅行方案接口。
@@ -45,10 +47,43 @@ export async function POST(request: Request) {
   /**
    * 访问校验放在最前：生成行程会消耗模型与地图配额，
    * 必须在做任何工作之前拦截，而不是等流式输出开始后才发现未授权。
+   *
+   * 这里取的是「身份」而不只是「有没有登录」——
+   * 后面的行程隔离与限流都要知道是谁。
    */
-  const denied = await requireTravelAccess(request);
+  const grantId = await travelGrantFromRequest(request);
 
-  if (denied) return denied;
+  if (!grantId) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "需要访问口令",
+        code: "TRAVEL_AUTH_REQUIRED",
+      },
+      { status: 401 },
+    );
+  }
+
+  /**
+   * 频率限制：一次行程规划约 ¥0.02–0.03，是新闻摘要的 5–7 倍。
+   * 维护者不受限 —— 这条限制防的是「别人的使用变成不可控账单」。
+   */
+  if (grantId !== OWNER_GRANT) {
+    const limit = consumeRateLimit(grantId);
+
+    if (!limit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `生成太频繁，请${formatRetryAfter(limit.retryAfterMs)}后再试`,
+          code: "TRAVEL_RATE_LIMITED",
+          limit: limit.limit,
+          used: limit.used,
+        },
+        { status: 429 },
+      );
+    }
+  }
 
   let body: unknown;
 
@@ -69,11 +104,11 @@ export async function POST(request: Request) {
   const wantsStream = (request.headers.get("accept") ?? "").includes("application/x-ndjson");
 
   if (wantsStream) {
-    return streamPlan(payload);
+    return streamPlan(payload, grantId);
   }
 
   try {
-    const result = await runGenerate(payload);
+    const result = await runGenerate(payload, grantId);
 
     return NextResponse.json(result);
   } catch (error) {
@@ -97,7 +132,7 @@ export async function POST(request: Request) {
  * 用 NDJSON 而不是 SSE：POST 请求用 SSE 需要 EventSource，而它不支持
  * POST，改用 fetch + ReadableStream 读 NDJSON 更直接，也不需要心跳包。
  */
-function streamPlan(payload: Record<string, unknown>): Response {
+function streamPlan(payload: Record<string, unknown>, grantId: string): Response {
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
       let closed = false;
@@ -127,7 +162,7 @@ function streamPlan(payload: Record<string, unknown>): Response {
       }, STREAM_TIMEOUT_MS);
 
       try {
-        const result = await runGenerate(payload, onProgress);
+        const result = await runGenerate(payload, grantId, onProgress);
 
         clearTimeout(timer);
         push({ type: "done", ...result });
@@ -180,6 +215,7 @@ function toErrorPayload(error: unknown): {
  */
 async function runGenerate(
   payload: Record<string, unknown>,
+  ownerGrant: string,
   onProgress?: PlanProgressReporter,
 ): Promise<{
   success: true;
@@ -189,7 +225,12 @@ async function runGenerate(
   warnings: string[];
   deduplicated: boolean;
 }> {
-  const { plan, warnings, fingerprint } = await generateTravelPlan(payload, new Date(), onProgress);
+  const { plan, warnings, fingerprint } = await generateTravelPlan(
+    payload,
+    new Date(),
+    onProgress,
+    ownerGrant,
+  );
 
   const quoteMode = resolveQuoteMode(plan);
 
@@ -208,7 +249,7 @@ async function runGenerate(
       warnings.push("该需求已有历史方案，本次已用最新生成结果替换旧记录");
     }
 
-    id = await savePlan({ plan, quoteMode });
+    id = await savePlan({ plan, quoteMode, ownerGrant });
   } catch (error) {
     // 落库失败不应让用户丢掉刚生成的方案：照常返回，仅提示未保存
     console.error("[travel] 方案落库失败", { error: String(error) });
@@ -223,8 +264,21 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const limitParam = Number(url.searchParams.get("limit") ?? "20");
 
+  // 历史列表必须按身份过滤：好友只能看到自己生成的方案
+  const grantId = await travelGrantFromRequest(request);
+
+  if (!grantId) {
+    return NextResponse.json(
+      { success: false, message: "需要访问口令", code: "TRAVEL_AUTH_REQUIRED" },
+      { status: 401 },
+    );
+  }
+
   try {
-    const items = await listPlans(Number.isFinite(limitParam) ? limitParam : 20);
+    const items = await listPlans(
+      Number.isFinite(limitParam) ? limitParam : 20,
+      grantId,
+    );
 
     return NextResponse.json({ success: true, data: items, total: items.length });
   } catch (error) {

@@ -12,6 +12,8 @@
 
 import OpenAI from "openai";
 
+import { recordUsage } from "@/lib/ai-summary";
+
 const apiKey = process.env.DEEPSEEK_API_KEY;
 
 let client = apiKey
@@ -79,6 +81,19 @@ export async function travelChat(options: TravelChatOptions): Promise<string | n
           { role: "user", content: options.user },
         ],
       });
+
+      /**
+       * 记录 token 用量。
+       *
+       * 旅行生成是站内最贵的 AI 调用（max_tokens 8000，
+       * 单次约 ¥0.02–0.03，是新闻摘要的 5–7 倍）。
+       * 改造前完全不记录，账单涨了看不出是谁花的 ——
+       * 加上之后 ai-usage.log 里能按时间对上是哪一次行程。
+       *
+       * 注意：这里记的是「一次模型调用」，不是「一份方案」。
+       * 失败重试会调两次，因此可能出现方案数少于调用数的情况。
+       */
+      recordUsage(model, response.usage);
 
       const text = response.choices?.[0]?.message?.content?.trim();
 

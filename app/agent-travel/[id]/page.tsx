@@ -4,7 +4,9 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import PlanView from "@/components/agent-travel/PlanView";
-import { getPlanById } from "@/lib/agents/travel/data";
+import { getPlanById, getPlanOwnerGrant } from "@/lib/agents/travel/data";
+import { canAccessPlan } from "@/lib/travel-access";
+import { currentTravelGrant } from "@/lib/travel-access-server";
 
 /** 依赖数据库，按请求渲染 */
 export const dynamic = "force-dynamic";
@@ -52,6 +54,14 @@ export default async function TravelPlanDetailPage({
   const numericId = parseId(id);
 
   if (numericId === null) {
+    notFound();
+  }
+
+  // 归属校验：不是自己的方案按「不存在」处理（notFound 而不是 403）
+  const grantId = await currentTravelGrant();
+  const ownerGrant = await getPlanOwnerGrant(numericId);
+
+  if (!canAccessPlan(grantId, ownerGrant)) {
     notFound();
   }
 

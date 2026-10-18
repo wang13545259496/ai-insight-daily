@@ -1,7 +1,13 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { TRAVEL_COOKIE, hasValidAccess, isTravelAuthed } from "./travel-access";
+import {
+  OWNER_GRANT,
+  TRAVEL_COOKIE,
+  hasValidAccess,
+  isTravelProtected,
+  parseGrant,
+} from "./travel-access";
 
 /**
  * 旅行接口与服务端组件的访问校验。
@@ -10,12 +16,13 @@ import { TRAVEL_COOKIE, hasValidAccess, isTravelAuthed } from "./travel-access";
  * 在 Proxy 层统一拦截会让「已开始输出后才发现未授权」难以处理。
  * 接口内校验可以在写入任何数据前就返回 401。
  *
- * 用法（接口）：
- *   const denied = await requireTravelAccess(request);
- *   if (denied) return denied;
+ * ## 两种查询方式
  *
- * 用法（服务端组件）：
- *   const authed = await isRequestAuthed();
+ *   requireTravelAccess(request)  只判断有没有登录（返回 401 或 null）
+ *   travelGrantFromRequest(request)  拿到身份，用于行程隔离与限流
+ *
+ * 需要区分身份的接口（生成、列表、详情）用后者 ——
+ * 因为「已登录」还不够，得知道是谁，才能决定他能看到哪些数据。
  */
 
 /** 从 Cookie 头里取指定名字的值 */
@@ -37,6 +44,22 @@ export function readCookie(header: string, name: string): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * 从请求里解析出身份。
+ *
+ * @returns 身份标识；未登录或签名不合法时为 null。
+ *          未启用口令保护时返回 OWNER_GRANT —— 此时不存在登录，
+ *          所有人都按「维护者」对待，与改造前的行为一致。
+ */
+export async function travelGrantFromRequest(request: Request): Promise<string | null> {
+  if (!isTravelProtected()) return OWNER_GRANT;
+
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const value = readCookie(cookieHeader, TRAVEL_COOKIE);
+
+  return parseGrant(value);
 }
 
 /** 接口用：未通过校验时返回 401 响应，通过则返回 null */
@@ -68,5 +91,17 @@ export async function requireTravelAccess(request: Request): Promise<NextRespons
 export async function isRequestAuthed(): Promise<boolean> {
   const store = await cookies();
 
-  return isTravelAuthed(store.get(TRAVEL_COOKIE)?.value);
+  return parseGrant(store.get(TRAVEL_COOKIE)?.value) !== null;
+}
+
+/**
+ * 服务端组件用：拿到当前访问者身份。
+ *
+ * 页面据此决定「历史方案列表显示哪些」——
+ * 好友只看自己的，维护者看全部。
+ */
+export async function currentTravelGrant(): Promise<string | null> {
+  const store = await cookies();
+
+  return parseGrant(store.get(TRAVEL_COOKIE)?.value);
 }

@@ -163,6 +163,15 @@ export async function generateTravelPlan(
   input: unknown,
   now: Date = new Date(),
   onProgress: PlanProgressReporter = noopProgress,
+  /**
+   * 生成者身份。用于：
+   *   · 指纹带上身份 —— 不同人提交相同需求要能各存一份，
+   *     否则会命中别人的方案（泄露）或撞唯一索引
+   *   · 落库时写入 ownerGrant，供列表按身份过滤
+   *
+   * 缺省为 null，等价于维护者 —— 保持无口令模式与既有测试的行为不变。
+   */
+  ownerGrant?: string | null,
 ): Promise<GeneratePlanResult> {
   // ---------- 1. 校验 ----------
   onProgress("validate", "正在校验行程参数");
@@ -170,7 +179,7 @@ export async function generateTravelPlan(
   const { query, warnings: validationWarnings } = normalizeTripQuery(input);
 
   // 需求指纹：与数据层落库时使用同一算法，保证「生成」与「去重」判定一致
-  const fingerprint = computeFingerprint(query);
+  const fingerprint = computeFingerprint(query, ownerGrant);
 
   const duration = resolveDuration(query.departDate, query.returnDate);
 

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { getPlanById } from "@/lib/agents/travel/data";
-import { requireTravelAccess } from "@/lib/travel-access-server";
+import { getPlanById, getPlanOwnerGrant } from "@/lib/agents/travel/data";
+import { canAccessPlan } from "@/lib/travel-access";
+import { travelGrantFromRequest } from "@/lib/travel-access-server";
 
 /**
  * 单份旅行方案接口。
@@ -13,9 +14,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  const denied = await requireTravelAccess(request);
+  const grantId = await travelGrantFromRequest(request);
 
-  if (denied) return denied;
+  if (!grantId) {
+    return NextResponse.json(
+      { success: false, message: "需要访问口令", code: "TRAVEL_AUTH_REQUIRED" },
+      { status: 401 },
+    );
+  }
 
   const { id } = await context.params;
   const numericId = Number(id);
@@ -25,6 +31,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   }
 
   try {
+    // 先查归属再取内容：不是自己的一律按「不存在」处理，
+    // 避免用 403 泄露「这个 id 确实有方案」
+    const ownerGrant = await getPlanOwnerGrant(numericId);
+
+    if (!canAccessPlan(grantId, ownerGrant)) {
+      return NextResponse.json({ success: false, message: "方案不存在" }, { status: 404 });
+    }
+
     const plan = await getPlanById(numericId);
 
     if (!plan) {

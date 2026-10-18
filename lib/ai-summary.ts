@@ -215,7 +215,7 @@ const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
  * 写到 logs/ai-usage.log，每行一条 JSON。写失败不影响分析结果 ——
  * 统计是次要功能，不能因为它出问题就让整条新闻分析失败。
  */
-function recordUsage(model: string, usage: unknown) {
+export function recordUsage(model: string, usage: unknown) {
   try {
     const u = usage as {
       prompt_tokens?: number;

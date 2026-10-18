@@ -14,6 +14,7 @@ import TravelLogoutButton from "@/components/agent-travel/TravelLogoutButton";
 import { isAmapConfigured } from "@/lib/agents/travel/amap";
 import { supportedCityCount } from "@/lib/agents/travel/cities";
 import { listPlans } from "@/lib/agents/travel/data";
+import { currentTravelGrant } from "@/lib/travel-access-server";
 import { getTravelAIModel, isTravelAIEnabled } from "@/lib/agents/travel/ai";
 
 export const metadata: Metadata = {
@@ -134,7 +135,8 @@ async function HistoryList() {
   let plans: Awaited<ReturnType<typeof listPlans>> = [];
 
   try {
-    plans = await listPlans(8);
+    // 按访问者身份过滤：好友只看自己的，维护者看全部
+    plans = await listPlans(8, await currentTravelGrant());
   } catch (error) {
     console.error("[travel] 历史方案读取失败", { error: String(error) });
 

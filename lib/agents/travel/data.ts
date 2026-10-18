@@ -19,6 +19,8 @@ export type QuoteMode = "live" | "partial" | "estimate";
 export interface SavePlanInput {
   plan: TravelPlan;
   quoteMode: QuoteMode;
+  /** 生成者身份。用于行程隔离，缺省视为维护者 */
+  ownerGrant?: string | null;
 }
 
 /**
@@ -31,8 +33,11 @@ export interface SavePlanInput {
  * 为什么需要它：一次生成要调用一次大模型并发出数十次高德请求，
  * 用户连点两次或刷新重试会造成重复消耗。指纹让重复提交直接命中已有方案。
  */
-export function computeFingerprint(query: TripQuery): string {
+export function computeFingerprint(query: TripQuery, ownerGrant?: string | null): string {
   const normalized = JSON.stringify({
+    // 身份进指纹：见本文件顶部注释。不同人提交相同需求必须能各存一份，
+    // 否则会命中别人的方案（泄露）或因唯一索引冲突而存不进去。
+    g: ownerGrant ?? null,
     o: query.origin.trim().toLowerCase(),
     d: query.destination.trim().toLowerCase(),
     dd: query.departDate,
@@ -85,6 +90,24 @@ export async function deletePlanById(id: number): Promise<void> {
   await prisma.tripPlan.deleteMany({ where: { id } });
 }
 
+/**
+ * 读取某条方案的归属身份。
+ *
+ * 详情页与下载接口用它判断「这个人能不能看这条」——
+ * null 表示改造前的历史数据，只有维护者可以访问。
+ */
+export async function getPlanOwnerGrant(id: number): Promise<string | null | undefined> {
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+
+  const record = await prisma.tripPlan.findUnique({
+    where: { id },
+    select: { ownerGrant: true },
+  });
+
+  // undefined 表示记录不存在，与「存在但归属为 null」区分开
+  return record ? record.ownerGrant : undefined;
+}
+
 /** 判定报价来源：区分「全部真实」「部分真实」「全为估算」 */
 export function resolveQuoteMode(plan: TravelPlan): QuoteMode {
   const flightLive = plan.quotes.flight?.confidence === "live";
@@ -121,7 +144,8 @@ export async function savePlan(input: SavePlanInput): Promise<number> {
       quoteMode,
       generatedByAI: plan.generatedByAI,
       model: plan.model ?? null,
-      fingerprint: computeFingerprint(query),
+      ownerGrant: input.ownerGrant ?? null,
+      fingerprint: computeFingerprint(query, input.ownerGrant),
     },
     select: { id: true },
   });
@@ -176,11 +200,25 @@ export async function getPlanById(id: number): Promise<TravelPlan | null> {
   }
 }
 
-/** 读取列表，按创建时间倒序 */
-export async function listPlans(limit = 20): Promise<TripPlanListItem[]> {
+/**
+ * 读取列表，按创建时间倒序。
+ *
+ * @param limit 条数上限
+ * @param grantId 访问者身份。维护者传 null/OWNER_GRANT 表示不过滤；
+ *                好友只返回自己生成的方案（ownerGrant 为 null 的历史数据不可见）
+ */
+export async function listPlans(
+  limit = 20,
+  grantId?: string | null,
+): Promise<TripPlanListItem[]> {
   const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 100);
 
+  // 只有维护者能看全部。这里用「是否等于 owner」而不是「是否为 null」判断，
+  // 避免调用方漏传参数时意外放开全部数据。
+  const isOwner = !grantId || grantId === "owner";
+
   const records = await prisma.tripPlan.findMany({
+    ...(isOwner ? {} : { where: { ownerGrant: grantId } }),
     orderBy: { createdAt: "desc" },
     take: safeLimit,
     select: {

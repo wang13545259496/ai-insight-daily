@@ -423,6 +423,18 @@ model TripPlan {
   // 需求指纹：同一需求重复提交时用于去重
   fingerprint String?
 
+  /**
+   * 生成者的身份（见 lib/travel-access.ts 的 grantId）。
+   *
+   *   "owner"  维护者本人
+   *   "gXXXX"  某个好友（对应 TravelInvite.grantId）
+   *   null     改造前的历史数据
+   *
+   * 隔离规则：好友只能看到 ownerGrant 等于自己身份的方案；
+   * 维护者不过滤，能看到全部（含 null 的历史数据）。
+   */
+  ownerGrant String?
+
   createdAt DateTime @default(now())
 
   updatedAt DateTime @default(now()) @updatedAt
@@ -436,6 +448,54 @@ model TripPlan {
   // 同一需求只保留一条方案
   @@unique([fingerprint])
 
+}
+
+// ==============================================================
+// 旅行模块的一次性邀请码（2026-10-18 新增）
+//
+// 背景：原先只有一个共享口令 TRAVEL_PASSWORD，拿到的人都能登录，
+// 而且所有人都看到彼此的行程。给朋友用之后需要：
+//   · 码只能用一次 —— 转发给别人也没用
+//   · 区分身份 —— 好友之间互相看不到对方的行程
+//   · 能追溯 —— 知道哪个码是谁在用
+//
+// 为什么存哈希不存明文：数据库泄露时，明文码可以直接拿去登录。
+// 存 SHA-256 后即使拿到库也用不了。
+//
+// 为什么不存明文也够用：码只在生成那一刻展示一次，
+// 维护者把它发给朋友，之后服务端只做「算哈希 → 查表」。
+// ==============================================================
+
+model TravelInvite {
+  id Int @id @default(autoincrement())
+
+  /** 码的 SHA-256（十六进制）。永不存明文 */
+  codeHash String @unique
+
+  /**
+   * 该码兑换出的身份标识，写进 Cookie。
+   *
+   * 用随机十六进制而不是自增 id：Cookie 里是明文，
+   * 自增 id 会暴露「一共有多少个好友」这类信息。
+   */
+  grantId String @unique
+
+  /** 备注：给谁的。便于核对 */
+  note String?
+
+  createdAt DateTime @default(now())
+
+  /** 过期时间。未使用的码到期后作废 */
+  expiresAt DateTime
+
+  /** 使用时间。null 表示未使用 */
+  usedAt DateTime?
+
+  /** 使用时的来源 IP（只取尾段，够判断异常即可） */
+  usedIp String?
+
+  @@index([usedAt])
+  @@index([expiresAt])
 }
 
 // ==============================================================
