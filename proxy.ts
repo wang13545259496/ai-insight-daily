@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { TRAVEL_COOKIE, accessCookieOptions, isTravelProtected, parseGrant } from "./lib/travel-access";
+import { OWNER_GRANT, TRAVEL_COOKIE, accessCookieOptions, isTravelProtected, parseGrant } from "./lib/travel-access";
 
 /**
  * Next.js 16 起 middleware 更名为 proxy，文件名与导出名都必须使用 proxy。
@@ -37,6 +37,17 @@ const TRAVEL_LOGIN_PATH = "/agent-travel/login";
  * 不再用于拦截，只用于判断「是否需要检查续期」——
  * 登录页本身不必续期（那时还没登录）。
  */
+/**
+ * 是否为邀请码管理页。
+ *
+ * 这个页面只允许维护者访问，且必须在**渲染之前**就拒绝 ——
+ * 页面内的 redirect()/notFound() 在流式输出开始后改不了状态码，
+ * 只能靠浏览器端跳转，curl 和服务端日志看到的仍是 200。
+ */
+function isTravelInvitesPath(pathname: string): boolean {
+  return pathname === "/agent-travel/invites" || pathname.startsWith("/agent-travel/invites/");
+}
+
 function isTravelPage(pathname: string): boolean {
   if (pathname === TRAVEL_LOGIN_PATH) return false;
 
@@ -84,6 +95,28 @@ export async function proxy(request: NextRequest) {
     // 解析出身份：续期时要按身份决定有效期 ——
     // 维护者 30 天，好友 1 天。都用默认值会把好友的会话续成 30 天。
     const grantId = await parseGrant(cookie);
+
+    /**
+     * 邀请码管理页：仅维护者。
+     *
+     * 放在续期之前，且返回真正的 307 / 404 ——
+     * 页面内的检查在流式渲染开始后无法改变状态码。
+     */
+    if (isTravelInvitesPath(pathname)) {
+      if (!grantId) {
+        const loginUrl = request.nextUrl.clone();
+
+        loginUrl.pathname = "/agent-travel/login";
+        loginUrl.search = "?next=/agent-travel/invites";
+
+        return NextResponse.redirect(loginUrl);
+      }
+
+      // 好友访问按「不存在」处理，不暴露管理页的存在
+      if (grantId !== OWNER_GRANT) {
+        return new NextResponse("Not Found", { status: 404 });
+      }
+    }
 
     if (cookie && grantId) {
       /**
