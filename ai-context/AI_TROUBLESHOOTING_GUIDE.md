@@ -121,6 +121,13 @@ HTTPS。
 
 # 一之二、网站间歇性打不开（2026-10-17 排查记录）
 
+> **⚠️ 本节描述的是迁移前（家用电脑 + Cloudflare 隧道）的架构。**
+>
+> 2026-10-18 已迁移到阿里云东京，直连 A 记录、不经 Cloudflare 代理，
+> 本节的问题 A 和问题 B 都不再存在。保留此节是因为排查思路仍有参考价值。
+>
+> 现在的架构见 [`MIGRATION_COMPLETED.md`](./MIGRATION_COMPLETED.md)。
+
 ## 现象
 
 - 有时能开、有时打不开，无明显规律
@@ -214,6 +221,100 @@ curl -6 -s -o /dev/null -m 8 -w 'v6: %{http_code}\n' https://aibiliai.com/
 - **不要以为「服务 active」就代表参数生效** ——
   `systemctl start` 对运行中的服务是空操作，
   必须核对 `ps aux | grep cloudflared` 的实际命令行
+
+---
+
+# 一之三、改了 DNS 后本地打不开（本机 / 路由器 DNS 缓存）
+
+## 现象
+
+改完 Cloudflare 的 DNS 记录（换 IP、加子域名、删记录）后：
+
+- **公网 DNS 解析已经正确**
+- 但**本机**打不开，报错有三种形态
+
+| 报错 | 场景 |
+| --- | --- |
+| Cloudflare `Error 1016 · Origin DNS error` | 记录已删，但请求仍发往 Cloudflare |
+| Cloudflare `Error 522` | 换 IP 后本机仍访问旧的 Cloudflare 地址 |
+| 浏览器「找不到网站」 | 加了记录但本机还认为域名不存在 |
+
+## 根因：DNS 负缓存
+
+本机用的是路由器 DNS（`192.168.1.1`），它缓存了旧结果。
+
+DNS 不只有正缓存，还有**负缓存** —— 查询一个不存在的域名，
+解析器会把「不存在」这个结论缓存一段时间，长度由域名的 SOA 记录决定
+（常见 300–1800 秒）。
+
+于是出现「公网已生效、本机没生效」。
+
+## 排查顺序
+
+```bash
+# 1. 公共 DNS —— 确认记录在权威 DNS 已生效
+dig +short A www.aibiliai.com @8.8.8.8
+dig +short A www.aibiliai.com @223.5.5.5
+
+# 2. 路由器 DNS —— 看是不是它没更新
+dig +short A www.aibiliai.com @192.168.1.1
+```
+
+Windows 上等价：
+
+```powershell
+ipconfig /flushdns                                   # 清本机缓存
+Resolve-DnsName www.aibiliai.com -Server 8.8.8.8     # 公共 DNS
+Resolve-DnsName www.aibiliai.com -Server 192.168.1.1 # 路由器 DNS
+```
+
+## 判断口诀
+
+> 公共 DNS 对、路由器 DNS 错 → 等一会儿，或换 DNS
+> 两者都错 → 记录没生效或配错了，回去检查 Cloudflare
+
+## 解决
+
+| 方法 | 生效速度 | 说明 |
+| --- | --- | --- |
+| 等 | 5–30 分钟 | 负缓存 TTL 到期自动恢复 |
+| 把本机 DNS 改成 `223.5.5.5` | 立刻 | 绕过路由器缓存 |
+| 重启路由器 | 立刻 | 清空路由器缓存，会短暂断网 |
+
+**`ipconfig /flushdns` 只能清 Windows 自己的缓存，清不了路由器那一层。**
+
+## 2026-10-18 实测记录（加 www 子域名）
+
+```
+8.8.8.8        → 43.133.176.111   ✓
+223.5.5.5      → 43.133.176.111   ✓
+119.29.29.29   → 43.133.176.111   ✓
+192.168.1.1    → 无记录            ✗  ← 路由器负缓存
+```
+
+用 `curl --resolve` 绕过 DNS 强制指向服务器，证明服务器侧完全正常：
+
+```bash
+curl --resolve www.aibiliai.com:443:43.133.176.111 https://www.aibiliai.com/
+# → HTTP 200，证书验证通过
+```
+
+**结论**：nginx、证书、应用都没问题，纯粹是本地缓存。
+
+## 同一类现象的另一个实例
+
+把 `aibiliai.com` 的 A 记录从 Cloudflare 改成服务器 IP 后，
+浏览器仍报 `Error 522`（Cloudflare 连不上源站）——
+因为本机缓存还指向 Cloudflare 的 `104.21.x` / `172.67.x`。
+
+`ipconfig /flushdns` 后立刻正常。
+
+## 教训
+
+**改完 DNS 先 `ipconfig /flushdns`，再判断是否真的没生效。**
+
+不加这一步，很容易把「缓存没更新」误判成「服务器配错了」，
+然后去改一堆本来正确的东西。
 
 ---
 
