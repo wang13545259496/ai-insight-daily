@@ -37,6 +37,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 const BATCH_SIZE = 30;
+/**
+ * 关闭思考模式。
+ *
+ * 本脚本要的是按提示词输出固定 JSON 或纯文本，不依赖深度推理。
+ * 开着思考时推理会吃掉大量输出预算 —— 旅行模块曾因此拿到空内容
+ * 并静默降级到模板（见 AI_TROUBLESHOOTING_GUIDE.md 对应章节）。
+ *
+ * OpenAI SDK 的类型定义里没有这个字段，但请求会透传给 DeepSeek。
+ */
+const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
+
 const PROGRESS_FILE = "backup/entity-extract-progress.json";
 const SUMMARY_LIMIT = 200;
 
@@ -294,10 +305,23 @@ async function main() {
   let mergedAliases = 0;
   let failedBatches = 0;
 
-  // 已有实体名索引（用于避免重复查询）
+  /**
+   * 已有实体索引 —— **按 name 建，不按 name+type**。
+   *
+   * 数据库唯一约束是 (name, type)，schema 注释写着「不同类型允许重名」。
+   * 但实测 11 组重名全部是同一实体被模型标成了不同类型：一组有新闻关联，
+   * 另一组是 0 新闻 0 事件的空壳，列表页因此出现重复条目。
+   *
+   * 改成按 name 索引后，同名一律复用已有实体、不再新建空壳。
+   * 代价是失去「同名不同类型」的能力 —— 对 OpenAI / GPT-6 / Sora
+   * 这类专名可以接受。
+   */
   const existing = await prisma.entity.findMany({ select: { id: true, name: true, type: true, aliases: true } });
-  const index = new Map<string, { id: number; aliases: string }>();
-  for (const e of existing) index.set(`${e.name}||${e.type}`, { id: e.id, aliases: e.aliases });
+  const index = new Map<string, { id: number; aliases: string; type: string }>();
+  for (const e of existing) {
+    if (!index.has(e.name)) index.set(e.name, { id: e.id, aliases: e.aliases, type: e.type });
+  }
+  let typeConflicts = 0;
 
   for (let bi = 0; bi < batches.length; bi++) {
     if (doneBatches.includes(bi)) continue;
@@ -314,6 +338,7 @@ async function main() {
       const res = await client.chat.completions.create({
         model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
         temperature: 0.1,
+        ...THINKING_DISABLED,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -344,13 +369,18 @@ async function main() {
       // 校验：实体名必须出现在该批原文里
       if (!batchText.includes(name)) continue;
 
-      const key = `${name}||${type}`;
       const aliases = normalizeAliases(Array.isArray(raw.aliases) ? raw.aliases : []);
       const desc = String(raw.description || "").slice(0, 80);
 
-      const hit = index.get(key);
+      const hit = index.get(name);
 
       if (hit) {
+        /**
+         * 同名已存在：复用，不新建。
+         * 若模型给的类型与已存的不同，累加计数并在收尾时报告 ——
+         * 不为这种情况分裂实体，否则又会回到空壳问题。
+         */
+        if (hit.type !== type) typeConflicts++;
         // 已有：合并新别名
         const merged = mergeAliases(hit.aliases, aliases);
 
@@ -370,7 +400,7 @@ async function main() {
               status: "candidate",
             },
           });
-          index.set(key, { id: created.id, aliases });
+          index.set(name, { id: created.id, aliases, type });
           newEntities++;
         } catch {
           // 并发或重复，忽略
@@ -402,6 +432,9 @@ async function main() {
   console.log(`  新增实体:     ${newEntities}`);
   console.log(`  合并别名:     ${mergedAliases}`);
   console.log(`  失败批次:     ${failedBatches}`);
+  if (typeConflicts > 0) {
+    console.log(`  类型分歧:     ${typeConflicts} 次（同名被标成不同类型，已按首次类型归并）`);
+  }
   console.log(`  实体总数:     ${total}`);
   console.log("");
   console.log("  按类型:");

@@ -26,6 +26,17 @@
 import dotenv from "dotenv";
 
 dotenv.config({ path: ".env.local" });
+/**
+ * 关闭思考模式。
+ *
+ * 本脚本要的是按提示词输出固定 JSON 或纯文本，不依赖深度推理。
+ * 开着思考时推理会吃掉大量输出预算 —— 旅行模块曾因此拿到空内容
+ * 并静默降级到模板（见 AI_TROUBLESHOOTING_GUIDE.md 对应章节）。
+ *
+ * OpenAI SDK 的类型定义里没有这个字段，但请求会透传给 DeepSeek。
+ */
+const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
+
 
 import OpenAI from "openai";
 
@@ -94,6 +105,7 @@ async function translateEventTitle(
     const response = await client.chat.completions.create({
       model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
       temperature: 0.2,
+      ...THINKING_DISABLED,
       messages: [
         { role: "system", content: TRANSLATE_PROMPT },
         {
