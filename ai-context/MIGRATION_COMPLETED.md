@@ -247,6 +247,75 @@ sudo systemctl restart ssh
 
 ---
 
+## GitHub 接入（已完成）
+
+服务器已接上 GitHub，代码更新走 `git pull`，不再需要 rsync 传文件。
+
+### 配置
+
+服务器生成了独立密钥 `~/.ssh/id_ed25519_github`，作为 **Deploy Key**
+添加到仓库（已勾选 Allow write access）。
+
+`~/.ssh/config` 指定该密钥用于 github.com：
+
+```
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519_github
+    IdentitiesOnly yes
+```
+
+**为什么必须勾 write access**：`backup-db-to-github.sh` 每天 23:00
+往 `db-backup` 分支推数据库备份。只读密钥会让备份静默失败。
+
+### 目录转仓库的做法
+
+原本是 rsync 部署的普通目录，转成 git 仓库时：
+
+```bash
+git init -b main
+git remote add origin git@github.com:.../ai-insight-daily.git
+git fetch origin main          # 只下载对象，不碰工作区
+git reset --hard origin/main   # 对齐
+```
+
+**风险在于 `reset --hard` 会覆盖工作区**。所以先在 fetch 后用
+`git check-ignore` 逐个确认敏感文件会被忽略，并记录它们的 md5：
+
+```
+.env.local / .env.production / prisma/dev.db / node_modules / .next / logs
+```
+
+reset 后重新比对 md5，确认一个字节都没变。实测全部一致。
+
+### 日常更新代码
+
+```bash
+# 本地提交并推送
+git push
+
+# 服务器拉取、重建、重启、健康检查（失败自动回滚）
+ssh ubuntu@43.133.176.111 "cd ~/ai-insight-daily && bash scripts/deploy-server.sh"
+```
+
+`scripts/deploy-server.sh` 会做：git pull → 按需 npm ci → prisma generate
+→ build → pm2 restart → 5 次健康检查 → 失败自动回滚到上一个 commit。
+
+### 验证结果
+
+| 项 | 结果 |
+| --- | --- |
+| SSH 认证 | ✓ `Hi wang13545259496/ai-insight-daily!` |
+| `git ls-remote` | ✓ 返回 HEAD |
+| `git pull` | ✓ 拉下了 db-backup 分支与全部 tag |
+| `git push --dry-run` | ✓ Everything up-to-date（写权限有效） |
+| 备份脚本端到端 | ✓ 快照 10.8MB → 压缩 3.8MB → 推送成功 |
+| 敏感文件 | ✓ md5 全部未变 |
+| 应用 | ✓ reset 后 HTTP 200 |
+
+---
+
 ## 遗留事项
 
 | 项 | 说明 | 优先级 |
@@ -254,7 +323,7 @@ sudo systemctl restart ssh
 | ~~SSH 密码强度~~ | ~~建议改密钥登录~~ | ✅ **已完成** |
 | `www.aibiliai.com` | DNS 记录已删，无法访问 www | 低 |
 | 本地 WSL 网络 | Clash 开启时 WSL 镜像网络失效，关掉 Clash 或用 `wsl --shutdown` 重启可恢复 | 低 |
-| 服务器未配 git | 首次用 rsync 部署，后续更新建议配 GitHub 部署密钥走 `git pull` | 中 |
+| ~~服务器未配 git~~ | ~~配 GitHub 部署密钥~~ | ✅ **已完成** |
 
 ---
 
