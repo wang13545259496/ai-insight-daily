@@ -316,6 +316,72 @@ ssh ubuntu@43.133.176.111 "cd ~/ai-insight-daily && bash scripts/deploy-server.s
 
 ---
 
+## 密钥管理与故障恢复
+
+### 服务器上有两把钥匙
+
+| 密钥 | 指纹 | 存在哪 |
+| --- | --- | --- |
+| 主密钥 | `SHA256:lttkVvDA9Sqy6js62A2AtfwZDfXZdTD3smneUJOguk0` | 本机 `~/.ssh/id_ed25519` |
+| 备用密钥 | `SHA256:sGpAkTxPX+wLTnPEm0FaB05roRmY4brUwu+ZPUK00iY` | 本机已删，加密后异地保存 |
+
+两个公钥都在服务器的 `~/.ssh/authorized_keys` 里，**任一个都能登录**。
+
+### 备用密钥怎么存的
+
+私钥用 AES-256-CBC + PBKDF2 20 万轮加密，文件放网盘/U盘；
+**解密口令单独记**（人脑 / 纸上 / 密码管理器），不与文件同处。
+
+> 文件和口令放一起等于没加密——拿到文件的人同时拿到钥匙。
+
+本机（WSL）的明文备用私钥已用 `shred` 删除，只留加密文件。
+
+### 为什么「在线重置密码」没有意义
+
+腾讯云控制台提供「在线重置密码」（通过 TAT 自动化助手在实例内
+执行 `chpasswd`，无需关机）。但**本服务器已设置
+`PasswordAuthentication no`**，改密码也不会让 SSH 可用。
+
+真正该准备的不是密码，而是：
+
+1. **备用密钥**（已做）
+2. **TAT 执行命令**（不依赖 SSH、不依赖密码、不依赖对外端口）
+
+### TAT 兜底：连密钥都进不去时
+
+```
+腾讯云控制台 → 轻量应用服务器 → 实例 → 更多 → 执行命令
+```
+
+这个通道走云厂商的 agent（`/usr/local/qcloud/tat_agent/tat_agent`），
+只有云控制台能断，是最可靠的最后一道门。
+
+常用恢复命令：
+
+```bash
+# SSH 配置改坏了
+sudo rm -f /etc/ssh/sshd_config.d/10-hardening.conf
+sudo systemctl restart ssh
+
+# 重新装公钥
+echo 'ssh-ed25519 AAAA...' >> /home/ubuntu/.ssh/authorized_keys
+
+# 应用挂了
+pm2 restart ai-insight-daily
+```
+
+### 实测记录
+
+```
+主密钥登录          ✓
+备用密钥登录        ✓（装公钥后立即验证）
+加密文件解密        ✓ 与原文件逐字节一致
+清理后主密钥仍可用  ✓
+服务器 authorized_keys 2 个密钥 ✓
+```
+
+---
+
 ## 遗留事项
 
 | 项 | 说明 | 优先级 |
