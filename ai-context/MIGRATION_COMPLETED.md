@@ -1,0 +1,211 @@
+# 迁移完成记录
+
+> 完成时间：2026-10-18 11:00
+> 状态：**已完成，网站已运行在阿里云东京**
+
+原计划文档：[`MIGRATION_TO_CLOUD.md`](./MIGRATION_TO_CLOUD.md)
+购买指南：[`TENCENT_CLOUD_PURCHASE.md`](./TENCENT_CLOUD_PURCHASE.md)
+
+---
+
+## 现在的架构
+
+```
+用户手机/浏览器
+      │  DNS: A 记录 → 43.133.176.111（灰云，不经 Cloudflare）
+      ▼
+┌─────────────────────────────────────────┐
+│  腾讯云轻量 · 东京                        │
+│  Ubuntu 26.04 / 2核2G / 40GB             │
+│                                          │
+│  nginx :80 / :443                        │
+│      │ 反向代理                           │
+│      ▼                                   │
+│  Next.js :3000（PM2 守护）                │
+│      │                                   │
+│  SQLite prisma/dev.db                    │
+│                                          │
+│  cron：采集/健康检查/备份/日报            │
+└─────────────────────────────────────────┘
+```
+
+**与家用电脑完全脱钩。电脑关机、断电、重装都不影响网站。**
+
+---
+
+## 关键参数
+
+| 项 | 值 |
+| --- | --- |
+| 公网 IP | `43.133.176.111` |
+| 地域 | 东京 |
+| 系统 | Ubuntu 26.04 LTS（与本地 WSL 同版本） |
+| 登录 | `ssh ubuntu@43.133.176.111`（密钥登录，root 不可用） |
+| 应用目录 | `/home/ubuntu/ai-insight-daily` |
+| 进程管理 | PM2，进程名 `ai-insight-daily` |
+| Web 服务 | nginx 1.28.3 |
+| 证书 | Let's Encrypt，到期 2027-01-16，自动续期 |
+| 时区 | Asia/Shanghai |
+| 费用 | ¥288/年（约 ¥24/月） |
+
+---
+
+## 速度对比
+
+| 场景 | 迁移前 | 迁移后 |
+| --- | --- | --- |
+| 国内访问首页 | 3.5–5.6 秒 | **0.4–0.5 秒** |
+| RSS 采集（OpenAI） | 1.4 秒 | **0.1 秒** |
+| RSS 采集（TechCrunch） | 2.2 秒 | **0.03 秒** |
+| RSS 源健康度 | 偶尔超时 | **22/22 全部 100 分** |
+
+---
+
+## 日常维护
+
+### 查看状态
+
+```bash
+ssh ubuntu@43.133.176.111
+pm2 status                    # 应用状态
+pm2 logs ai-insight-daily --lines 50 --nostream   # 日志
+sudo systemctl status nginx   # Web 服务
+crontab -l                    # 定时任务
+```
+
+### 更新代码
+
+```bash
+# 本地改完、提交、推送
+git push
+
+# 服务器拉取并重建
+ssh ubuntu@43.133.176.111 "cd ~/ai-insight-daily && git pull && npm ci && npx prisma generate && npm run build && pm2 restart ai-insight-daily"
+```
+
+> 首次迁移用的是 rsync 通道（服务器上还没配 git）。若要走 `git pull`，
+> 需先在服务器 `git clone` 一次并配好 GitHub 的部署密钥。
+
+### 查看数据
+
+```bash
+ssh ubuntu@43.133.176.111 "sqlite3 ~/ai-insight-daily/prisma/dev.db 'SELECT COUNT(*) FROM News;'"
+```
+
+### 重启服务
+
+```bash
+ssh ubuntu@43.133.176.111 "pm2 restart ai-insight-daily"
+ssh ubuntu@43.133.176.111 "sudo systemctl restart nginx"
+```
+
+---
+
+## 自动运行的任务
+
+迁移后全部在服务器上，无需人工干预：
+
+| 任务 | 时间 | cron 表达式 |
+| --- | --- | --- |
+| 新闻采集 + AI 分析 | 每小时 | `0 * * * *` |
+| 健康检查 + 告警 | 每小时 | `15 * * * *` |
+| 数据库备份（推 GitHub） | 每天 23:00 | `0 23 * * *` |
+| 日报推微信 | 每天 22:30 | `30 22 * * *` |
+| 开机补跑 | 重启后 | `@reboot` |
+
+---
+
+## 迁移过程中发现并修掉的问题
+
+### 1. 脚本路径硬编码（会导致静默失效）
+
+11 个脚本把项目路径写死为 `$HOME/projects/ai-insight-daily`。
+服务器上项目在 `/home/ubuntu/ai-insight-daily`，脚本找不到 `.env.local`
+就**静默退出**——cron 配好了但采集根本不跑，且没有任何报错。
+
+改成从脚本自身位置推导：
+
+```bash
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+```
+
+### 2. 防火墙 443 规则未保存
+
+第一次添加 HTTPS 规则后列表里没有它，导致 HTTP 跳转 HTTPS 后整站不可用。
+重新添加并确认「来源」为「全部IPv4地址」后解决。
+
+**教训**：改完防火墙要回列表确认规则真的存在。
+
+### 3. 证书申请失败一次
+
+第一次同时申请 `aibiliai.com` 和 `www.aibiliai.com`，但 www 的 DNS 记录已被删除，
+Let's Encrypt 验证失败。改为只申请主域名后成功。
+
+### 4. 本地 PM2 被 systemd 复活
+
+`pm2 delete` 后进程又出现了（systemd 的 pm2-administrator 服务按 dump 恢复）。
+用 `pm2 save --force` 写入空列表后彻底解决。
+
+---
+
+## nginx 配置说明
+
+配置文件：`/etc/nginx/sites-available/ai-insight-daily`
+
+**80 和 443 都直接服务，不做强制跳转。**
+
+原因：迁移时 443 曾被防火墙拦住，如果 80 跳 443，整站就不可用。
+两个端口都服务意味着**任何一条路能通，站就能访问**。
+
+代价是访问 `http://` 时不会自动升级到加密连接。日常请用 `https://aibiliai.com`。
+
+配置要点：
+
+```nginx
+proxy_read_timeout 600s;   # 采集接口可能跑几分钟
+proxy_buffering off;       # 流式响应不被缓冲
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+---
+
+## 回退到家用电脑的方法
+
+本地环境**完整保留**（代码、数据库、node_modules 都没删）：
+
+```bash
+# 1. 本地恢复
+crontab /tmp/premigrate-20261018-104818/crontab.txt
+cd ~/projects/ai-insight-daily && pm2 start npm --name ai-insight-daily -- start
+sudo systemctl enable --now cloudflared-ipv4
+
+# 2. Cloudflare 把 DNS 改回隧道
+#    A 记录 → 删掉
+#    CNAME → ai-insight-daily.cfargotunnel.com，开橙云
+```
+
+隧道 `ai-insight-daily` 在 Cloudflare 上**保留未删**，随时可切回。
+
+---
+
+## 遗留事项
+
+| 项 | 说明 | 优先级 |
+| --- | --- | --- |
+| SSH 密码强度 | 初始密码较弱，建议改密钥登录并禁用密码 | 中 |
+| `www.aibiliai.com` | DNS 记录已删，无法访问 www | 低 |
+| 本地 WSL 网络 | Clash 开启时 WSL 镜像网络失效，关掉 Clash 或用 `wsl --shutdown` 重启可恢复 | 低 |
+| 服务器未配 git | 首次用 rsync 部署，后续更新建议配 GitHub 部署密钥走 `git pull` | 中 |
+
+---
+
+## 迁移耗时
+
+| 阶段 | 时间 |
+| --- | --- |
+| 服务器初始化 | 约 3 分钟 |
+| 传代码 + 依赖 | 约 4 分钟 |
+| 传数据 + 构建 | 约 3 分钟 |
+| 配 nginx + 证书 | 约 10 分钟（含排查 443） |
+| **合计** | **约 1 小时**（跨两次会话） |
