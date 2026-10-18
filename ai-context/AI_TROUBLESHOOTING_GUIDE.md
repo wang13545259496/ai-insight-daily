@@ -318,6 +318,123 @@ curl --resolve www.aibiliai.com:443:43.133.176.111 https://www.aibiliai.com/
 
 ---
 
+# 旅行规划：行程内容变成「首选景区」「景区周边」这类占位描述
+
+## 现象
+
+生成行程后，返回的内容是：
+
+```
+08:30  早餐与出发准备        地点：酒店或周边小店
+09:30  三亚核心景点游览       地点：首选景区
+12:30  当地特色午餐          地点：景区周边
+14:00  深度体验或博物馆       地点：市区
+```
+
+标题和地点全是占位词，没有一个真实地名。用户拿到的等于一份空方案。
+
+## 一句话结论
+
+**思考模式没关，推理把 `max_tokens` 全吃光了，模型返回空内容，
+系统降级到确定性模板。**
+
+## 排查过程
+
+### 1. 先确认是 AI 还是模板
+
+方案内容里有 `首选景区`、`景区周边` 这类词 —— 这两个词在
+`lib/agents/travel/itinerary.ts` 的模板里，而
+`lib/agents/travel/prompt.ts` 第 56 行明确禁止模型使用它们。
+所以**一定是模板兜底**，不是模型输出。
+
+### 2. 查模型为什么失败
+
+PM2 错误日志：
+
+```
+[travel] 模型返回空内容 { attempt: 1, model: 'deepseek-flash' }
+[travel] 模型返回空内容 { attempt: 2, model: 'deepseek-flash' }
+```
+
+### 3. 看 AI 用量日志，找到真正原因
+
+```
+{"in":3480,"out":8000,"reason":8000}
+```
+
+`reason: 8000` = 推理 token 占满全部输出预算 → 正文 0 token。
+
+### 4. 为什么以前是好的
+
+方案 49 及以前的 `model` 字段是 `deepseek-chat`，全部成功；
+50/51 是 `deepseek-flash`，全部失败。
+
+`deepseek-flash` 默认开启思考模式，而
+`lib/agents/travel/ai.ts` 没有传 `thinking: { type: "disabled" }`。
+`lib/ai-summary.ts` 早就处理过同一个问题，唯独旅行模块漏了。
+
+## 修复
+
+`lib/agents/travel/ai.ts` 加上 `THINKING_DISABLED` 并展开进请求。
+
+实测同一提示词：
+
+| | 耗时 | 输出 tokens | 推理 tokens | 正文 |
+| --- | --- | --- | --- | --- |
+| 开思考 | 18.9s | 3891 | 3143 | 有（短提示词时） |
+| **关思考** | **3.5s** | **655** | **0** | 完整 JSON |
+
+短提示词下思考还能剩下正文；生产环境提示词 3500 token，
+推理直接顶到 8000 上限，正文就空了。
+
+修复后线上实测：
+
+```
+{"in":3468,"out":2143,"reason":0}
+generatedByAI: true
+```
+
+行程内容：
+
+```
+三亚兴安长峰大酒店(万象汇店)
+琼禧小馆·海南菜
+蜈支洲岛旅游风景区
+阿俊糟粕醋抱罗粉
+亚龙湾热带天堂森林公园
+```
+
+## 排查口诀
+
+> **日志说「返回空内容」时，先看 `reasoning_tokens`，不要先怀疑提示词。**
+>
+> `reasoning_tokens` 接近 `max_tokens` → 思考模式没关
+> `reasoning_tokens` 很小 → 模型真的没话说，回去看提示词与输入内容
+
+## 防止再犯
+
+`lib/agents/travel/ai.ts` 里「模型返回空内容」的日志现在带上
+`finish_reason` 与完整 `usage`，下次出现能直接从日志判断方向，
+不用再去翻用量日志反推。
+
+## 同类风险点
+
+所有调用模型的地方都必须显式关思考（结构化输出用不上深度推理，
+开着等于把输出预算烧在思考上）：
+
+| 文件 | 状态 |
+| --- | --- |
+| `lib/ai-summary.ts` | ✅ 已关 |
+| `lib/agents/travel/ai.ts` | ✅ 已关（本次修复） |
+| `scripts/extractEntities.ts` | ⚠️ 未关 |
+| `scripts/backfillTitleZh.ts` | ⚠️ 未关 |
+| `scripts/backfillEventTitleZh.ts` | ⚠️ 未关 |
+
+后三个是一次性回填脚本，不常跑，暂未处理 —— 但**下次跑之前要先加上**，
+否则可能静默产出空结果。
+
+---
+
 # 二、PM2服务异常
 
 
