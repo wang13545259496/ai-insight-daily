@@ -129,6 +129,42 @@ async function main() {
     select: { name: true, keywords: true, category: true },
   });
 
+  /**
+   * 已知实体的类型与说明。
+   *
+   * 热点关键词里会带出具体产品/公司名（过滤掉宽泛词后目前恰好是
+   * GPT / Claude / Gemini / NVIDIA 四个）。
+   *
+   * 原先一律写成 `type: "model"` + `description: ""`，带来两个错误：
+   *   · 页面显示「暂无说明」—— 而这几个恰恰是全站关联新闻最多的实体
+   *     （GPT 关联 283 篇、Claude 28 篇、Gemini 16 篇）
+   *   · NVIDIA 是公司却被标成模型
+   *
+   * 更麻烦的是：AI 提取遇到已存在实体会因唯一约束跳过，
+   * 所以这些空说明不会被后续流程自动补上。
+   *
+   * 这里给一份准确的中文说明。这几个名字固定、含义明确，
+   * 人工写比让模型从新闻里猜可靠。
+   */
+  const KNOWN_ENTITIES: Record<string, { type: string; description: string }> = {
+    GPT: {
+      type: "model",
+      description: "OpenAI 的生成式预训练模型系列，ChatGPT 的底层模型",
+    },
+    Claude: {
+      type: "model",
+      description: "Anthropic 的对话模型系列，以长上下文与安全性见长",
+    },
+    Gemini: {
+      type: "model",
+      description: "谷歌的多模态大模型系列，覆盖搜索与云服务场景",
+    },
+    NVIDIA: {
+      type: "company",
+      description: "美国 GPU 与 AI 芯片制造商",
+    },
+  };
+
   // 热点 keywords 里的是模型/产品名（如 GPT, Claude, Gemini, NVIDIA）
   for (const h of hotspots) {
     const kws = (h.keywords || "").split(",").map((k) => k.trim()).filter(Boolean);
@@ -137,11 +173,22 @@ async function main() {
       if (/^(大模型|LLM|GPU|芯片|算力|机器人|具身智能|SaaS|企业AI|Copilot|自动化|AI员工|智能体|Agent|CUDA|Humanoid)$/i.test(k)) {
         continue;
       }
+      const known = KNOWN_ENTITIES[k] ?? KNOWN_ENTITIES[k.toUpperCase()];
+
+      if (!known) {
+        // 不认识的词也要播种（可能是新出现的模型名），
+        // 但要留下痕迹 —— 否则又会静默产生一批「暂无说明」
+        console.warn(
+          `[entities] 种子「${k}」没有预置说明，页面会显示「暂无说明」；` +
+            `建议补进 KNOWN_ENTITIES`,
+        );
+      }
+
       seeds.push({
         name: k,
-        type: "model",
+        type: known?.type ?? "model",
         aliases: [],
-        description: "",
+        description: known?.description ?? "",
       });
     }
   }
