@@ -514,27 +514,61 @@ Gemini   → 谷歌的多模态大模型系列，覆盖搜索与云服务场景
 可见的 NVIDIA:             1 条（修复前 2 条）
 ```
 
-## 遗留：同名实体的类型冲突
+## 同名实体的类型冲突（已处理）
 
-排查时发现 11 组同名实体被标成了不同类型，页面上会各显示一次：
+排查说明缺失问题时顺带发现：11 组同名实体被标成了不同类型，
+列表页会各显示一次（AWS 既是 company 又是 product）。
+
+### 规律
+
+11 组**全部**符合同一个模式 —— 一组有新闻关联，另一组是 0 新闻 0 事件的空壳：
+
+| 名称 | 保留（有新闻） | 空壳（0 新闻） |
+| --- | --- | --- |
+| Codex | #279 product（121） | #825 model |
+| GitHub | #86 company（29） | #514 product |
+| Sora | #897 product（16） | #907 model |
+| OpenAI Academy | #621 product（14） | #841 company |
+| AWS | #703 company（7） | #881 product |
+| Facebook | #235 product（5） | #1104 company |
+| Instagram | #237 product（4） | #1236 company |
+| Axios | #840 product（3） | #876 company |
+| ArtCraft | #63 product（2） | #302 company |
+| GPT-Live | #276 model（6） | #715 product |
+
+### 成因
+
+数据库唯一约束是 `(name, type)`，而 AI 提取对同一个名字在不同批里
+给出了不同的 type，于是各建了一条。空壳那条没有任何关联数据。
+
+### 处理
+
+**数据侧**：保留有数据的那条，空壳标 `merged` 并把 `mergedIntoId`
+指向保留项 —— 这是项目既有约定（原有 11 条 merged 都这么做）。
+因为空壳没有任何关联，不需要迁移 `NewsEntity` / `EventEntity`。
+
+**代码侧**：`scripts/extractEntities.ts` 的实体索引从 `${name}||${type}`
+改成按 `name` 唯一，同名一律复用已有实体，不再新建空壳。
+模型给的类型与已存冲突时累加计数、收尾报告，但不为此分裂实体。
+
+代价是失去「同名不同类型」的能力（schema 注释里举的
+「Apple 公司 vs Apple 产品线」）。对 OpenAI / GPT-6 / Sora
+这类专名可以接受。
+
+### 结果
 
 ```
-AWS        company / product
-Codex      model   / product
-Facebook   company / product
-GitHub     company / product
-Instagram  company / product
-OpenAI Academy  company / product
-Sora       model   / product
-...
+重名组数    0（处理前 11）
+可见实体    1491（处理前 1500）
+merged      22 条，全部有有效 mergedIntoId
+说明为空    0 条
 ```
 
-成因是 AI 提取对同一个名字给出了不同的 type，而唯一约束是
-`(name, type)` 组合。目前 22/1502 条，占比小但都是知名名字。
+### 教训
 
-处理方向（待定）：按「公司优先」的规则合并，或人工逐组确认。
-未处理 —— 需要先确认合并方向，否则可能把「Sora 模型」和
-「Sora 产品功能」这两件真实不同的事强行合并。
+> 唯一约束用 `(name, type)` 时，模型对 type 的摇摆会直接变成重复数据。
+> 判定实体身份的是**名字**，type 是属性 —— 把属性放进唯一键里，
+> 等于把「模型的分类分歧」变成了「两个不同的实体」。
 
 ---
 
