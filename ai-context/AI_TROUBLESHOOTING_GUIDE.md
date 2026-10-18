@@ -435,6 +435,109 @@ generatedByAI: true
 
 ---
 
+# 实体库：核心模型显示「暂无说明」
+
+## 现象
+
+实体库页面上，GPT、Claude、Gemini 三个模型的说明显示为「暂无说明」。
+而它们恰恰是全站关联新闻最多的实体：
+
+```
+GPT      283 篇新闻   2 个事件
+Claude    28 篇新闻   2 个事件
+Gemini    16 篇新闻   3 个事件
+```
+
+同页的 GPT-6、Gemini 4 Argon、Frontier 都有正常说明。
+
+## 根因
+
+`scripts/extractEntities.ts` 从 **IndustryHotspot 的关键词**播种实体时写死：
+
+```ts
+seeds.push({ name: k, type: "model", aliases: [], description: "" });
+```
+
+两处错误：
+
+| 字段 | 问题 |
+| --- | --- |
+| `description` | 写死空字符串 |
+| `type` | 一律 `model` —— NVIDIA 是公司却标成模型 |
+
+更关键的是：AI 提取入库时遇到已存在实体会因唯一约束**跳过**
+（`catch { // 已存在则跳过 }`），所以这些空说明不会被后续流程自动补上。
+
+热点关键词去重后 20 个，过滤掉「大模型 / LLM / GPU / 芯片 / 算力」这类
+宽泛词，剩下的恰好就是 GPT、Claude、Gemini、NVIDIA 四个 ——
+**受影响的正是最需要说明的那几个**。
+
+## 修复
+
+**数据侧**（已有备份）：
+
+```
+GPT      → OpenAI 的生成式预训练模型系列，ChatGPT 的底层模型
+Claude   → Anthropic 的对话模型系列，以长上下文与安全性见长
+Gemini   → 谷歌的多模态大模型系列，覆盖搜索与云服务场景
+```
+
+**NVIDIA 还多了一条脏数据**：
+
+```
+#536  company(candidate)  18 篇新闻  1 个事件  别名 |英伟达|NVIDIA|  有说明  ← 正确
+#7    model(active)        0 篇新闻  0 个事件  无别名   无说明           ← 空壳
+```
+
+`#7` 是早期把「NVIDIA」当模型播种的产物。标 `merged`
+（项目既有的合并方式，现有 11 条先例），页面只剩正确那条。
+
+**代码侧**：加 `KNOWN_ENTITIES` 字典，播种时查表拿类型与说明。
+字典里没有的新词仍然播种（可能是新出现的模型名），但会打一条告警：
+
+```
+[entities] 种子「xxx」没有预置说明，页面会显示「暂无说明」；建议补进 KNOWN_ENTITIES
+```
+
+避免又静默产生一批空说明。
+
+## 为什么不交给模型生成
+
+这几个名字固定、含义明确。人工写比让模型从新闻里猜可靠 ——
+模型容易把「GPT」理解成某个具体版本（如 GPT-5），写出一句过时的说明。
+
+## 验证
+
+```
+页面「暂无说明」出现次数: 0
+说明为空的实体:            0 条（修复前 4 条）
+可见的 NVIDIA:             1 条（修复前 2 条）
+```
+
+## 遗留：同名实体的类型冲突
+
+排查时发现 11 组同名实体被标成了不同类型，页面上会各显示一次：
+
+```
+AWS        company / product
+Codex      model   / product
+Facebook   company / product
+GitHub     company / product
+Instagram  company / product
+OpenAI Academy  company / product
+Sora       model   / product
+...
+```
+
+成因是 AI 提取对同一个名字给出了不同的 type，而唯一约束是
+`(name, type)` 组合。目前 22/1502 条，占比小但都是知名名字。
+
+处理方向（待定）：按「公司优先」的规则合并，或人工逐组确认。
+未处理 —— 需要先确认合并方向，否则可能把「Sora 模型」和
+「Sora 产品功能」这两件真实不同的事强行合并。
+
+---
+
 # 二、PM2服务异常
 
 
