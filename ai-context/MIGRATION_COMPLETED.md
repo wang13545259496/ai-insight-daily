@@ -684,6 +684,86 @@ Cookie 请求头。于是「维护者访问管理页」被误判为 307。
 
 ---
 
+## 网络链路优化（2026-10-18）
+
+### 现象
+
+服务器本机响应 0.17 秒，但从国内访问要 **4.5–6.7 秒**。
+
+`ping` 显示到东京的链路 **丢包 16–25%**、RTT 91–119ms。
+
+TLS 握手本身只占 0.2 秒，**大部分时间花在传正文上**——
+42KB 的 gzip 页面用了 4 秒多，是典型的小拥塞窗口 + 丢包退让。
+
+### 三项改动
+
+**1. 拥塞控制 cubic → BBR**
+
+```bash
+# /etc/sysctl.d/99-bbr.conf
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+```
+
+cubic 遇到丢包会把窗口退让得过狠；BBR 按带宽和 RTT 建模，对丢包不敏感。
+这是国际链路的标准做法，也是本次收益最大的一项。
+
+**2. nginx 开启 HTTP/2**
+
+```nginx
+listen 443 ssl;
+http2 on;
+```
+
+多路复用省掉重复握手与队头阻塞。首页要加载多个 JS/CSS 分块，
+串行握手在高延迟链路上代价很大。
+
+**3. OCSP 装订 —— 开启后才发现已失效**
+
+加上配置后 nginx 报：
+
+```
+"ssl_stapling" ignored, no OCSP responder URL in the certificate
+```
+
+**Let's Encrypt 已于 2025 年停止提供 OCSP**，证书里没有 responder URL，
+开了也只会被忽略并每次重载时报警告。已移除配置，并在原位置留了说明，
+避免以后有人再尝试一次。
+
+### 效果
+
+| | 优化前 | 优化后 |
+| --- | --- | --- |
+| 单次访问 | 4.5 – 6.7 秒 | **1.09 – 2.79 秒**（均值 1.50） |
+| 丢包 | 16 – 25% | 0% |
+
+约 **3.7 倍**提升。
+
+> 需要说明的是：丢包率本身也在波动，所以不能把全部提升都归功于配置改动。
+> 但 BBR 与 HTTP/2 都是针对「高延迟 + 丢包」链路的正向改动，
+> 多次测量后均值稳定在 1.5 秒，与优化前的 5 秒以上有明显区别。
+
+### 回滚
+
+```bash
+# BBR
+sudo rm /etc/sysctl.d/99-bbr.conf && sudo sysctl --system
+
+# nginx
+sudo cp /etc/nginx/sites-available/ai-insight-daily.bak.<时间戳> \
+        /etc/nginx/sites-available/ai-insight-daily
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+配置备份在 `/etc/nginx/sites-available/ai-insight-daily.bak.*`。
+
+### 验证
+
+10 个页面全部 200、ALPN 协商到 `h2`、gzip 仍生效（183KB → 45KB）、
+证书剩余 89 天、9 条定时任务、PM2 online。
+
+---
+
 ## 遗留事项
 
 | 项 | 说明 | 优先级 |
