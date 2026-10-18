@@ -169,7 +169,7 @@ export async function runNewsPipeline() {
 
   console.log(
     `流水线完成：抓取 ${ingest.fetched}、新增 ${ingest.created}、重复 ${ingest.duplicated}、` +
-      `合并 ${ingest.merged}、空内容丢弃 ${ingest.emptyContent}，耗时 ${duration}ms`,
+      `合并 ${ingest.merged}、非AI过滤 ${ingest.notAiRelated}、空内容丢弃 ${ingest.emptyContent}，耗时 ${duration}ms`,
   );
 
   return {
@@ -188,6 +188,10 @@ export async function runNewsPipeline() {
       skipped: ingest.skipped,
       // 空内容条数单独暴露：RSS 只给标题的源会在这里体现出来
       emptyContent: ingest.emptyContent,
+      // 在调用 AI 分析之前被相关性过滤拦下的条数。
+      // 单独暴露是为了能从接口直接看到过滤是否在起作用 ——
+      // 长期为 0 说明词表或来源豁免配置有问题。
+      notAiRelated: ingest.notAiRelated,
       errors: ingest.errors.slice(0, 10),
     },
     analysis: {
