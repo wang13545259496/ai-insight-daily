@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { generateEventSummary } from "../ai-summary";
 
 
 
@@ -547,18 +548,32 @@ export async function buildEventClusters() {
     }
 
 
+    // 事件标题：优先用话题名，否则用新闻标题
+    const eventTitle = detectTopic(item.title) || item.title;
+
+    // 事件摘要用模型基于真实新闻内容生成，不再用硬编码模板。
+    // 原来那句「围绕"..."形成的AI产业事件」60 个事件全是同一句，
+    // 而它出现在首页「今日重点」的主要位置。
+    // 失败时 generateEventSummary 内部会回退模板，不阻塞事件创建。
+    const eventSummary = await generateEventSummary({
+      title: eventTitle,
+      category: item.category,
+      news: [
+        {
+          title: item.title,
+          summary: item.summary,
+          content: item.content,
+          source: item.source,
+        },
+      ],
+    });
+
     const event = await prisma.newsEvent.create({
       data: {
-        title:
-        detectTopic(item.title)
-        ?
-        detectTopic(item.title)!
-        :
-        item.title,
+        title: eventTitle,
         keywords: extractKeywords(item.title),
         category: item.category,
-        summary:
-          `围绕“${item.title}”形成的AI产业事件。系统将持续聚合相关来源并跟踪后续发展。`,
+        summary: eventSummary,
         heatScore: Math.min(
           100,
           30 +

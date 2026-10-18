@@ -324,3 +324,136 @@ export async function generateSummaryStream(
 
   return parseAIResponse(accumulated, title, content);
 }
+
+/* ============================================================
+ *  事件摘要生成
+ *
+ *  背景：原来的事件摘要是硬编码模板 ——
+ *    `围绕"{标题}"形成的AI产业事件。系统将持续聚合相关来源并跟踪后续发展。`
+ *  60 个事件 100% 都是这句，除了复述标题没有任何信息。
+ *  而它出现在首页「今日重点」和事件页的主要位置。
+ *
+ *  这里改成用模型基于真实新闻内容生成。
+ * ============================================================ */
+
+export interface EventSummaryInput {
+  /** 事件标题（可能是话题名，如「AI Agent」） */
+  title: string;
+  /** 分类，可空 */
+  category?: string | null;
+  /** 该事件关联的新闻，按时间倒序传入，函数内部只取前 5 条 */
+  news: Array<{
+    title?: string | null;
+    summary?: string | null;
+    content?: string | null;
+    source?: string | null;
+  }>;
+}
+
+const EVENT_SUMMARY_SYSTEM_PROMPT = `你是 AI 产业分析师。根据给定的新闻材料，为一个「产业事件」写一段客观摘要。
+
+【输出要求】
+2–3 句，120–180 字，中文，直接输出正文。
+
+【必须包含】
+- 发生了什么（主体 + 动作 + 时间或阶段）
+- 涉及哪些公司、产品或技术
+- 当前进展或已披露的影响（如果材料里有）
+
+【禁止】
+- 复述标题
+- 写「值得关注」「将持续跟踪」「产业影响正在扩散」这类空话
+- 预测股价、判断投资价值、给买卖建议
+- 编造材料里没有的事实、数字、时间
+- 加「摘要：」「本事件」这类前缀
+
+【材料不足时】
+如果材料只够支撑一句话，就写一句话，不要为凑字数编内容。`;
+
+function buildEventSummaryPrompt(input: EventSummaryInput): string {
+  const picked = input.news
+    .slice(0, 5)
+    .map((n, i) => {
+      const body = String(n.summary || n.content || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 400);
+
+      return [
+        `${i + 1}. ${String(n.title || "").trim()}`,
+        n.source ? `   来源：${n.source}` : "",
+        body ? `   内容：${body}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+
+  return `事件标题：${input.title}
+${input.category ? `分类：${input.category}` : ""}
+
+相关新闻（共 ${input.news.length} 条，以下为最近的 ${Math.min(5, input.news.length)} 条）：
+
+${picked}`;
+}
+
+/** 模型不可用时保持与旧版一致的兜底文案 */
+function fallbackEventSummary(input: EventSummaryInput): string {
+  const first = input.news[0]?.title || input.title;
+  return `围绕“${first}”形成的AI产业事件。系统将持续聚合相关来源并跟踪后续发展。`;
+}
+
+/**
+ * 为一个事件生成摘要。
+ *
+ * 与 `generateSummary` 的区别：
+ *   · 输入是多条新闻而非单条，输出是一段事件级概述
+ *   · 不走 JSON 模式 —— 只要一段纯文本，没必要约束结构
+ *   · 温度更低（0.1）—— 事件摘要要求高度忠实于材料，不要发挥
+ */
+export async function generateEventSummary(
+  input: EventSummaryInput,
+): Promise<string> {
+  if (!client || !input.news.length) {
+    return fallbackEventSummary(input);
+  }
+
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-flash";
+  const startedAt = Date.now();
+
+  try {
+    const response = await client.chat.completions.create({
+      model,
+      temperature: 0.1,
+      ...THINKING_DISABLED,
+      messages: [
+        { role: "system", content: EVENT_SUMMARY_SYSTEM_PROMPT },
+        { role: "user", content: buildEventSummaryPrompt(input) },
+      ],
+    });
+
+    recordUsage(model, response.usage);
+
+    const text = String(response.choices?.[0]?.message?.content || "")
+      .replace(/^["'「]|["'」]$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (text.length < 20) {
+      // 模型返回过短，视为失败，回退模板，不留空摘要
+      return fallbackEventSummary(input);
+    }
+
+    console.log(
+      `[ai] 事件摘要 ${(Date.now() - startedAt) / 1000}s｜${input.title.slice(0, 30)}`,
+    );
+
+    return text.slice(0, 400);
+  } catch (error) {
+    // 事件摘要失败不该阻塞事件创建 —— 回退模板，继续聚合
+    console.log(
+      `[ai] 事件摘要失败，回退模板｜${input.title.slice(0, 30)}：${String(error).slice(0, 80)}`,
+    );
+    return fallbackEventSummary(input);
+  }
+}
