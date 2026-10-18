@@ -648,12 +648,19 @@ export default async function HomePage() {
                       </div>
                     </div>
 
-                    <p className="mt-5 text-sm leading-6 text-gray-400">
-                      {getTrendLabel(
-                        event.recent24h,
-                        event.recent72h,
-                        latestNews?.title
-                      )}
+                    {/*
+                      这里原来调 getTrendLabel()，返回硬编码文案
+                      （「近期出现新增动态，产业影响正在持续扩散」之类）。
+                      卡片上方已有「最新动态」新闻标题、下方已有 24h/72h/热度，
+                      那句模板既重复又没有信息量，改用 AI 生成的事件摘要。
+                      line-clamp-3 限制高度，避免摘要偏长撑破卡片。
+
+                      注：getTrendLabel 函数保留未删。之前尝试用花括号计数
+                      删掉它，误删了相邻的 formatDate / getTimeAgo，
+                      构造函数的工作量不值得。
+                    */}
+                    <p className="mt-5 line-clamp-3 text-sm leading-6 text-gray-400">
+                      {safeText(event.summary, "暂无事件摘要")}
                     </p>
 
                     <div className="mt-auto flex items-center justify-between border-t border-gray-200 pt-5">
