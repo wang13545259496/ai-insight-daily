@@ -189,11 +189,69 @@ sudo systemctl enable --now cloudflared-ipv4
 
 ---
 
+## SSH 加固（已完成）
+
+初始密码较弱（站内信自动生成的 13 位），已改为**仅密钥登录**。
+
+### 改动
+
+新建 `/etc/ssh/sshd_config.d/10-hardening.conf`：
+
+```
+PasswordAuthentication no
+PermitEmptyPasswords no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+MaxAuthTries 4
+LoginGraceTime 30
+```
+
+### 为什么文件名是 10- 而不是 99-
+
+**sshd 对同一关键字「首个匹配生效」**，后面的被忽略。
+
+而 `Include /etc/ssh/sshd_config.d/*.conf` 位于主配置第 24 行，
+早于主配置自身的设置；drop-in 之间按**文件名排序**读入。
+cloud-init 写的是 `50-cloud-init.conf`（`PasswordAuthentication yes`）。
+
+所以必须用排序更靠前的 `10-` 才能覆盖它。若写成 `99-hardening.conf`，
+会因为 50 先被读到而**完全失效**，而且不报错。
+
+`sshd -T` 可以验证实际生效值，不能靠猜：
+
+```bash
+sudo sshd -T | grep -iE '^(passwordauthentication|permitrootlogin)'
+```
+
+### 加固后状态
+
+| 项 | 结果 |
+| --- | --- |
+| 密钥登录（ubuntu） | ✓ 正常，sudo 可用 |
+| 密码登录 | ✗ `Permission denied (publickey)` |
+| root 登录 | ✗ 被拒绝 |
+| 支持的认证方式 | 仅 publickey |
+
+Windows 与 WSL 两侧的密钥登录均已验证。
+
+### 万一锁死的恢复方法
+
+腾讯云控制台 → 实例 → **登录**（OrcaTerm 网页终端）不依赖 sshd：
+
+```bash
+sudo rm /etc/ssh/sshd_config.d/10-hardening.conf
+sudo systemctl restart ssh
+```
+
+---
+
 ## 遗留事项
 
 | 项 | 说明 | 优先级 |
 | --- | --- | --- |
-| SSH 密码强度 | 初始密码较弱，建议改密钥登录并禁用密码 | 中 |
+| ~~SSH 密码强度~~ | ~~建议改密钥登录~~ | ✅ **已完成** |
 | `www.aibiliai.com` | DNS 记录已删，无法访问 www | 低 |
 | 本地 WSL 网络 | Clash 开启时 WSL 镜像网络失效，关掉 Clash 或用 `wsl --shutdown` 重启可恢复 | 低 |
 | 服务器未配 git | 首次用 rsync 部署，后续更新建议配 GitHub 部署密钥走 `git pull` | 中 |
