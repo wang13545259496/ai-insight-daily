@@ -181,12 +181,122 @@ titleZh 的规则：
 不要写成「具有商业价值」「需要综合判断」这类空话。
 要具体到：谁能够变现、靠什么变现、当前的障碍是什么。`;
 
+/* ============================================================
+ *  篇幅自适应
+ *
+ *  背景：系统提示词对所有新闻用同一组字数区间（各字段合计 660–1770 字），
+ *  与实际素材长度无关。而实测素材普遍只有几百字 —— 要求写 1500 字、
+ *  素材只有 400 字时，模型只能靠套话凑（系统提示词自己记着
+ *  「87% 的 impact 以『对AI产业而言』开头」，正是这么来的）。
+ *
+ *  按素材长度给具体区间，一举两得：
+ *    · 短素材不再注水 —— 输出 token 降，可读性反而上升
+ *    · 长素材行为完全不变 —— long 档的区间与系统提示词一字不差
+ *
+ *  实测（生产 7 天 172 次调用）：输出 token 占单条成本 88%，
+ *  其中 content 字段一项约占 28%，是最大的单项。
+ * ============================================================ */
+
+type LengthTier = "short" | "medium" | "long";
+
+/** 正文少于该字数按短素材处理 */
+const SHORT_MATERIAL_CHARS = 600;
+
+/** 正文多于该字数按长素材处理（沿用系统提示词原区间） */
+const LONG_MATERIAL_CHARS = 1600;
+
+/** 去掉空白后的正文字数 */
+function materialChars(content: string): number {
+  return String(content || "").replace(/\s+/g, "").length;
+}
+
+function lengthTier(content: string): LengthTier {
+  const chars = materialChars(content);
+
+  if (chars < SHORT_MATERIAL_CHARS) return "short";
+  if (chars <= LONG_MATERIAL_CHARS) return "medium";
+
+  return "long";
+}
+
+/**
+ * 各档的字段字数区间。
+ *
+ * long 档必须与系统提示词里的区间保持一致 —— 那是已验证过的写法，
+ * 长文本来就有足够素材撑住这些篇幅，不需要动。
+ */
+const LENGTH_GUIDE: Record<LengthTier, string> = {
+  short: `- background：50-80 字
+- summary：70-120 字
+- content：120-320 字
+- insight：50-100 字
+- impact：50-100 字
+- businessOpportunity：40-80 字
+- investmentView：40-80 字`,
+  medium: `- background：70-130 字
+- summary：90-180 字
+- content：200-480 字
+- insight：60-140 字
+- impact：60-140 字
+- businessOpportunity：60-120 字
+- investmentView：60-120 字`,
+  long: `- background：80-180 字
+- summary：100-250 字
+- content：300-700 字
+- insight：80-200 字
+- impact：80-200 字
+- businessOpportunity：80-200 字
+- investmentView：80-200 字`,
+};
+
+const TIER_LABEL: Record<LengthTier, string> = {
+  short: "短",
+  medium: "中等",
+  long: "较长",
+};
+
+/**
+ * 篇幅要求块。
+ *
+ * `AI_LENGTH_GUIDE=off` 时整块不出现，退回改造前的提示词 ——
+ * 出问题时不必回滚代码，改环境变量再重启即可。
+ */
+function buildLengthGuide(content: string): string {
+  if (process.env.AI_LENGTH_GUIDE === "off") return "";
+
+  const tier = lengthTier(content);
+
+  return `
+
+【本次篇幅要求】素材正文约 ${materialChars(content)} 字，属${TIER_LABEL[tier]}素材。以下区间**覆盖**系统提示词中的字数要求，请按此执行：
+
+${LENGTH_GUIDE[tier]}
+
+素材不足以支撑某段时就写短，或只写一句话说明缺失；不要为凑字数扩写、复述原文句子或套用固定句式。`;
+}
+
 function buildUserPrompt(title: string, content: string) {
+  const body =
+    content || "正文内容缺失，请基于标题和已有信息进行谨慎分析。";
+
   return `新闻标题：
 ${title}
 
 新闻正文：
-${content || "正文内容缺失，请基于标题和已有信息进行谨慎分析。"}`;
+${body}${buildLengthGuide(body)}`;
+}
+
+/** 仅供离线校验：给定正文，返回分档与篇幅块（不发起模型调用） */
+export function inspectLengthGuide(content: string): {
+  tier: LengthTier;
+  chars: number;
+  guide: string;
+} {
+  return {
+    tier: lengthTier(String(content || "")),
+    chars: materialChars(String(content || "")),
+    guide: buildLengthGuide(String(content || "")),
+  };
 }
 
 /** 是否已配置模型（供调用方判断走 AI 还是回退） */
@@ -215,7 +325,12 @@ const THINKING_DISABLED = { thinking: { type: "disabled" } } as const;
  * 写到 logs/ai-usage.log，每行一条 JSON。写失败不影响分析结果 ——
  * 统计是次要功能，不能因为它出问题就让整条新闻分析失败。
  */
-export function recordUsage(model: string, usage: unknown) {
+export function recordUsage(
+  model: string,
+  usage: unknown,
+  /** 调用来源：news=新闻分析，event=事件摘要，travel=行程编排 */
+  kind: "news" | "event" | "travel" = "news",
+) {
   try {
     const u = usage as {
       prompt_tokens?: number;
@@ -228,6 +343,7 @@ export function recordUsage(model: string, usage: unknown) {
     const line =
       JSON.stringify({
         t: new Date().toISOString(),
+        k: kind,
         model,
         in: u.prompt_tokens ?? 0,
         out: u.completion_tokens ?? 0,
@@ -267,6 +383,7 @@ export async function generateSummary(
   recordUsage(
     process.env.DEEPSEEK_MODEL || "deepseek-flash",
     response.usage,
+    "news",
   );
 
   // 显式计时替代原来的 console.time：并发调用时 console.time 会互相覆盖
@@ -432,7 +549,7 @@ export async function generateEventSummary(
       ],
     });
 
-    recordUsage(model, response.usage);
+    recordUsage(model, response.usage, "event");
 
     const text = String(response.choices?.[0]?.message?.content || "")
       .replace(/^["'「]|["'」]$/g, "")

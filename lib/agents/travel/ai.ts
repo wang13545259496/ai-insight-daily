@@ -121,7 +121,7 @@ export async function travelChat(options: TravelChatOptions): Promise<string | n
        * 注意：这里记的是「一次模型调用」，不是「一份方案」。
        * 失败重试会调两次，因此可能出现方案数少于调用数的情况。
        */
-      recordUsage(model, response.usage);
+      recordUsage(model, response.usage, "travel");
 
       const text = response.choices?.[0]?.message?.content?.trim();
 
