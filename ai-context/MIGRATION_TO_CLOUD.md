@@ -7,6 +7,11 @@
 > 完成记录见 [`MIGRATION_COMPLETED.md`](./MIGRATION_COMPLETED.md)。
 >
 > 购买步骤见 [`TENCENT_CLOUD_PURCHASE.md`](./TENCENT_CLOUD_PURCHASE.md)（腾讯云轻量香港）。
+>
+> **2026-10-20 核实**：生产实际为 `ubuntu@43.133.176.111`，
+> 应用在 `/home/ubuntu/ai-insight-daily`（**不是本文下面写的 root / `/root/...`**）。
+> 部署命令、字体依赖与验证步骤见 [`DEPLOYMENT.md`](./DEPLOYMENT.md) 的「生产部署现状」。
+> 本文其余 root 路径属于迁移当时的历史记录，留作参考。
 > 触发条件：维护者购买阿里云轻量应用服务器（香港地域）之后。
 
 ---

@@ -32,10 +32,13 @@ ok "当前时间: $(date '+%Y-%m-%d %H:%M:%S %Z')"
 log "3. 系统依赖"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
+# fontconfig + fonts-dejavu-core：逐日地图的编号是 SVG <text> 画的，
+# sharp 通过 fontconfig 找字体。服务器没有任何字体时编号会渲染成空白，
+# 图上只剩红点 —— 2026-10-20 上线时踩过。
 apt-get install -y -qq \
     curl ca-certificates gnupg git rsync sqlite3 unzip jq \
-    build-essential python3 cron logrotate > /dev/null
-ok "已安装 curl git rsync sqlite3 unzip jq gcc make python3 cron"
+    build-essential python3 cron logrotate fontconfig fonts-dejavu-core > /dev/null
+ok "已安装 curl git rsync sqlite3 unzip jq gcc make python3 cron fontconfig fonts-dejavu-core"
 
 log "4. Node.js $NODE_MAJOR"
 if command -v node > /dev/null 2>&1 && [ "$(node -v | cut -d. -f1 | tr -d v)" = "$NODE_MAJOR" ]; then

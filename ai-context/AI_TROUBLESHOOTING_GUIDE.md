@@ -1363,3 +1363,41 @@ npx tsx scripts/tmp-check-polyline.ts 49   # 打印各天的 zoom / 合法点数
 - **白色方向箭头压在线上**：会把蓝线切出白缺口，看起来像路线断开。
 - **图内中文图例**：sharp 渲染中文依赖系统字体，容器里未必有；
   图例放在网页与 Word 正文里更稳。
+
+---
+
+## 案例：地图上只有红点、没有数字（2026-10-20）
+
+### 现象
+
+新版地图上线后，公网上每张图都是「红色圆点 + 虚线/蓝线」，圆点里**没有编号**。
+本地同一份代码、同一个方案，编号正常。
+
+### 根因
+
+编号是 sharp 用 SVG `<text>` 合成的，sharp 的 librsvg 通过 **fontconfig** 找字体。
+腾讯云轻量镜像里 `/usr/share/fonts` 都不存在，`fc-list` 也没有 → 文字被静默丢弃，
+不报错、日志里也没有痕迹。
+
+对比检查：
+
+```bash
+# 本地（正常）
+fc-list | wc -l          # 几百个
+# 服务器（异常）
+command -v fc-list || echo 无
+```
+
+### 修法
+
+```bash
+sudo apt-get install -y fontconfig fonts-dejavu-core
+pm2 restart ai-insight-daily --update-env    # 进程内有图片缓存，必须重启
+```
+
+`02-server-bootstrap.sh` 已加入这两个包。
+
+### 教训
+
+「本地看着对」不构成验证。凡是服务端合成图片的功能，上线后必须**从公网取一张图
+肉眼看**；只看 HTTP 200 和 content-type 会漏掉这类「渲染成功但内容为空」的问题。

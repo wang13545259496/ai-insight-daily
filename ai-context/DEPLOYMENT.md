@@ -672,3 +672,70 @@ true  → robots: Allow: /     ｜ meta: index, follow             ｜ header: �
 | `AI-START-HERE.md`（项目根目录） | 改动流程、验证要求、当前已知问题 |
 | `ai-context/AI_TROUBLESHOOTING_GUIDE.md` | 故障排查手册（含实测案例） |
 | `ai-context/ARCHITECTURE.md` | 技术架构与数据流 |
+
+
+---
+
+## 生产部署现状（2026-10-20 核实）
+
+**这一节替代本文前面的「Windows + WSL2 自托管」描述** —— 域名已经指向腾讯云，
+本机这份只是开发副本。核对方法：`getent hosts aibiliai.com` 不再是 Cloudflare 段地址，
+而是腾讯云公网 IP。
+
+| 项 | 值 |
+| --- | --- |
+| 域名解析 | `aibiliai.com` → `43.133.176.111`（腾讯云轻量，中国香港） |
+| SSH | `ubuntu@43.133.176.111`（**不是 root**，root 密码登录被禁用） |
+| 应用目录 | `/home/ubuntu/ai-insight-daily` |
+| 进程 | PM2 `ai-insight-daily`（`npm start` → `next start -H 0.0.0.0`，3000 端口） |
+| 前置 | nginx 80 反代到 3000（响应头 `server: nginx`） |
+| 数据库 | 服务器自己的 `prisma/dev.db`，与开发机**不是同一份** |
+
+### 部署命令（在开发机 WSL 执行）
+
+```bash
+cd ~/projects/ai-insight-daily
+# 先把公钥装上，之后所有 ssh 都是免密的：
+ssh-copy-id -i ~/.ssh/id_ed25519.pub ubuntu@43.133.176.111
+
+DEPLOY_SERVER=ubuntu@43.133.176.111 \
+DEPLOY_APP_DIR=/home/ubuntu/ai-insight-daily \
+DEPLOY_PM2_NAME=ai-insight-daily \
+bash scripts/migration/deploy.sh
+```
+
+脚本会：`git reset --hard origin/main` → 按需 `npm ci` → `prisma generate`（schema 变了才 migrate）
+→ `npm run build` → `pm2 restart --update-env` → 健康检查；失败自动回滚到上一个 commit。
+
+> 注意：`deploy.sh` 用 `ssh -o BatchMode=yes` 做连通性检查，**只认密钥**，
+> 密码认证会直接判为「SSH 连不上」。所以第一次必须先 `ssh-copy-id`。
+
+### 部署后必须做的三件验证
+
+```bash
+# 1. 服务器上的 commit 是否为新版
+ssh ubuntu@43.133.176.111 "cd /home/ubuntu/ai-insight-daily && git log -1 --oneline"
+
+# 2. 公网页面是否引用新接口（旧版会命中 restapi.amap.com）
+curl -s -b <登录 Cookie> https://aibiliai.com/agent-travel/49 | grep -c 'api/travel/49/map'
+
+# 3. 地图接口是否出图（应为 image/png，1440x810）
+curl -s -b <登录 Cookie> -o /tmp/m.png -w '%{content_type} %{size_download}\n' \
+  "https://aibiliai.com/api/travel/49/map?day=1"
+```
+
+### 服务器字体是硬依赖
+
+逐日地图的编号由 sharp 用 SVG `<text>` 合成，sharp 通过 fontconfig 找字体。
+**服务器没有任何字体时，编号渲染成空白**，图上只剩红底圆点 —— 2026-10-20 首次
+部署到腾讯云时就是这样，肉眼看着像「改了没生效」。
+
+检查与安装：
+
+```bash
+fc-list | wc -l                    # 0 或「命令不存在」= 没装字体
+sudo apt-get install -y fontconfig fonts-dejavu-core
+pm2 restart ai-insight-daily --update-env   # 必须重启：进程内有图片缓存
+```
+
+`02-server-bootstrap.sh` 已把这两个包写进系统依赖，重建机器不会漏。
