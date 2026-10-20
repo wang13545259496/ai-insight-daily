@@ -573,101 +573,89 @@ AI永远知道项目结构。
 
 ## 旅行规划 Agent
 
-位置：
+位置：`lib/agents/travel/`
 
-lib/agents/travel/
+职责：旅行方案生成的全部业务逻辑（编排、报价、预算、地图、导出）。
 
+### 业务逻辑
 
-职责：
+| 文件 | 作用 |
+| --- | --- |
+| `types.ts` | 领域模型 |
+| `date.ts` | 日期推算 |
+| `validation.ts` | 输入校验 |
+| `cities.ts` | 城市 → IATA 三字码 |
+| `budget.ts` | 预算分配（确定性算法） |
+| `itinerary.ts` | 行程编排与成本回填 |
+| `prompt.ts` | 提示词构建 |
+| `ai.ts` | 模型调用层 |
+| `planner.ts` | 主流程编排 |
+| `data.ts` | 数据访问层（TripPlan） |
+| `providers.ts` / `amadeus.ts` / `variflight.ts` | 机票报价 |
+| `rollinggo.ts` | 酒店报价 |
+| `intercityOptions.ts` / `fareEstimate.ts` / `stationRank.ts` | 跨城方式（火车 / 自驾）对比 |
+| `amap.ts` | 高德：POI 检索、坐标补齐、通勤、天气 |
+| `weather.ts` | 逐日天气（和风） |
 
+### 逐日路线图（2026-10-20 重做）
 
-旅行方案生成的全部业务逻辑。
+| 文件 | 作用 |
+| --- | --- |
+| `daymap-core.ts` | **纯计算**：编号合并、取景（按跨度算 zoom）、Web 墨卡托投影、折线抽稀。浏览器与服务端共用，无 Node 依赖 |
+| `daymap.ts` | **渲染**：只向高德要底图，用 sharp 叠加编号圆点与路线，输出 PNG（网页与 Word 共用） |
+| `staticmap.ts` | 兜底路径：高德自带的 markers + paths 静态图（方案未落库时使用） |
 
+### 页面
 
-文件分工：
+| 路径 | 作用 |
+| --- | --- |
+| `app/agent-travel/page.tsx` | 表单 + 状态条 + 历史方案 |
+| `app/agent-travel/[id]/page.tsx` | 方案分享页（按归属鉴权） |
+| `app/agent-travel/login/page.tsx` | 口令 / 邀请码登录 |
+| `app/agent-travel/invites/page.tsx` | 邀请码管理（仅维护者） |
 
+### 接口
 
-types.ts        领域模型
+| 路径 | 作用 |
+| --- | --- |
+| `app/api/travel/plan/route.ts` | POST 生成（支持 NDJSON 流式进度）/ GET 列表 |
+| `app/api/travel/plan/[id]/route.ts` | GET 单条方案 |
+| `app/api/travel/[id]/download/route.ts` | 导出 Word（full / compact / day） |
+| `app/api/travel/[id]/map/route.ts` | **逐日路线图 PNG**（?day=N，鉴权 + 归属校验 + 进程内缓存） |
+| `app/api/travel/auth/route.ts` | 口令与邀请码登录 |
+| `app/api/travel/invites/route.ts` | 邀请码增删 |
 
-date.ts         日期推算
+### 组件
 
-validation.ts   输入校验
+位置：`components/agent-travel/`
 
-cities.ts       城市到 IATA 三字码
+| 文件 | 作用 |
+| --- | --- |
+| `TripPlannerForm.tsx` | 表单与结果容器（客户端） |
+| `PlanView.tsx` | 方案展示；逐日卡片含地图与编号圆点 |
+| `InviteManager.tsx` | 邀请码管理 |
+| `TravelLoginForm.tsx` / `TravelLogoutButton.tsx` | 登录态入口 |
 
-budget.ts       预算分配算法（确定性）
+### 导出
 
-itinerary.ts    行程编排与成本回填
+| 文件 | 作用 |
+| --- | --- |
+| `export.ts` | 文档结构（区块取舍） |
+| `exportDocx.ts` | 结构 → .docx |
+| `exportImages.ts` | 逐日图取回（串行 + 间隔，避免高德限流） |
 
-prompt.ts       提示词构建
+### 数据表
 
-providers.ts    报价 Provider 抽象与估算降级
+`TripPlan`（方案 JSON + 归属）、`TravelInvite`（一次性邀请码）
 
-amadeus.ts      真实报价接入（未启用）
+### 诊断脚本
 
-ai.ts           模型调用层
+位置：`scripts/travel/`
 
-data.ts         数据访问层
-
-planner.ts      主流程编排
-
-
----
-
-页面：
-
-
-位置：app/travel/
-
-app/travel/page.tsx       表单与结果
-
-app/travel/[id]/page.tsx  方案分享页
-
-
----
-
-接口：
-
-
-位置：app/api/travel/plan/
-
-route.ts        POST 生成 / GET 列表
-
-[id]/route.ts   GET 单条
-
-
----
-
-组件：
-
-
-位置：components/travel/
-
-TripPlannerForm.tsx   表单（客户端）
-
-PlanView.tsx          方案展示（服务端）
-
-
----
-
-数据表：
-
-TripPlan
-
-
----
-
-诊断脚本：
-
-
-位置：scripts/travel/
-
-check-amap.ts        高德 Key 与接口诊断
-
-check-amadeus.ts     Amadeus 凭据诊断
-
-check-qweather.ts    和风天气诊断
-
-check-db.ts          方案落库自洽性检查
-
-e2e.ts               端到端验证
+| 文件 | 作用 |
+| --- | --- |
+| `check-amap.ts` | 高德 Key 与接口诊断 |
+| `check-amadeus.ts` | Amadeus 凭据诊断 |
+| `check-qweather.ts` | 和风天气诊断 |
+| `check-db.ts` | 方案落库自洽性检查 |
+| `e2e.ts` | 端到端验证 |

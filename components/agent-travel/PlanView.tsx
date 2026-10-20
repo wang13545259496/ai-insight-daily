@@ -9,7 +9,12 @@ import Link from "next/link";
 
 import { formatDuration } from "@/lib/agents/travel/providers";
 import { VEHICLE_DEFAULTS } from "@/lib/agents/travel/amap";
-import { buildDayMapUrlSafe, MAP_HEIGHT, MAP_WIDTH } from "@/lib/agents/travel/staticmap";
+import {
+  DAY_MAP_HEIGHT,
+  DAY_MAP_WIDTH,
+  buildDayMapModel,
+} from "@/lib/agents/travel/daymap-core";
+import { buildDayMapUrlSafe } from "@/lib/agents/travel/staticmap";
 import type {
   BudgetCategory,
   ItineraryActivity,
@@ -332,25 +337,37 @@ function DayCard({
   day,
   nights,
   plan,
+  planId,
 }: {
   day: TravelPlan["itinerary"][number];
   nights: number;
   plan: TravelPlan;
+  planId?: number | null;
 }) {
   /**
-   * 当日路线图。按游览顺序给有坐标的活动编号，
-   * 少于两个坐标时不画（一个点无法表达路线）。
+   * 当日地图的编号模型：按游览顺序给有坐标的活动编号。
+   *
+   * 同一坐标合并成一个编号（模型常把「前往天坛」与「天坛公园」写成两条活动，
+   * 坐标完全相同），合并后两条活动共享同号，地图上不会叠出两个数字。
    */
-  const mapPoints = day.activities
-    .filter((a) => typeof a.coordinates === "string" && a.coordinates.length > 0)
-    .map((a, index) => ({ location: a.coordinates as string, index: index + 1 }));
+  const mapModel = buildDayMapModel(day);
 
   // 优先用真实道路折线；没有时回退直连（直连会穿过不可通行区域）
   const dayPolyline = plan.dayRoutePolylines?.[day.day] ?? null;
 
-  const mapUrl = buildDayMapUrlSafe(mapPoints, dayPolyline);
-
   const hasRealRoute = Boolean(dayPolyline);
+
+  /**
+   * 有方案编号时走服务端合成的图：编号是大号圆点、连线带方向箭头。
+   * 方案未落库（保存失败）时退回高德自己画的图 —— 编号偏小，但仍能看。
+   */
+  const mapSrc =
+    planId != null
+      ? `/api/travel/${planId}/map?day=${day.day}`
+      : buildDayMapUrlSafe(
+          mapModel.stops.map((stop) => ({ location: stop.location, index: stop.number })),
+          dayPolyline,
+        );
 
   return (
     <div className="rounded-lg border border-gray-800 bg-gray-950/40">
@@ -368,12 +385,26 @@ function DayCard({
       <div className="divide-y divide-gray-800/60">
         {day.activities.map((activity, index) => {
           const meta = KIND_META[activity.kind];
+          const number = mapModel.activityNumbers[index];
 
           return (
-            <div key={`${activity.title}-${index}`} className="flex gap-4 px-4 py-3">
-              <div className="w-24 shrink-0 pt-0.5 text-right">
+            <div key={`${activity.title}-${index}`} className="flex gap-3 px-4 py-3">
+              <div className="w-20 shrink-0 pt-0.5 text-right">
                 <div className="font-mono text-xs text-gray-400">{activity.startTime}</div>
                 <div className="font-mono text-xs text-gray-400">{activity.endTime}</div>
+              </div>
+
+              {/*
+                与地图上的编号一一对应：不标号的话，图上的 1/2/3
+                与下面这串活动对不上，还是得自己数。
+                无坐标的活动留出空位，保持左侧对齐。
+              */}
+              <div className="w-5 shrink-0 pt-0.5">
+                {number !== null && mapSrc && (
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#E03131] text-[12px] font-bold leading-none text-white">
+                    {number}
+                  </span>
+                )}
               </div>
 
               <div className="min-w-0 flex-1">
@@ -411,22 +442,30 @@ function DayCard({
         {nights === 0 && <span className="text-gray-400">（一日游）</span>}
       </div>
 
-      {mapUrl && (
+      {mapSrc && (
         <div className="border-t border-gray-800 px-4 py-3">
           <p className="mb-2 text-xs text-gray-400">
             当日路线{" "}
             <span className="text-gray-400">
-              （编号对应下方活动顺序{hasRealRoute ? "，连线为实际道路" : "，连线为直线示意"}）
+              （
+              {mapModel.stops.length > 1
+                ? `编号 ${mapModel.stops.map((stop) => stop.number).join("→")} 与下方活动一一对应`
+                : "当天活动集中在同一地点，只有一个标注"}
+              {hasRealRoute ? "，连线为实际道路" : "，连线为直线示意"}
+              ）
             </span>
           </p>
-          {/* 静态图由高德生成，逐日一张；用原生 img 而非 next/image，
-              因为图片来自外部域名且尺寸固定，无需优化管线 */}
+          {/* 图由服务端按当天坐标合成（编号 + 真实路线），逐日一张。
+              用原生 img 而非 next/image：这是同源的动态图片接口，
+              尺寸固定且按 2 倍像素出图，不需要优化管线 */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={mapUrl}
-            alt={`第 ${day.day} 天路线图`}
-            width={MAP_WIDTH}
-            height={MAP_HEIGHT}
+            src={mapSrc}
+            alt={`第 ${day.day} 天路线图：${mapModel.stops
+              .map((stop) => `${stop.number}.${stop.title}`)
+              .join("、")}`}
+            width={DAY_MAP_WIDTH}
+            height={DAY_MAP_HEIGHT}
             loading="lazy"
             className="w-full rounded border border-gray-800"
           />
@@ -689,7 +728,13 @@ export default function PlanView({
 
         <div className="space-y-4">
           {plan.itinerary.map((day) => (
-            <DayCard key={day.date} day={day} nights={plan.duration.nights} plan={plan} />
+            <DayCard
+              key={day.date}
+              day={day}
+              nights={plan.duration.nights}
+              plan={plan}
+              planId={planId}
+            />
           ))}
         </div>
       </section>

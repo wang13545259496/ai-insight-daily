@@ -61,7 +61,7 @@ npx tsc --noEmit
 
 # 3. 跑测试
 npx tsx --test lib/agents/travel/*.test.ts lib/ranking/*.test.ts lib/*.test.ts
-# 当前 460 项全通过
+# 当前 511 项全通过（2026-10-20 实测）
 
 # 4. 构建（约 48 秒）
 npm run build

@@ -13,6 +13,8 @@
  * 但图片 URL 由浏览器按需加载，天然分散，不受此影响。
  */
 
+import { fitDayView, parseLocation } from "./daymap-core";
+
 /** 高德静态图端点 */
 const STATIC_MAP_URL = "https://restapi.amap.com/v3/staticmap";
 
@@ -20,7 +22,13 @@ const STATIC_MAP_URL = "https://restapi.amap.com/v3/staticmap";
 export const MAP_WIDTH = 640;
 export const MAP_HEIGHT = 300;
 
-/** 缩放级别：13 适合展示同一片区内的若干地点 */
+/**
+ * 兜底缩放级别。
+ *
+ * 只在 fitDayView 拿不到取景时使用。正常路径按当天点位的跨度算级别 ——
+ * 写死级别会让跨度大的天把点全甩到画面外（实测北京第 1 天从大兴机场到顺义，
+ * 写死 13 级时图上只剩一片无关街区）。
+ */
 const DEFAULT_ZOOM = 13;
 
 /** 标记点与路线的颜色（高德用 0xRRGGBB） */
@@ -94,9 +102,19 @@ export function buildDayMapUrl(points: MapPoint[], routePolyline?: string | null
 
   const paths = `5,${ROUTE_COLOR},1,,:${routePoints}`;
 
+  // 按实际点位取景：跨度大的天必须缩到更小的级别才装得下
+  const view = fitDayView(
+    used
+      .map((point) => parseLocation(point.location))
+      .filter((point): point is [number, number] => point !== null),
+    MAP_WIDTH,
+    MAP_HEIGHT,
+  );
+
   const params = [
     `size=${MAP_WIDTH}*${MAP_HEIGHT}`,
-    `zoom=${DEFAULT_ZOOM}`,
+    `zoom=${view?.zoom ?? DEFAULT_ZOOM}`,
+    ...(view ? [`location=${view.center[0].toFixed(6)},${view.center[1].toFixed(6)}`] : []),
     `markers=${markers}`,
     `paths=${paths}`,
     `key=${key}`,

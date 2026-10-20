@@ -3,7 +3,7 @@ import { afterEach, describe, it } from "node:test";
 
 import { buildPlanDocument, documentFileName, resolveExportOptions } from "./export";
 import { fetchDayMapImages } from "./exportImages";
-import type { TravelPlan } from "./types";
+import type { ItineraryDay, TravelPlan } from "./types";
 
 /**
  * 导出模式与图片嵌入的测试。
@@ -284,199 +284,80 @@ describe("travel/export 文件名带模式后缀", () => {
 });
 
 describe("travel/exportImages 逐日路线图", () => {
-  it("未配置高德 Key 时不发请求", async () => {
-    delete process.env.AMAP_WEB_KEY;
+  /**
+   * 假渲染器。
+   *
+   * 真渲染器要连高德并调用 sharp，单测里既慢又不稳定；
+   * 这里只验证「取哪几天、失败怎么记、有没有把 Key 带出去」这些编排逻辑。
+   * 真实合成由 daymap.test.ts 覆盖。
+   */
+  function fakeRenderer(failDays: number[] = []) {
+    const calls: number[] = [];
 
-    const originalFetch = globalThis.fetch;
-    let called = 0;
+    const render = async (_plan: TravelPlan, day: ItineraryDay): Promise<Buffer | null> => {
+      calls.push(day.day);
 
-    globalThis.fetch = (async () => {
-      called++;
-      throw new Error("不应发起请求");
-    }) as typeof fetch;
+      if (failDays.includes(day.day)) return null;
 
-    try {
-      const result = await fetchDayMapImages(makePlan());
+      // 造一张「像 PNG」的数据，长度超过 fetchOneMap 时代的 1KB 门槛
+      return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), Buffer.alloc(2000, 1)]);
+    };
 
-      assert.equal(called, 0, "未配置 Key 时不应请求");
-      assert.equal(result.images.length, 0);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
+    return { calls, render };
+  }
 
-  it("★ 取回图片二进制", async () => {
-    process.env.AMAP_WEB_KEY = "test_key";
+  it("每天都取到图", async () => {
+    const { calls, render } = fakeRenderer();
+    const result = await fetchDayMapImages(makePlan(), undefined, 7, render);
 
-    const originalFetch = globalThis.fetch;
-
-    // 造一张超过 1KB 的假 PNG
-    const fakePng = Buffer.concat([
-      Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-      Buffer.alloc(2000, 1),
-    ]);
-
-    globalThis.fetch = (async () =>
-      new Response(new Uint8Array(fakePng), {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      })) as typeof fetch;
-
-    try {
-      const result = await fetchDayMapImages(makePlan());
-
-      assert.equal(result.images.length, 3, "三天都应有图");
-      assert.equal(result.failed.length, 0);
-      assert.ok(result.images[0].data.length > 1000);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    assert.deepEqual(calls, [1, 2, 3], "三天都应请求出图");
+    assert.equal(result.images.length, 3);
+    assert.equal(result.failed.length, 0);
+    assert.ok(result.images[0].data.length > 1000);
   });
 
   it("只取指定天数", async () => {
-    process.env.AMAP_WEB_KEY = "test_key";
+    const { calls, render } = fakeRenderer();
+    const result = await fetchDayMapImages(makePlan(), [2], 7, render);
 
-    const originalFetch = globalThis.fetch;
-    const fakePng = Buffer.concat([Buffer.from([0x89]), Buffer.alloc(2000, 1)]);
-
-    globalThis.fetch = (async () =>
-      new Response(new Uint8Array(fakePng), {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      })) as typeof fetch;
-
-    try {
-      const result = await fetchDayMapImages(makePlan(), [2]);
-
-      assert.equal(result.images.length, 1);
-      assert.equal(result.images[0].day, 2);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    assert.deepEqual(calls, [2]);
+    assert.equal(result.images.length, 1);
+    assert.equal(result.images[0].day, 2);
   });
 
-  it("★ 接口返回 JSON 而非图片时按失败处理（并重试）", async () => {
-    process.env.AMAP_WEB_KEY = "test_key";
+  it("★ 单天失败记为 failed，且不影响其它天", async () => {
+    const { render } = fakeRenderer([2]);
+    const result = await fetchDayMapImages(makePlan(), [1, 2, 3], 7, render);
 
-    const originalFetch = globalThis.fetch;
-    let called = 0;
-
-    globalThis.fetch = (async () => {
-      called++;
-      return new Response(JSON.stringify({ status: "0", info: "CUQPS_HAS_EXCEEDED_THE_LIMIT" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }) as typeof fetch;
-
-    try {
-      const result = await fetchDayMapImages(makePlan(), [1]);
-
-      assert.equal(result.images.length, 0);
-      assert.equal(result.failed.length, 1, "该天应记为失败");
-      // 失败会重试：首次 + 2 次重试 = 3 次
-      assert.ok(called >= 3, `应重试，实际调用 ${called} 次`);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    assert.deepEqual(result.failed, [2]);
+    assert.deepEqual(
+      result.images.map((i) => i.day),
+      [1, 3],
+      "其余天应成功",
+    );
   });
 
-  it("★ 首次失败后重试成功（应对限流）", async () => {
-    process.env.AMAP_WEB_KEY = "test_key";
+  it("没有坐标的天不发请求，也不算失败", async () => {
+    const plan = makePlan();
 
-    const originalFetch = globalThis.fetch;
-    let n = 0;
+    for (const activity of plan.itinerary[1].activities) delete activity.coordinates;
 
-    globalThis.fetch = (async () => {
-      n++;
+    const { calls, render } = fakeRenderer();
+    const result = await fetchDayMapImages(plan, undefined, 7, render);
 
-      // 第一次返回限流错误，之后成功
-      if (n === 1) {
-        return new Response(JSON.stringify({ status: "0", info: "CUQPS" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      const png = Buffer.concat([Buffer.from([0x89]), Buffer.alloc(2000, 1)]);
-
-      return new Response(new Uint8Array(png), {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      });
-    }) as typeof fetch;
-
-    try {
-      const result = await fetchDayMapImages(makePlan(), [1]);
-
-      assert.equal(result.images.length, 1, "重试后应成功");
-      assert.equal(result.failed.length, 0);
-      assert.equal(n, 2, "应为 2 次调用");
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it("HTTP 错误时记为失败且不影响其它天", async () => {
-    process.env.AMAP_WEB_KEY = "test_key";
-
-    const originalFetch = globalThis.fetch;
-
-    /**
-     * 按 URL 判断是哪一天，而不是按调用序号 ——
-     * 失败会重试，序号会漂移，用序号判断会做出不稳定的测试。
-     * 第 2 天的坐标以 120.12/30.22 开头（见 makePlan 的模板）。
-     */
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
-
-      if (url.includes("120.12")) return new Response("err", { status: 500 });
-
-      const png = Buffer.concat([Buffer.from([0x89]), Buffer.alloc(2000, 1)]);
-
-      return new Response(new Uint8Array(png), {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      });
-    }) as typeof fetch;
-
-    try {
-      const result = await fetchDayMapImages(makePlan(), [1, 2, 3]);
-
-      assert.deepEqual(
-        result.failed,
-        [2],
-        `第 2 天应失败，实际失败 ${JSON.stringify(result.failed)}`,
-      );
-      assert.deepEqual(
-        result.images.map((i) => i.day),
-        [1, 3],
-        "其余天应成功",
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    assert.ok(!calls.includes(2), "第 2 天无坐标，不应请求出图");
+    assert.deepEqual(result.failed, [], "无坐标不是失败");
+    assert.deepEqual(
+      result.images.map((i) => i.day),
+      [1, 3],
+    );
   });
 
   it("limit 限制取图数量", async () => {
-    process.env.AMAP_WEB_KEY = "test_key";
+    const { render } = fakeRenderer();
+    const result = await fetchDayMapImages(makePlan(), undefined, 2, render);
 
-    const originalFetch = globalThis.fetch;
-    const png = Buffer.concat([Buffer.from([0x89]), Buffer.alloc(2000, 1)]);
-
-    globalThis.fetch = (async () =>
-      new Response(new Uint8Array(png), {
-        status: 200,
-        headers: { "Content-Type": "image/png" },
-      })) as typeof fetch;
-
-    try {
-      const result = await fetchDayMapImages(makePlan(), undefined, 2);
-
-      assert.equal(result.images.length, 2);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    assert.equal(result.images.length, 2);
   });
 
   it("★ 图片 URL 未写入文档（Key 不泄露）", async () => {

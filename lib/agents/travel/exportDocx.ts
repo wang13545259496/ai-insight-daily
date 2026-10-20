@@ -24,6 +24,7 @@ import {
   WidthType,
 } from "docx";
 
+import { DAY_MAP_HEIGHT, DAY_MAP_WIDTH } from "./daymap-core";
 import type { DocSection, PlanDocument } from "./export";
 
 /** 正文字号（半磅），21 = 10.5pt，与 Word 中文默认字号一致 */
@@ -43,10 +44,10 @@ const SUBTITLE_SIZE = 20;
  *
  * 为什么用磅而非原图像素：docx 的 transformation 单位是磅，
  * A4 正文区宽度约 425 磅（11906 twips 页宽减去两侧 1134 twips 边距）。
- * 取 420 磅基本铺满正文区，再按原图 640×300 的比例算出高度。
+ * 取 420 磅基本铺满正文区，再按画布 720×405 的比例算出高度。
  */
 const MAP_DISPLAY_WIDTH = 420;
-const MAP_ASPECT = 300 / 640;
+const MAP_ASPECT = DAY_MAP_HEIGHT / DAY_MAP_WIDTH;
 const MAP_DISPLAY_HEIGHT = Math.round(MAP_DISPLAY_WIDTH * MAP_ASPECT);
 
 /** 一天的路线图（已取回的二进制） */
