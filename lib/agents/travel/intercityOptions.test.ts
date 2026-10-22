@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import { estimateDrivingCost, VEHICLE_DEFAULTS } from "./amap";
+import { fetchDriveOption } from "./intercityOptions";
 import { lowestSeatPrice } from "./variflight";
 import type { TrainTicket } from "./variflight";
 
@@ -195,5 +196,31 @@ describe("travel/intercityOptions 未配置凭据时的降级", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+
+describe("travel/intercity 自驾选项兜底", () => {
+  const ORIGINAL_KEY = process.env.AMAP_WEB_KEY;
+  const ORIGINAL_FETCH = globalThis.fetch;
+
+  afterEach(() => {
+    process.env.AMAP_WEB_KEY = ORIGINAL_KEY;
+    globalThis.fetch = ORIGINAL_FETCH;
+  });
+
+  it("★ 高德驾车接口报错时返回「暂无」，不抛异常", async () => {
+    process.env.AMAP_WEB_KEY = "test_key";
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: "0", info: "INVALID_PARAMS", infocode: "20000" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+
+    const result = await fetchDriveOption("116.397,39.917", "116.429,39.510", 2);
+
+    assert.equal(result.option, null);
+    assert.ok(result.error && result.error.length > 0, "应给出可读原因");
   });
 });

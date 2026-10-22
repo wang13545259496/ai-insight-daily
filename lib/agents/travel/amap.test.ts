@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   clearAmapCache,
   enrichItinerary,
+  fetchDrivingRoute,
   estimateTaxiFare,
   haversineMeters,
   isAmapConfigured,
@@ -439,5 +440,75 @@ describe("travel/amap 正常增强", () => {
       result.warnings.some((w) => w.includes("定位")),
       "应报告有地点未能定位",
     );
+  });
+});
+
+
+describe("travel/amap 驾车接口的参数防护（INVALID_PARAMS 回归）", () => {
+  const ORIGINAL_KEY = process.env.AMAP_WEB_KEY;
+  const ORIGINAL_FETCH = globalThis.fetch;
+
+  afterEach(() => {
+    process.env.AMAP_WEB_KEY = ORIGINAL_KEY;
+    globalThis.fetch = ORIGINAL_FETCH;
+    clearAmapCache();
+  });
+
+  it("★ 城市名解析不出坐标时，不拿城市名去调驾车接口", async () => {
+    process.env.AMAP_WEB_KEY = "test_key";
+
+    const called: string[] = [];
+
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      called.push(url);
+
+      // 地理编码返回空结果（城市解析不出来）
+      if (url.includes("/v3/geocode/geo")) {
+        return new Response(JSON.stringify({ status: "1", geocodes: [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // 一旦走到这里就说明防护失效：高德会返回 INVALID_PARAMS
+      return new Response(
+        JSON.stringify({ status: "0", info: "INVALID_PARAMS", infocode: "20000" }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const route = await fetchDrivingRoute("不存在的城市甲", "不存在的城市乙");
+
+    assert.equal(route, null, "应返回 null 而不是抛异常");
+    assert.equal(
+      called.filter((url) => url.includes("/v3/direction/driving")).length,
+      0,
+      "不应调用驾车接口（城市名不是合法坐标）",
+    );
+  });
+
+  it("★ 接口报错时错误信息带接口名与参数，便于定位", async () => {
+    process.env.AMAP_WEB_KEY = "test_key";
+
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ status: "0", info: "INVALID_PARAMS", infocode: "20000" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as typeof fetch;
+
+    let message = "";
+
+    try {
+      // 直接给坐标，绕过城市解析，强制走到驾车接口
+      await fetchDrivingRoute("116.397,39.917", "116.429,39.510");
+    } catch (error) {
+      message = String(error);
+    }
+
+    assert.ok(message.includes("INVALID_PARAMS"), `应包含高德错误码：${message}`);
+    assert.ok(message.includes("/v3/direction/driving"), `应包含接口路径：${message}`);
+    assert.ok(message.includes("origin="), `应包含参数摘要：${message}`);
   });
 });

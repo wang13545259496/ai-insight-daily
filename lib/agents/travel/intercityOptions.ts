@@ -291,8 +291,15 @@ export async function fetchDriveOption(
     return { option: null, error: "未配置 AMAP_WEB_KEY，无法计算自驾路线" };
   }
 
-  // 高德驾车接口接受城市名作为起终点
-  const route = await fetchDrivingRoute(originCity, destinationCity);
+  // 高德驾车接口接受城市名作为起终点；这里再兜一层，
+  // 确保「自驾对比」出问题也只是少一个选项，不会让整份方案失败
+  let route: Awaited<ReturnType<typeof fetchDrivingRoute>> = null;
+
+  try {
+    route = await fetchDrivingRoute(originCity, destinationCity);
+  } catch (error) {
+    return { option: null, error: `高德驾车接口暂时不可用：${String(error).slice(0, 80)}` };
+  }
 
   if (!route) {
     return { option: null, error: "高德未返回驾车路线（可能超出覆盖范围或两地不可达）" };

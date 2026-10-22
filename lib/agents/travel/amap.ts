@@ -193,7 +193,11 @@ export async function amapGet<T extends AmapResponse>(
         lastRateLimitFailures++;
       }
 
-      throw new Error(`高德接口返回错误：${payload.info ?? "未知"}（${payload.infocode ?? "-"}）`);
+      // 带上接口与参数摘要：否则「INVALID_PARAMS」无法定位是哪一步、哪个参数
+      throw new Error(
+        `高德接口返回错误：${payload.info ?? "未知"}（${payload.infocode ?? "-"}）` +
+          ` · 接口 ${path} · 参数 ${describeParams(params)}`,
+      );
     } finally {
       clearTimeout(timer);
     }
@@ -205,6 +209,35 @@ export async function amapGet<T extends AmapResponse>(
 /** 等待指定毫秒 */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 是否形如 "lng,lat" 的坐标（驾车接口只认这个格式） */
+export function isCoordinateText(value: string): boolean {
+  const parts = String(value || "").trim().split(",");
+
+  if (parts.length !== 2) return false;
+
+  const lng = Number(parts[0]);
+  const lat = Number(parts[1]);
+
+  return Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lng) <= 180 && Math.abs(lat) <= 90;
+}
+
+/**
+ * 把请求参数压成一行摘要（隐藏 key、截断长值）。
+ *
+ * 目的是排查而不是记录：能看出「哪个接口、哪两个坐标、哪个关键字」即可。
+ */
+function describeParams(params: Record<string, string>): string {
+  const parts: string[] = [];
+
+  for (const [name, value] of Object.entries(params)) {
+    const text = String(value ?? "");
+
+    parts.push(`${name}=${text.length > 40 ? `${text.slice(0, 40)}…` : text}`);
+  }
+
+  return parts.join("&") || "无";
 }
 
 /**
@@ -310,8 +343,13 @@ export async function resolveCityPoint(city: string): Promise<GeoPoint | null> {
     cityCache.set(city, point);
 
     return point;
-  } catch {
-    cityCache.set(city, null);
+  } catch (error) {
+    /**
+     * 网络抖动或高德临时报错时**不能**缓存 null：
+     * 一旦缓存，这个进程里该城市就永久解析不出坐标，
+     * 后续驾车接口再收到城市名就会一路失败（本次 INVALID_PARAMS 的诱因）。
+     */
+    console.warn("[travel] 城市中心解析失败，本次不缓存", { city, error: String(error).slice(0, 120) });
 
     return null;
   }
@@ -586,6 +624,19 @@ export async function fetchDrivingRoute(
 
   const from = fromPoint?.location || origin;
   const to = toPoint?.location || destination;
+
+  /**
+   * 解析不出坐标就**不要**调用驾车接口。
+   *
+   * 曾经这里把城市名原样传下去，高德返回 INVALID_PARAMS（20000），
+   * 而这个异常一路冒到接口层，整份方案生成失败 —— 只为一个「自驾对比」增强项。
+   * 现在直接返回 null，由调用方降级成「暂无自驾方案」。
+   */
+  if (!isCoordinateText(from) || !isCoordinateText(to)) {
+    console.warn("[travel] 驾车接口跳过：起终点无法解析为坐标", { origin, destination, from, to });
+
+    return null;
+  }
 
   const payload = await amapGet<
     AmapResponse & {
