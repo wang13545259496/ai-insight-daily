@@ -617,9 +617,10 @@ export async function fetchDrivingRoute(
 ): Promise<DrivingRoute | null> {
   // 驾车接口只接受 "lng,lat"，直接传城市名会返回 INVALID_PARAMS（实测）。
   // 因此先把城市名解析为坐标；解析失败则按原样传（调用方可能已给坐标）。
+  // 已经是坐标就别再拿去地理编码：高德会对坐标返回 30001，白打两个失败请求
   const [fromPoint, toPoint] = await Promise.all([
-    resolveCityPoint(origin),
-    resolveCityPoint(destination),
+    isCoordinateText(origin) ? Promise.resolve(null) : resolveCityPoint(origin),
+    isCoordinateText(destination) ? Promise.resolve(null) : resolveCityPoint(destination),
   ]);
 
   const from = fromPoint?.location || origin;
