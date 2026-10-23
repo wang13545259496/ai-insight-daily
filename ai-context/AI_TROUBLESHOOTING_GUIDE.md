@@ -454,9 +454,9 @@ PM2 自动 `resurrect`，本机 3000 与局域网 80 立即恢复 200。
 | --- | --- |
 | 脚本 | `%LOCALAPPDATA%\ProxyGuard\proxy-guard.ps1` |
 | 日志 | `%LOCALAPPDATA%\ProxyGuard\proxy-guard.log` |
-| 任务名 | `ProxyGuard-FailOpen` |
+| 任务名 | `ProxyGuard-Watchdog` |
 | 触发 | 登录后 45 秒 + 每 10 分钟 |
-| 运行身份 | 当前用户、`Limited`（不需要管理员） |
+| 运行身份 | 当前用户、`S4U`（后台会话，不产生窗口）、`Limited` |
 
 ## 边界（重要）
 
@@ -473,22 +473,57 @@ PM2 自动 `resurrect`，本机 3000 与局域网 80 立即恢复 200。
 | 活代理（临时占用 7890 监听） | 保持 1 不动、不写日志、1.82 秒返回 |
 | 计划任务实跑一次 | `LastTaskResult 0x0`、`ProxyEnable` 1 → 0、日志留痕 |
 
+## 为什么必须以 S4U 运行（否则会弹终端）
+
+最初用普通交互式身份运行 `powershell.exe`，结果是**每 10 分钟弹一次黑窗口** ——
+计划任务在交互桌面创建控制台进程，`-WindowStyle Hidden` 拦不住：
+窗口在进程创建时就已由 conhost 画出来了。
+
+试过的两条错路：
+
+| 做法 | 结果 |
+| --- | --- |
+| `powershell.exe -WindowStyle Hidden` | 窗口照样闪一下 |
+| `wscript.exe` 跑一个 VBS 壳（`WshShell.Run cmd, 0`） | 任务**被自动禁用**，本机装有 360 安全卫士，20 秒内即生效 |
+
+最终解法：principal 用 `-LogonType S4U`（即「不管用户是否登录都运行、不存储密码」）。
+任务在后台会话执行，根本不会创建可见窗口；HKCU 仍是当前用户的，注册表照常写。
+
+### 三个附带发现
+
+1. **`Register-ScheduledTask -Force` 覆盖同名任务会继承原来的禁用状态。**
+   任务已被禁用时，重建后仍是禁用。要么先 `Unregister-ScheduledTask` 再建，
+   要么建完显式 `Enable-ScheduledTask`。
+
+2. **任务名字会被安全软件记住。** 同一份配置，叫被拦过的名字就一直被禁用，
+   换个名字立刻正常。改完必须确认：
+
+   ```powershell
+   Get-ScheduledTask -TaskName 'ProxyGuard-Watchdog' |
+     Select-Object TaskName, State, @{n='Enabled';e={$_.Settings.Enabled}}, @{n='Logon';e={$_.Principal.LogonType}}
+   ```
+
+   要看到 `State=Ready`、`Enabled=True`、`Logon=S4U`。
+
+3. **S4U 的代价**：`InternetSetOption` 的通知只在本会话内有效，交互会话里的浏览器
+   收不到；但注册表写入是真实的，浏览器下次读取代理设置时即生效。
+
 ## 运维命令
 
 ```powershell
 # 任务状态与上次结果
-Get-ScheduledTask     -TaskName 'ProxyGuard-FailOpen' | Select-Object TaskName,State
-Get-ScheduledTaskInfo -TaskName 'ProxyGuard-FailOpen' | Select-Object LastRunTime,LastTaskResult
+Get-ScheduledTask     -TaskName 'ProxyGuard-Watchdog' | Select-Object TaskName,State
+Get-ScheduledTaskInfo -TaskName 'ProxyGuard-Watchdog' | Select-Object LastRunTime,LastTaskResult
 
 # 改完代理设置想立刻生效，手动跑一次
-Start-ScheduledTask -TaskName 'ProxyGuard-FailOpen'
+Start-ScheduledTask -TaskName 'ProxyGuard-Watchdog'
 
 # 看它做过什么
 Get-Content "$env:LOCALAPPDATA\ProxyGuard\proxy-guard.log" -Encoding UTF8
 
 # 临时停用 / 恢复
-Disable-ScheduledTask -TaskName 'ProxyGuard-FailOpen'
-Enable-ScheduledTask  -TaskName 'ProxyGuard-FailOpen'
+Disable-ScheduledTask -TaskName 'ProxyGuard-Watchdog'
+Enable-ScheduledTask  -TaskName 'ProxyGuard-Watchdog'
 ```
 
 ## 已知边界
