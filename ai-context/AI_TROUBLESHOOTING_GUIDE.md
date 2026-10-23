@@ -430,6 +430,163 @@ PM2 自动 `resurrect`，本机 3000 与局域网 80 立即恢复 200。
 
 ---
 
+# 一之五、fail-open 守护：死代理不再拖垮浏览器（2026-10-23 实施）
+
+## 背景
+
+「一之四」的根因是**代理客户端没启动、系统代理却还开着**。
+只把 `ProxyEnable` 改回 0 只能救一次 —— 下次客户端异常退出、或开机没启动，
+同样的问题会再来一遍。
+
+2026-10-23 实测：Clash Party 在这台机器上启动即退出（`exit=0`，
+加 `--no-sandbox` 则 `exit=9`），不建配置目录、不写日志、无管理员兼容性标记，
+说明是安装本身坏了，短期内指望不上它自愈。
+
+因此把「代理死了要有人收尾」交给系统自己做，不再依赖代理客户端的行为。
+
+## 做法
+
+一个脚本 + 一个计划任务，判据只有一条：
+
+> **系统代理开着 + 指向本机 + 那个端口没人监听 → 关闭系统代理。**
+
+| 项 | 值 |
+| --- | --- |
+| 脚本 | `%LOCALAPPDATA%\ProxyGuard\proxy-guard.ps1` |
+| 日志 | `%LOCALAPPDATA%\ProxyGuard\proxy-guard.log` |
+| 任务名 | `ProxyGuard-FailOpen` |
+| 触发 | 登录后 45 秒 + 每 10 分钟 |
+| 运行身份 | 当前用户、`Limited`（不需要管理员） |
+
+## 边界（重要）
+
+- **只处理回环地址**（`127.0.0.1` / `localhost` / `::1`）。远程代理、局域网代理、
+  公司代理一律不碰 —— 它们偶尔不可达属于正常波动，自动关掉会制造更难查的问题。
+- 代理活着时**完全不写日志**，否则每 10 分钟一行，很快就被无视。
+- 探测最多 3 次、间隔 5 秒（约 15 秒窗口），给刚启动的客户端留出绑定端口的时间。
+
+## 实测（2026-10-23）
+
+| 场景 | 结果 |
+| --- | --- |
+| 死代理（7890 无监听） | `ProxyEnable` 1 → 0，写日志，站点恢复 200 |
+| 活代理（临时占用 7890 监听） | 保持 1 不动、不写日志、1.82 秒返回 |
+| 计划任务实跑一次 | `LastTaskResult 0x0`、`ProxyEnable` 1 → 0、日志留痕 |
+
+## 运维命令
+
+```powershell
+# 任务状态与上次结果
+Get-ScheduledTask     -TaskName 'ProxyGuard-FailOpen' | Select-Object TaskName,State
+Get-ScheduledTaskInfo -TaskName 'ProxyGuard-FailOpen' | Select-Object LastRunTime,LastTaskResult
+
+# 改完代理设置想立刻生效，手动跑一次
+Start-ScheduledTask -TaskName 'ProxyGuard-FailOpen'
+
+# 看它做过什么
+Get-Content "$env:LOCALAPPDATA\ProxyGuard\proxy-guard.log" -Encoding UTF8
+
+# 临时停用 / 恢复
+Disable-ScheduledTask -TaskName 'ProxyGuard-FailOpen'
+Enable-ScheduledTask  -TaskName 'ProxyGuard-FailOpen'
+```
+
+## 已知边界
+
+若代理客户端启动时先写了系统代理、却要超过 15 秒才绑定端口，守护可能抢先把
+代理关掉。Clash 类客户端启动时本就会重写系统代理，影响有限；要彻底避免，
+可在客户端里关掉「启动时自动配置系统代理」，改为手动开关。
+
+> 这个脚本必须存成 **UTF-8 带 BOM**，否则计划任务调用的 PowerShell 5.1
+> 会按 ANSI 解析中文，轻则日志乱码、重则语法报错。原因见下一节。
+
+---
+
+# 工具环境：Windows PowerShell 5.1 的编码陷阱（2026-10-23）
+
+## 现象
+
+两个表现，看似两件事，其实是同一个原因：
+
+1. 用 `Get-Content` 看 UTF-8 无 BOM 的中文文件，输出乱码、断行错乱
+2. `Set-Content -Encoding utf8BOM` 直接报参数错误，提示可选值只有
+   `Unknown, String, Unicode, Byte, BigEndianUnicode, UTF8, UTF7, UTF32, Ascii, Default, Oem, BigEndianUTF32`
+
+## 根因
+
+这个会话里的 shell **是 Windows PowerShell 5.1，不是 PowerShell 7**，
+尽管工具里把它称作 `pwsh`。确认方法：
+
+```powershell
+$PSVersionTable.PSVersion.ToString()
+```
+
+5.1 与 7 的两个关键差异：
+
+| 行为 | PowerShell 5.1 | PowerShell 7 |
+| --- | --- | --- |
+| `Get-Content` 默认编码 | ANSI（中文系统为 GBK） | UTF-8 |
+| `-Encoding` 可选值 | 无 `utf8BOM` / `utf8NoBOM` | 支持 |
+
+## 先分清「显示乱码」还是「文件真坏了」
+
+**不要用眼睛看到的乱码下结论。** 直接看字节：
+
+```bash
+file 目标.md
+head -c 120 目标.md | od -c | head
+```
+
+中文 UTF-8 的字节是 `E4 B8 xx` 这类三字节序列。只要 `file` 判定 UTF-8
+且字节序列正常，文件就是好的 —— 乱码只是读取端的解码问题。
+
+> 2026-10-23 踩过：看到便条文件乱码，一度以为写入时编码错了，
+> 用 `od -c` 核对后确认文件完全正常，是 5.1 按 GBK 解码造成的显示问题。
+
+## 必须遵守的两条
+
+**1. 读 UTF-8 文件要显式指定编码**
+
+```powershell
+Get-Content 文件.md -Encoding UTF8
+```
+
+**2. 交给 5.1 执行的 `.ps1` 必须存成 UTF-8 带 BOM**
+
+5.1 读 `.ps1` 时，无 BOM 会按 ANSI 解析。脚本里只要有中文（注释、日志文案
+都算）就会乱码，甚至语法失败：
+
+```
+The Try statement is missing its Catch or Finally block.
+Unexpected token '鎵ц鍑洪敊锛?' in expression or statement.
+```
+
+「try 少了 catch」这种报错，实际是中文被按 GBK 解析后把引号吃掉了。
+**看到这种莫名语法错，先查编码，不要重构代码。**
+
+写 BOM 的方法（5.1 没有 `utf8BOM` 参数，改用 .NET）：
+
+```powershell
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$utf8Bom   = New-Object System.Text.UTF8Encoding($true)
+$text = [System.IO.File]::ReadAllText($path, $utf8NoBom)
+[System.IO.File]::WriteAllText($path, $text, $utf8Bom)
+```
+
+验证：
+
+```powershell
+[System.IO.File]::ReadAllBytes($path)[0..2]     # 应为 EF BB BF
+$e = $null
+[System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$null, [ref]$e)
+# $e.Count 为 0 即语法通过
+```
+
+> 若 `.ps1` 只由 PowerShell 7 执行则无此限制；但计划任务默认调
+> `powershell.exe`（5.1），所以按上面做最稳。
+
+---
+
 # 旅行规划：行程内容变成「首选景区」「景区周边」这类占位描述
 
 ## 现象
