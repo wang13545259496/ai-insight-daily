@@ -123,7 +123,7 @@ HTTPS。
 
 > **⚠️ 本节描述的是迁移前（家用电脑 + Cloudflare 隧道）的架构。**
 >
-> 2026-10-18 已迁移到阿里云东京，直连 A 记录、不经 Cloudflare 代理，
+> 2026-10-18 已迁移到腾讯云东京，直连 A 记录、不经 Cloudflare 代理，
 > 本节的问题 A 和问题 B 都不再存在。保留此节是因为排查思路仍有参考价值。
 >
 > 现在的架构见 [`MIGRATION_COMPLETED.md`](./MIGRATION_COMPLETED.md)。
@@ -315,6 +315,118 @@ curl --resolve www.aibiliai.com:443:43.133.176.111 https://www.aibiliai.com/
 
 不加这一步，很容易把「缓存没更新」误判成「服务器配错了」，
 然后去改一堆本来正确的东西。
+
+---
+
+# 一之四、网站打不开：本机系统代理指向已停止的代理软件（2026-10-23 排查记录）
+
+## 现象
+
+- 浏览器打开 `https://aibiliai.com` 打不开，Edge 显示
+  「你尚未连接 —— 代理服务器可能有问题，或地址不正确」
+  （错误码 `ERR_PROXY_CONNECTION_FAILED`）
+- 同一台机器上 `http://192.168.1.25` 这类**局域网地址能打开**
+- 命令行 `curl https://aibiliai.com/` 返回 **200**，服务器一切正常
+
+## 第一步：先分清「服务端故障」还是「本机故障」
+
+这一步决定后面所有排查方向，**判反了会白查很久**。
+
+| 观察 | 结论 |
+| --- | --- |
+| 命令行 `curl` 200，但浏览器打不开 | **本机侧**问题（代理 / DNS / 缓存 / 浏览器） |
+| `curl` 也打不开，局域网 IP 能开 | 服务端或出口链路问题 |
+| 两边都打不开 | 先查服务器（见第一节），再查本机 |
+
+关键前提：**`curl` 不读 Windows 系统代理，浏览器读。**
+两者结论不一致时，优先怀疑代理，而不是服务器。
+
+## 根因
+
+Windows 系统代理仍然开着，指向 `127.0.0.1:7890`（Clash 默认端口），
+但**代理客户端没在运行**，7890 无人监听 —— 浏览器每个请求都先发给这个死端口。
+
+```powershell
+Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' |
+  Select-Object ProxyEnable,ProxyServer
+# ProxyEnable = 1
+# ProxyServer = 127.0.0.1:7890
+```
+
+`ProxyOverride` 里含 `192.168.*;10.*;<local>`，所以**局域网地址绕开代理仍能访问**，
+域名走代理直接失败 —— 这就是「局域网能开、网站打不开」的成因。
+
+## 30 秒定位
+
+```powershell
+# 1. 代理开关与地址
+Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' |
+  Select-Object ProxyEnable,ProxyServer
+
+# 2. 代理端口是否真有人监听（没有 = 死代理）
+Get-NetTCPConnection -State Listen -LocalPort 7890 -ErrorAction SilentlyContinue
+
+# 3. 走代理与绕过代理对比（决定性证据）
+curl.exe -s -o NUL -w "via_proxy=%{http_code}`n" --max-time 8 --proxy http://127.0.0.1:7890 https://aibiliai.com/
+curl.exe -s -o NUL -w "direct=%{http_code}`n"    --max-time 8 --noproxy "*"              https://aibiliai.com/
+# via_proxy=000（curl 退出码 7，连接被拒）且 direct=200 → 就是死代理
+```
+
+## 修复
+
+代理软件没开、当前也不需要时，关掉系统代理即可：
+
+```powershell
+$k = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+Set-ItemProperty -Path $k -Name ProxyEnable -Value 0 -Type DWord
+# 再通知 WinINET 立即生效，避免浏览器继续沿用缓存的旧设置：
+#   InternetSetOption(NULL, 39 = SETTINGS_CHANGED, ...)
+#   InternetSetOption(NULL, 37 = REFRESH, ...)
+```
+
+`ProxyServer` 的值保留不动 —— 下次启动 Clash 会自己写回。
+
+**验证必须用浏览器，不能用 `curl`。** `curl` 本来就不走系统代理，
+它一直是好的；用它「验证修好了」等于什么都没验证。
+本次用 Edge 无头模式截图确认首页完整渲染（出现当天 10:03「刚刚更新」的条目）。
+
+## 为什么容易查错方向
+
+1. **会先去查服务器。** 本次实测服务器完全健康：腾讯云东京，
+   已连续运行 5 天，nginx 1.28.3 active，PM2 online 11 小时，
+   `unstable restarts` 0，全部页面 200，首页连测 5 次 0.57–0.89 秒。
+2. **会去查 DNS。** 三个解析器（本机缓存 / 223.5.5.5 / 8.8.8.8）
+   一致指向 `43.133.176.111`，无缓存污染。DNS 问题有它自己的症状，
+   见「一之三」，别和代理混为一谈。
+3. **会去查隧道。** `DEPLOYMENT.md` 前几节写着「隧道是唯一的对外通路」，
+   而本机 `cloudflared` 其实是 `disabled` 且 10-17 就已停止。
+   照那几节排查会先怀疑隧道，但线上早已不走它。
+
+## 复发预防
+
+Clash Party **不在 Windows 开机启动项里**。它退出（或被结束后）系统代理会
+留在开启状态，下次开机浏览器就全部打不开。三条路选一：
+
+| 做法 | 效果 |
+| --- | --- |
+| 把 Clash Party 加进开机启动 | 每次开机代理自动恢复 |
+| 退出 Clash 前先在它界面里关掉「系统代理」 | 不留残留 |
+| 不用代理时保持 `ProxyEnable=0` | 最简单 |
+
+## 附带发现：开发机的 WSL 也会停
+
+本次同时发现本机 WSL 处于 Stopped 状态 —— 于是 `http://192.168.1.25`
+（Windows 80 → 127.0.0.1:3000 端口转发）也是不通的。启动 WSL 后
+PM2 自动 `resurrect`，本机 3000 与局域网 80 立即恢复 200。
+
+这只影响开发机的局域网访问，**与线上腾讯云无关**。
+
+## 教训
+
+> **命令行正常 + 浏览器异常 → 先查本机代理，再查服务器。**
+>
+> 反过来同样成立：用 `curl` 测出 200 就宣布「站点正常」是错的 ——
+> 真实访客体验只能由浏览器代表。
 
 ---
 
